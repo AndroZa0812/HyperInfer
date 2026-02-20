@@ -7,16 +7,18 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 /// A chat request to an LLM provider
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ChatRequest {
+    #[serde(default)]
     pub model: String,
+    #[serde(default)]
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
 }
 
 /// A single message in a chat conversation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: MessageRole,
     pub content: String,
@@ -43,6 +45,7 @@ pub struct TokenBucket {
 /// Configuration structure for the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    #[serde(skip_serializing)]
     pub api_keys: HashMap<String, String>,
     pub routing_rules: Vec<RoutingRule>,
     pub quotas: HashMap<String, Quota>,
@@ -62,5 +65,5 @@ pub struct RoutingRule {
 pub struct Quota {
     pub max_requests_per_minute: Option<u64>,
     pub max_tokens_per_minute: Option<u64>,
-    pub budget: Option<f64>, // monthly budget in USD
+    pub budget_cents: Option<u64>, // monthly budget in cents (USD)
 }

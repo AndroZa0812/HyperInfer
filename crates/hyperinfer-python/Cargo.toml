@@ -8,5 +8,5 @@ license = { workspace = true }
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
+pyo3 = { version = "0.28", features = ["extension-module"] }
 hyperinfer-client = { path = "../hyperinfer-client" }

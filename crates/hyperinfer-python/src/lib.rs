@@ -27,7 +27,7 @@ impl HyperInferClient {
 
 /// Module definition for Python bindings
 #[pymodule]
-fn hyperinfer_python(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_class::<HyperInferClient>()?;
+fn hyperinfer_python(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("HyperInferClient", m.getattr("HyperInferClient")?)?;
     Ok(())
 }

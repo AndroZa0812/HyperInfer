@@ -14,23 +14,34 @@ pub struct HyperInferServer {
     rate_limiter: Option<RateLimiter>,
 }
 
-impl HyperInferServer {
-    /// Create a new server instance
-    pub fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let rate_limiter = match redis_url {
-            Some(url) => Some(RateLimiter::new(Some(url))?), 
-            None => None,
-        };
-        
-        Ok(Self {
+impl Default for HyperInferServer {
+    fn default() -> Self {
+        // Create a server with no Redis connection (mock mode)
+        Self {
             config: Config {
                 api_keys: std::collections::HashMap::new(),
                 routing_rules: Vec::new(),
                 quotas: std::collections::HashMap::new(),
                 model_aliases: std::collections::HashMap::new(),
             },
-            rate_limiter,
-        })
+            rate_limiter: None,
+        }
+    }
+}
+
+impl HyperInferServer {
+    /// Create a new server instance (default with no Redis)
+    pub fn new() -> Self {
+        // For now we'll just create the server without Redis connection in mock mode.
+        Self {
+            config: Config {
+                api_keys: std::collections::HashMap::new(),
+                routing_rules: Vec::new(),
+                quotas: std::collections::HashMap::new(),
+                model_aliases: std::collections::HashMap::new(),
+            },
+            rate_limiter: None,
+        }
     }
 
     /// Start the server
@@ -47,11 +58,7 @@ impl HyperInferServer {
 
 #[tokio::main]
 async fn main() -> Result<(), HyperInferError> {
-    let redis_url = std::env::var("REDIS_URL").ok();
-    let server = HyperInferServer::new(redis_url.as_deref()).map_err(|e| {
-        eprintln!("Failed to initialize server: {}", e);
-        HyperInferError::Redis(e.to_string())
-    })?;
+    let server = HyperInferServer::new();
     server.start().await?;
     
     // Keep the server running

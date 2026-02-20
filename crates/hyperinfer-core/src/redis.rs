@@ -4,6 +4,7 @@
 
 use redis::Client;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 /// Configuration update message from control plane
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -30,7 +31,7 @@ impl ConfigManager {
         // 2. Listen for config update messages
         // 3. Update local configuration cache
         
-        println!("Subscribing to Redis config updates (mock implementation)");
+        info!("Subscribing to Redis config updates (mock implementation)");
         Ok(())
     }
 
@@ -38,7 +39,7 @@ impl ConfigManager {
     pub async fn fetch_config(&self) -> Result<super::types::Config, Box<dyn std::error::Error>> {
         // This would normally fetch the config from a Redis key or hash
         
-        println!("Fetching initial config (mock implementation)");
+        info!("Fetching initial config (mock implementation)");
         Ok(super::types::Config {
             api_keys: std::collections::HashMap::new(),
             routing_rules: Vec::new(),
