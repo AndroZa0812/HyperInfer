@@ -1,0 +1,7 @@
+organization=androza0812
+projectKey=AndroZa0812_HyperInfer
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.81686
+dashboardUrl=https://sonarcloud.io/dashboard?id=AndroZa0812_HyperInfer
+ceTaskId=AZx9E5TAEvRUB9GawEaX
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZx9E5TAEvRUB9GawEaX
