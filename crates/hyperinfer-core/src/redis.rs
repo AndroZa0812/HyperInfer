@@ -179,6 +179,15 @@ impl ConfigManager {
     pub async fn publish_config_update(&self, config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.manager.clone();
         
+        // Store config first so it's available when subscribers receive notification
+        let config_bytes = serde_json::to_vec(config)?;
+        
+        redis::cmd("SET")
+            .arg(CONFIG_KEY)
+            .arg(config_bytes)
+            .query_async::<()>(&mut conn)
+            .await?;
+        
         let update = ConfigUpdate {
             config: config.clone(),
         };
@@ -192,14 +201,6 @@ impl ConfigManager {
             .await?;
         
         info!("Published config update to channel: {}", CONFIG_CHANNEL);
-        
-        let config_bytes = serde_json::to_vec(config)?;
-        
-        redis::cmd("SET")
-            .arg(CONFIG_KEY)
-            .arg(config_bytes)
-            .query_async::<()>(&mut conn)
-            .await?;
         
         Ok(())
     }
