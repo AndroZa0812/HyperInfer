@@ -20,6 +20,16 @@ All tasks are high priority since they form the core infrastructure for the hybr
 - ✅ Python integration stubs
 - ✅ Rate limiting infrastructure using GCRA algorithm
 - ✅ Proper LLM API message role serialization (lowercase strings)
+- ✅ TokenBucket implementation includes last_refill timestamp for correct rate limiting
+
+## Implementation Status
+- ✅ Cargo workspace setup completed with axum 0.8 dependency
+- ✅ Core crate with shared types and error handling  
+- ✅ Client library structure with Redis Pub/Sub support  
+- ✅ Server binary skeleton with updated dependencies
+- ✅ Python integration stubs
+- ✅ Rate limiting infrastructure using GCRA algorithm
+- ✅ Proper LLM API message role serialization (lowercase strings)
 
 ## Implementation Status
 - ✅ Cargo workspace setup completed with axum 0.8 dependency

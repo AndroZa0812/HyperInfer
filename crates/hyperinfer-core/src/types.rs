@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Instant;
 
 /// A chat request to an LLM provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,6 +37,7 @@ pub struct TokenBucket {
     pub capacity: u64,
     pub tokens: u64,
     pub refill_rate: u64, // tokens per second
+    pub last_refill: Instant,
 }
 
 /// Configuration structure for the system

@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::Instant;
 
 /// A token bucket for rate limiting
 #[derive(Debug, Clone)]
@@ -11,6 +12,7 @@ pub struct TokenBucket {
     pub capacity: u64,
     pub tokens: u64,
     pub refill_rate: u64, // tokens per second
+    pub last_refill: Instant,
 }
 
 /// Quota configuration for a resource
