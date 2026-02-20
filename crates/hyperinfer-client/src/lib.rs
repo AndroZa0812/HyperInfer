@@ -51,20 +51,24 @@ impl HyperInferClient {
         }
 
         // 2. Resolve model alias
-        let config = self.config.read().await;
-        let resolved = self.router.resolve(&request.model, &config);
-        
-        let (model, provider) = match resolved {
-            Some((m, p)) => (m, p),
-            None => (request.model.clone(), Provider::OpenAI),
-        };
+        let (model, provider, api_key) = {
+            let config = self.config.read().await;
+            let resolved = self.router.resolve(&request.model, &config);
+            
+            let (model, provider) = match resolved {
+                Some((m, p)) => (m, p),
+                None => (request.model.clone(), Provider::OpenAI),
+            };
 
-        let api_key = config.api_keys.get(&provider.to_string())
-            .cloned()
-            .ok_or_else(|| HyperInferError::Config(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("API key not found for provider: {:?}", provider)
-            )))?;
+            let api_key = config.api_keys.get(&provider.to_string())
+                .cloned()
+                .ok_or_else(|| HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("API key not found for provider: {:?}", provider)
+                )))?;
+            
+            (model, provider, api_key)
+        };
 
         // 3. Execute HTTP call
         let response = match provider {
