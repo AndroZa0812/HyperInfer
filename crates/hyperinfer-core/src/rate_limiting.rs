@@ -73,7 +73,9 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
-    pub async fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(
+        redis_url: Option<&str>,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let redis_manager = match redis_url {
             Some(url) => {
                 let client = Client::open(url)?;
@@ -88,10 +90,14 @@ impl RateLimiter {
         })
     }
 
-    pub async fn is_allowed(&self, key: &str, amount: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn is_allowed(
+        &self,
+        key: &str,
+        amount: u64,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
-            
+
             let result: Vec<u64> = redis::cmd("EVAL")
                 .arg(RPM_SCRIPT)
                 .arg(1)
@@ -100,7 +106,7 @@ impl RateLimiter {
                 .arg(60)
                 .query_async(&mut conn)
                 .await?;
-            
+
             if result[0] == 0 {
                 return Ok(false);
             }
@@ -128,10 +134,14 @@ impl RateLimiter {
         }
     }
 
-    pub async fn check_rpm(&self, key: &str, limit: u64) -> Result<(bool, u64), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn check_rpm(
+        &self,
+        key: &str,
+        limit: u64,
+    ) -> Result<(bool, u64), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
-            
+
             let result: Vec<u64> = redis::cmd("EVAL")
                 .arg(RPM_SCRIPT)
                 .arg(1)
@@ -140,23 +150,28 @@ impl RateLimiter {
                 .arg(60)
                 .query_async(&mut conn)
                 .await?;
-            
+
             Ok((result[0] == 1, result[1]))
         } else {
             Ok((true, limit))
         }
     }
 
-    pub async fn check_tpm(&self, key: &str, limit: u64, tokens: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn check_tpm(
+        &self,
+        key: &str,
+        limit: u64,
+        tokens: u64,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
-            
+
             let now = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
                 .as_millis() as u64;
             let rate = limit / 60;
-            
+
             let result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
@@ -167,17 +182,21 @@ impl RateLimiter {
                 .arg(tokens)
                 .query_async(&mut conn)
                 .await?;
-            
+
             Ok(result[0] == 1)
         } else {
             Ok(true)
         }
     }
 
-    pub async fn record_usage(&self, key: &str, tokens_used: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn record_usage(
+        &self,
+        key: &str,
+        tokens_used: u64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
-            
+
             redis::pipe()
                 .atomic()
                 .cmd("INCRBY")

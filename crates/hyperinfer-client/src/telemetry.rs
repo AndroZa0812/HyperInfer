@@ -9,7 +9,12 @@ impl Telemetry {
         })
     }
 
-    pub async fn record(&self, _key: &str, _model: &str, _response_time_ms: u64) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn record(
+        &self,
+        _key: &str,
+        _model: &str,
+        _response_time_ms: u64,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         tracing::debug!("Recording telemetry");
         Ok(())
     }
