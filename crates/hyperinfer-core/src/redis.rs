@@ -66,14 +66,6 @@ impl ConfigManager {
                     let mut stream = pubsub.on_message();
                     
                     while let Some(msg) = stream.next().await {
-                        let payload = match msg.get_payload::<String>() {
-                            Ok(p) => p,
-                            Err(e) => {
-                                error!("Failed to get message payload: {}", e);
-                                continue;
-                            }
-                        };
-                        
                         let payload_str = match msg.get_payload::<String>() {
                             Ok(p) => p,
                             Err(e) => {
