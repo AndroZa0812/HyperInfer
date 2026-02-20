@@ -3,9 +3,7 @@
 //! Provides distributed quota enforcement using Redis and GCRA algorithm.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Instant;
-
 /// A token bucket for rate limiting
 #[derive(Debug, Clone)]
 pub struct TokenBucket {
@@ -31,9 +29,12 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     /// Create a new rate limiter with optional Redis client
-    pub fn new(redis_url: Option<&str>) -> Self {
-        let redis_client = redis_url.map(|url| redis::Client::open(url).unwrap());
-        Self { redis_client }
+    pub fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
+        let redis_client = match redis_url {
+            Some(url) => Some(redis::Client::open(url)?),
+            None => None,
+        };
+        Ok(Self { redis_client })
     }
 
     /// Check if a request is allowed based on quotas

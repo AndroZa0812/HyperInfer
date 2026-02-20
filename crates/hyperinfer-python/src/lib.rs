@@ -19,7 +19,7 @@ impl HyperInferClient {
     }
 
     /// Execute a chat completion request
-    pub fn chat_completion(&self, prompt: &str) -> PyResult<String> {
+    pub fn chat_completion(&self, _prompt: &str) -> PyResult<String> {
         // Mock implementation - in real code this would call the Rust client
         Ok("Mock response".to_string())
     }

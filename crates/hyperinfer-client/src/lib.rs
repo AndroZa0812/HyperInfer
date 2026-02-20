@@ -1,12 +1,11 @@
-//! Tests for HyperInfer client
+//! HyperInfer Client Library
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// A client for interacting with the HyperInfer service
+pub struct HyperInferClient;
 
-    #[tokio::test]
-    async fn test_client_creation() {
-        let client = hyperinfer_client::HyperInferClient::new();
-        assert!(true); // Placeholder test
+impl HyperInferClient {
+    /// Create a new client instance
+    pub fn new() -> Self {
+        Self
     }
 }

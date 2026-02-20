@@ -3,26 +3,34 @@
 //! This binary acts as the centralized governor, managing configuration,
 //! stateful conversations, and MCP hosting.
 
-use hyperinfer_core::{HyperInferError, Config};
+use hyperinfer_core::{HyperInferError, Config, rate_limiting::RateLimiter};
 use tokio;
 
 /// Main server struct
 pub struct HyperInferServer {
     /// Configuration for the server
     config: Config,
+    /// Rate limiter with optional Redis client
+    rate_limiter: Option<RateLimiter>,
 }
 
 impl HyperInferServer {
     /// Create a new server instance
-    pub fn new() -> Self {
-        Self {
+    pub fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
+        let rate_limiter = match redis_url {
+            Some(url) => Some(RateLimiter::new(Some(url))?), 
+            None => None,
+        };
+        
+        Ok(Self {
             config: Config {
                 api_keys: std::collections::HashMap::new(),
                 routing_rules: Vec::new(),
                 quotas: std::collections::HashMap::new(),
                 model_aliases: std::collections::HashMap::new(),
             },
-        }
+            rate_limiter,
+        })
     }
 
     /// Start the server
@@ -39,7 +47,11 @@ impl HyperInferServer {
 
 #[tokio::main]
 async fn main() -> Result<(), HyperInferError> {
-    let server = HyperInferServer::new();
+    let redis_url = std::env::var("REDIS_URL").ok();
+    let server = HyperInferServer::new(redis_url.as_deref()).map_err(|e| {
+        eprintln!("Failed to initialize server: {}", e);
+        HyperInferError::Redis(e.to_string())
+    })?;
     server.start().await?;
     
     // Keep the server running

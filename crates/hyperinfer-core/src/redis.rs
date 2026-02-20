@@ -2,7 +2,7 @@
 //!
 //! Provides functionality for Redis-based configuration and policy updates.
 
-use redis::{Client, Connection, Commands};
+use redis::Client;
 use serde::{Deserialize, Serialize};
 
 /// Configuration update message from control plane
@@ -36,7 +36,7 @@ impl ConfigManager {
 
     /// Fetch initial configuration from control plane
     pub async fn fetch_config(&self) -> Result<super::types::Config, Box<dyn std::error::Error>> {
-        // This would normally make an HTTP call to get the encrypted config
+        // This would normally fetch the config from a Redis key or hash
         
         println!("Fetching initial config (mock implementation)");
         Ok(super::types::Config {
