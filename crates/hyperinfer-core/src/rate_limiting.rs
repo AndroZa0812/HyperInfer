@@ -9,24 +9,29 @@ use std::time::Instant;
 
 const GCRA_SCRIPT: &str = r#"
 local key = KEYS[1]
-local limit = tonumber(ARGV[1])
-local window = tonumber(ARGV[2])
-local tokens = tonumber(ARGV[3])
+local rate = tonumber(ARGV[1])
+local capacity = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local cost = tonumber(ARGV[4])
 
-local current = tonumber(redis.call('GET', key) or "0")
-local new_total = current + tokens
+local emission_interval = capacity / rate
+local tat = redis.call('GET', key)
 
-if new_total > limit then
-    return {0, current}
-end
-
-if current == 0 then
-    redis.call('SETEX', key, window, tokens)
+if not tat then
+    tat = now
 else
-    redis.call('INCRBY', key, tokens)
+    tat = tonumber(tat)
 end
 
-return {1, new_total}
+local new_tat = math.max(tat, now) + cost * emission_interval
+local allow_at = new_tat - capacity
+
+if allow_at <= now then
+    redis.call('SET', key, new_tat, 'EX', math.ceil(capacity * 2))
+    return {1, 0}
+else
+    return {0, math.ceil(allow_at - now)}
+end
 "#;
 
 const RPM_SCRIPT: &str = r#"
@@ -101,12 +106,18 @@ impl RateLimiter {
             }
 
             let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .as_millis() as u64;
+            let rate = self.default_tpm / 60;
             let tpm_result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
                 .arg(&tpm_key)
+                .arg(rate)
                 .arg(self.default_tpm)
-                .arg(60)
+                .arg(now)
                 .arg(amount)
                 .query_async(&mut conn)
                 .await?;
@@ -140,12 +151,19 @@ impl RateLimiter {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
             
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .as_millis() as u64;
+            let rate = limit / 60;
+            
             let result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
                 .arg(format!("hyperinfer:ratelimit:tpm:{}", key))
+                .arg(rate)
                 .arg(limit)
-                .arg(60)
+                .arg(now)
                 .arg(tokens)
                 .query_async(&mut conn)
                 .await?;

@@ -74,15 +74,26 @@ impl ConfigManager {
                             }
                         };
                         
-                        match serde_json::from_str::<ConfigUpdate>(&payload) {
-                            Ok(update) => {
-                                let mut cfg = config.write().await;
-                                *cfg = update.config;
-                                info!("Config updated via Pub/Sub");
+                        let payload_str = match msg.get_payload::<String>() {
+                            Ok(p) => p,
+                            Err(e) => {
+                                error!("Failed to get message payload: {}", e);
+                                continue;
                             }
+                        };
+                        
+                        let new_config = match serde_json::from_str::<ConfigUpdate>(&payload_str) {
+                            Ok(update) => update.config,
                             Err(e) => {
                                 error!("Failed to parse config update: {}", e);
+                                continue;
                             }
+                        };
+                        
+                        {
+                            let mut cfg = config.write().await;
+                            *cfg = new_config;
+                            info!("Config updated via Pub/Sub");
                         }
                     }
                     Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
