@@ -13,7 +13,7 @@ pub enum HyperInferError {
     #[error("Rate limiting error: {0}")]
     RateLimit(String),
 
-    #[error("HTTP request failed")]
+    #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
     #[error("Database error")]

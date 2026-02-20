@@ -67,3 +67,45 @@ pub struct Quota {
     pub max_tokens_per_minute: Option<u64>,
     pub budget_cents: Option<u64>, // monthly budget in cents (USD)
 }
+
+/// Provider enumeration for LLM services
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Provider {
+    OpenAI,
+    Anthropic,
+    #[serde(other)]
+    Other,
+}
+
+impl std::fmt::Display for Provider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Provider::OpenAI => write!(f, "openai"),
+            Provider::Anthropic => write!(f, "anthropic"),
+            Provider::Other => write!(f, "other"),
+        }
+    }
+}
+
+/// Usage statistics for a request
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct Usage {
+    #[serde(default)]
+    pub input_tokens: u32,
+    #[serde(default)]
+    pub output_tokens: u32,
+}
+
+/// A chat response from an LLM provider
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ChatResponse {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub choices: Vec<String>,
+    #[serde(default)]
+    pub usage: Usage,
+}

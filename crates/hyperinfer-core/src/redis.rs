@@ -2,49 +2,181 @@
 //!
 //! Provides functionality for Redis-based configuration and policy updates.
 
+use futures_util::stream::StreamExt;
+use redis::aio::ConnectionManager;
 use redis::Client;
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{info, error};
 
-/// Configuration update message from control plane
+use crate::types::Config;
+
+pub const CONFIG_CHANNEL: &str = "hyperinfer:config_updates";
+pub const CONFIG_KEY: &str = "hyperinfer:config";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigUpdate {
-    pub config: super::types::Config,
+    pub config: Config,
 }
 
-/// Redis Pub/Sub manager for handling configuration changes
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicyUpdate {
+    pub key: String,
+    pub action: PolicyAction,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PolicyAction {
+    Revoke,
+    Update,
+}
+
 pub struct ConfigManager {
     client: Client,
+    manager: ConnectionManager,
 }
 
 impl ConfigManager {
-    /// Create a new config manager with redis connection
-    pub fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::open(redis_url)?;
-        Ok(Self { client })
+        let runtime = tokio::runtime::Handle::current();
+        let manager = runtime.block_on(async { ConnectionManager::new(client.clone()).await })?;
+        Ok(Self { client, manager })
     }
 
-    /// Subscribe to configuration updates from the control plane
-    pub async fn subscribe_to_config_updates(&self) -> Result<(), Box<dyn std::error::Error>> {
-        // This would normally:
-        // 1. Connect to Redis Pub/Sub channel 
-        // 2. Listen for config update messages
-        // 3. Update local configuration cache
+    pub async fn subscribe_to_config_updates(
+        &self,
+        config: Arc<RwLock<Config>>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut pubsub = self.client.get_async_pubsub().await?;
         
-        info!("Subscribing to Redis config updates (mock implementation)");
+        pubsub.subscribe(CONFIG_CHANNEL).await?;
+        
+        info!("Subscribed to Redis config updates channel: {}", CONFIG_CHANNEL);
+        
+        let config_clone = config.clone();
+        
+        tokio::spawn(async move {
+            let mut stream = pubsub.on_message();
+            
+            while let Some(msg) = stream.next().await {
+                let payload = match msg.get_payload::<String>() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("Failed to get message payload: {}", e);
+                        continue;
+                    }
+                };
+                
+                match serde_json::from_str::<ConfigUpdate>(&payload) {
+                    Ok(update) => {
+                        let mut cfg = config_clone.write().await;
+                        *cfg = update.config;
+                        info!("Config updated via Pub/Sub");
+                    }
+                    Err(e) => {
+                        error!("Failed to parse config update: {}", e);
+                    }
+                }
+            }
+        });
+        
         Ok(())
     }
 
-    /// Fetch initial configuration from control plane
-    pub async fn fetch_config(&self) -> Result<super::types::Config, Box<dyn std::error::Error>> {
-        // This would normally fetch the config from a Redis key or hash
+    pub async fn subscribe_to_policy_updates(
+        &self,
+        callback: impl Fn(PolicyUpdate) + Send + 'static,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut pubsub = self.client.get_async_pubsub().await?;
         
-        info!("Fetching initial config (mock implementation)");
-        Ok(super::types::Config {
-            api_keys: std::collections::HashMap::new(),
-            routing_rules: Vec::new(),
-            quotas: std::collections::HashMap::new(),
-            model_aliases: std::collections::HashMap::new(),
-        })
+        pubsub.subscribe("hyperinfer:policy_updates").await?;
+        
+        info!("Subscribed to Redis policy updates channel");
+        
+        tokio::spawn(async move {
+            let mut stream = pubsub.on_message();
+            
+            while let Some(msg) = stream.next().await {
+                if let Ok(payload) = msg.get_payload::<String>() {
+                    if let Ok(update) = serde_json::from_str::<PolicyUpdate>(&payload) {
+                        callback(update);
+                    }
+                }
+            }
+        });
+        
+        Ok(())
+    }
+
+    pub async fn fetch_config(&self) -> Result<Config, Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.manager.clone();
+        
+        let data: Option<Vec<u8>> = redis::cmd("GET")
+            .arg(CONFIG_KEY)
+            .query_async(&mut conn)
+            .await?;
+        
+        match data {
+            Some(bytes) => {
+                let config: Config = serde_json::from_slice(&bytes)?;
+                Ok(config)
+            }
+            None => {
+                Ok(Config {
+                    api_keys: std::collections::HashMap::new(),
+                    routing_rules: Vec::new(),
+                    quotas: std::collections::HashMap::new(),
+                    model_aliases: std::collections::HashMap::new(),
+                })
+            }
+        }
+    }
+
+    pub async fn publish_config_update(&self, config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.manager.clone();
+        
+        let update = ConfigUpdate {
+            config: config.clone(),
+        };
+        
+        let payload = serde_json::to_string(&update)?;
+        
+        redis::cmd("PUBLISH")
+            .arg(CONFIG_CHANNEL)
+            .arg(&payload)
+            .query_async::<()>(&mut conn)
+            .await?;
+        
+        info!("Published config update to channel: {}", CONFIG_CHANNEL);
+        
+        let config_bytes = serde_json::to_vec(config)?;
+        
+        redis::cmd("SET")
+            .arg(CONFIG_KEY)
+            .arg(config_bytes)
+            .query_async::<()>(&mut conn)
+            .await?;
+        
+        Ok(())
+    }
+
+    pub async fn publish_policy_update(&self, update: &PolicyUpdate) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let mut conn = self.manager.clone();
+        
+        let payload = serde_json::to_string(update)?;
+        
+        redis::cmd("PUBLISH")
+            .arg("hyperinfer:policy_updates")
+            .arg(&payload)
+            .query_async::<()>(&mut conn)
+            .await?;
+        
+        info!("Published policy update: {:?}", update.action);
+        
+        Ok(())
     }
 }

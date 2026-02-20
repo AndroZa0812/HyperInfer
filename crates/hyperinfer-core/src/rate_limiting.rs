@@ -2,58 +2,170 @@
 //!
 //! Provides distributed quota enforcement using Redis and GCRA algorithm.
 
+use redis::aio::ConnectionManager;
+use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-/// A token bucket for rate limiting
+
+const GCRA_SCRIPT: &str = r#"
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+
+local current = redis.call('GET', key)
+if current then
+    local remaining = limit - tonumber(current)
+    if remaining < 0 then
+        return {0, tonumber(current)}
+    end
+end
+
+redis.call('SETEX', key, window, 1)
+return {1, 1}
+"#;
+
+const RPM_SCRIPT: &str = r#"
+local key = KEYS[1]
+local limit = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+
+local current = redis.call('INCR', key)
+if current == 1 then
+    redis.call('EXPIRE', key, window)
+end
+
+if current > limit then
+    local ttl = redis.call('TTL', key)
+    return {0, limit, ttl}
+end
+return {1, limit - current}
+"#;
+
 #[derive(Debug, Clone)]
 pub struct TokenBucket {
     pub capacity: u64,
     pub tokens: u64,
-    pub refill_rate: u64, // tokens per second
+    pub refill_rate: u64,
     pub last_refill: Instant,
 }
 
-/// Quota configuration for a resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Quota {
     pub max_requests_per_minute: Option<u64>,
     pub max_tokens_per_minute: Option<u64>,
-    pub budget_cents: Option<u64>, // monthly budget in cents (USD)
+    pub budget_cents: Option<u64>,
 }
 
-/// Rate limiter implementation using GCRA (Generic Cell Rate Algorithm)
 pub struct RateLimiter {
-    /// Redis connection for distributed rate limiting
-    redis_client: Option<redis::Client>,
+    redis_manager: Option<ConnectionManager>,
+    default_rpm: u64,
+    default_tpm: u64,
 }
 
 impl RateLimiter {
-    /// Create a new rate limiter with optional Redis client
-    pub fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error>> {
-        let redis_client = match redis_url {
-            Some(url) => Some(redis::Client::open(url)?),
+    pub async fn new(redis_url: Option<&str>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let redis_manager = match redis_url {
+            Some(url) => {
+                let client = Client::open(url)?;
+                Some(ConnectionManager::new(client).await?)
+            }
             None => None,
         };
-        Ok(Self { redis_client })
+        Ok(Self {
+            redis_manager,
+            default_rpm: 60,
+            default_tpm: 100000,
+        })
     }
 
-/// Check if a request is allowed based on quotas
-    pub async fn is_allowed(&self, _key: &str, _amount: u64) -> Result<bool, Box<dyn std::error::Error>> {
-        // In a real implementation this would:
-        // 1. Use Redis Lua script to implement GCRA algorithm
-        // 2. Check rate limits atomically across distributed nodes
+    pub async fn is_allowed(&self, key: &str, _amount: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            
+            let result: Vec<u64> = redis::cmd("EVAL")
+                .arg(RPM_SCRIPT)
+                .arg(1)
+                .arg(format!("hyperinfer:ratelimit:rpm:{}", key))
+                .arg(self.default_rpm)
+                .arg(60)
+                .query_async(&mut conn)
+                .await?;
+            
+            if result[0] == 0 {
+                return Ok(false);
+            }
 
-        println!("Checking if request is allowed (mock implementation)");
-        Ok(true) // For now, always allow requests in mock
+            let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
+            let _: Vec<u64> = redis::cmd("EVAL")
+                .arg(GCRA_SCRIPT)
+                .arg(1)
+                .arg(&tpm_key)
+                .arg(self.default_tpm)
+                .arg(60)
+                .arg(0)
+                .query_async(&mut conn)
+                .await?;
+
+            Ok(true)
+        } else {
+            Ok(true)
+        }
     }
 
-    /// Record usage for telemetry purposes
-    pub async fn record_usage(&self, _key: &str, _tokens_used: u64) -> Result<(), Box<dyn std::error::Error>> {
-        // In a real implementation this would:
-        // 1. Push metrics to Redis Streams
-        // 2. Handle asynchronous telemetry
-        
-        tracing::debug!("Recording usage (mock implementation)");
+    pub async fn check_rpm(&self, key: &str, limit: u64) -> Result<(bool, u64), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            
+            let result: Vec<u64> = redis::cmd("EVAL")
+                .arg(RPM_SCRIPT)
+                .arg(1)
+                .arg(format!("hyperinfer:ratelimit:rpm:{}", key))
+                .arg(limit)
+                .arg(60)
+                .query_async(&mut conn)
+                .await?;
+            
+            Ok((result[0] == 1, result[1]))
+        } else {
+            Ok((true, limit))
+        }
+    }
+
+    pub async fn check_tpm(&self, key: &str, limit: u64, tokens: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            
+            let result: Vec<u64> = redis::cmd("EVAL")
+                .arg(GCRA_SCRIPT)
+                .arg(1)
+                .arg(format!("hyperinfer:ratelimit:tpm:{}", key))
+                .arg(limit)
+                .arg(60)
+                .arg(tokens)
+                .query_async(&mut conn)
+                .await?;
+            
+            Ok(result[0] == 1)
+        } else {
+            Ok(true)
+        }
+    }
+
+    pub async fn record_usage(&self, key: &str, _tokens_used: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            
+            let _: () = redis::cmd("INCR")
+                .arg(format!("hyperinfer:usage:tokens:{}", key))
+                .query_async(&mut conn)
+                .await?;
+            
+            let _: () = redis::cmd("INCR")
+                .arg(format!("hyperinfer:usage:requests:{}", key))
+                .query_async(&mut conn)
+                .await?;
+        }
         Ok(())
     }
 }

@@ -10,4 +10,5 @@ pub mod rate_limiting;
 
 // Re-exports for convenient access
 pub use error::HyperInferError;
-pub use types::{ChatRequest, TokenBucket, Config};
+pub use types::{ChatRequest, ChatResponse, Usage, Provider, Config, ChatMessage, MessageRole, RoutingRule, Quota};
+pub use rate_limiting::RateLimiter;
