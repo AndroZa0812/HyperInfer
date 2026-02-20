@@ -22,7 +22,8 @@ pub struct ChatMessage {
 }
 
 /// The role of a message in a chat
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MessageRole {
     System,
     User,
