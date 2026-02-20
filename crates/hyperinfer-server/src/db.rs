@@ -58,7 +58,7 @@ impl Db {
             .await
     }
 
-    pub async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: &str) -> Result<ApiKey, sqlx::Error> {
+    pub async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<&str>) -> Result<ApiKey, sqlx::Error> {
         let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, ApiKey>(

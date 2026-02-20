@@ -87,7 +87,7 @@ async fn create_api_key(
     State(state): State<AppState>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_api_key(&req.key_hash, &req.user_id, &req.team_id, &req.name).await {
+    match state.db.create_api_key(&req.key_hash, &req.user_id, &req.team_id, req.name.as_deref()).await {
         Ok(key) => Json(key).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create API key").into_response(),
     }
@@ -153,7 +153,7 @@ struct CreateApiKeyRequest {
     key_hash: String,
     user_id: String,
     team_id: String,
-    name: String,
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
