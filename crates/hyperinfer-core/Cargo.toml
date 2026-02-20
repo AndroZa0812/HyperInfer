@@ -1,0 +1,10 @@
+[package]
+name = "hyperinfer-core"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+thiserror = "1.0"
+redis = "0.24"

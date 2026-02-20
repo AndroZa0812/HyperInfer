@@ -1,0 +1,11 @@
+[package]
+name = "hyperinfer-client"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+hyperinfer-core = { path = "../hyperinfer-core" }
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1.0", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
