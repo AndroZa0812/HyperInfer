@@ -152,18 +152,18 @@ impl RateLimiter {
         }
     }
 
-    pub async fn record_usage(&self, key: &str, _tokens_used: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn record_usage(&self, key: &str, tokens_used: u64) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
             
-            let _: () = redis::cmd("INCR")
+            redis::pipe()
+                .atomic()
+                .cmd("INCRBY")
                 .arg(format!("hyperinfer:usage:tokens:{}", key))
-                .query_async(&mut conn)
-                .await?;
-            
-            let _: () = redis::cmd("INCR")
+                .arg(tokens_used)
+                .cmd("INCR")
                 .arg(format!("hyperinfer:usage:requests:{}", key))
-                .query_async(&mut conn)
+                .query_async::<()>(&mut conn)
                 .await?;
         }
         Ok(())

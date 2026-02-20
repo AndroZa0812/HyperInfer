@@ -1,0 +1,6 @@
+projectKey=HyperInfer
+serverUrl=http://localhost:9001
+serverVersion=26.2.0.119303
+dashboardUrl=http://localhost:9001/dashboard?id=HyperInfer
+ceTaskId=03659777-516b-4741-beea-35f856402162
+ceTaskUrl=http://localhost:9001/api/ce/task?id=03659777-516b-4741-beea-35f856402162
