@@ -1,6 +1,7 @@
-projectKey=HyperInfer
-serverUrl=http://localhost:9001
-serverVersion=26.2.0.119303
-dashboardUrl=http://localhost:9001/dashboard?id=HyperInfer
-ceTaskId=03659777-516b-4741-beea-35f856402162
-ceTaskUrl=http://localhost:9001/api/ce/task?id=03659777-516b-4741-beea-35f856402162
+organization=androza0812
+projectKey=AndroZa0812_HyperInfer
+serverUrl=https://sonarcloud.io
+serverVersion=8.0.0.81686
+dashboardUrl=https://sonarcloud.io/dashboard?id=AndroZa0812_HyperInfer
+ceTaskId=AZx9E5TAEvRUB9GawEaX
+ceTaskUrl=https://sonarcloud.io/api/ce/task?id=AZx9E5TAEvRUB9GawEaX
