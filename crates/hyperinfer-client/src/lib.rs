@@ -39,6 +39,8 @@ impl HyperInferClient {
     }
 
     pub async fn chat(&self, key: &str, request: ChatRequest) -> Result<ChatResponse, HyperInferError> {
+        request.validate()?;
+
         let start = std::time::Instant::now();
         
         // 1. Check rate limit

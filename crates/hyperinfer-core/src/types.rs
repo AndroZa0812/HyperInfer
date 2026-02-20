@@ -17,6 +17,24 @@ pub struct ChatRequest {
     pub max_tokens: Option<u32>,
 }
 
+impl ChatRequest {
+    pub fn validate(&self) -> Result<(), crate::HyperInferError> {
+        if self.model.is_empty() {
+            return Err(crate::HyperInferError::Config(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "model cannot be empty",
+            )));
+        }
+        if self.messages.is_empty() {
+            return Err(crate::HyperInferError::Config(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "messages cannot be empty",
+            )));
+        }
+        Ok(())
+    }
+}
+
 /// A single message in a chat conversation
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatMessage {
