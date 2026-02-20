@@ -95,21 +95,20 @@ impl Db {
 
     pub async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, sqlx::Error> {
         let uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
-        sqlx::query_as::<_, Quota>("SELECT id, team_id, rpm_limit, tpm_limit, budget_cents, updated_at FROM quotas WHERE team_id = $1")
+        sqlx::query_as::<_, Quota>("SELECT id, team_id, rpm_limit, tpm_limit, updated_at FROM quotas WHERE team_id = $1")
             .bind(uuid)
             .fetch_optional(&self.pool)
             .await
     }
 
-    pub async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32, budget_cents: i64) -> Result<Quota, sqlx::Error> {
+    pub async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32) -> Result<Quota, sqlx::Error> {
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, Quota>(
-            "INSERT INTO quotas (team_id, rpm_limit, tpm_limit, budget_cents) VALUES ($1, $2, $3, $4) RETURNING id, team_id, rpm_limit, tpm_limit, budget_cents, updated_at"
+            "INSERT INTO quotas (team_id, rpm_limit, tpm_limit) VALUES ($1, $2, $3) RETURNING id, team_id, rpm_limit, tpm_limit, updated_at"
         )
         .bind(team_uuid)
         .bind(rpm_limit)
         .bind(tpm_limit)
-        .bind(budget_cents)
         .fetch_one(&self.pool)
         .await
     }
@@ -161,6 +160,5 @@ pub struct Quota {
     pub team_id: uuid::Uuid,
     pub rpm_limit: i32,
     pub tpm_limit: i32,
-    pub budget_cents: i64,
     pub updated_at: DateTime<Utc>,
 }

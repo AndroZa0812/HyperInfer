@@ -129,7 +129,7 @@ async fn create_quota(
     State(state): State<AppState>,
     Json(req): Json<CreateQuotaRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_quota(&req.team_id, req.rpm_limit, req.tpm_limit, req.budget_cents).await {
+    match state.db.create_quota(&req.team_id, req.rpm_limit, req.tpm_limit).await {
         Ok(quota) => Json(quota).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
     }
@@ -169,7 +169,6 @@ struct CreateQuotaRequest {
     team_id: String,
     rpm_limit: i32,
     tpm_limit: i32,
-    budget_cents: i64,
 }
 
 #[tokio::main]
