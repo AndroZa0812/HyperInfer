@@ -176,6 +176,7 @@ struct CreateQuotaRequest {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
 
+    // NOTE: Default credentials are for development only. Set DATABASE_URL in production.
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/hyperinfer".to_string());
     
@@ -193,11 +194,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let db = Db::new(pool);
     let config_manager = Arc::new(ConfigManager::new(&redis_url).await?);
-    let config = config_manager.fetch_config().await.unwrap_or_else(|_| Config {
-        api_keys: std::collections::HashMap::new(),
-        routing_rules: Vec::new(),
-        quotas: std::collections::HashMap::new(),
-        model_aliases: std::collections::HashMap::new(),
+    let config = config_manager.fetch_config().await.unwrap_or_else(|e| {
+        tracing::warn!("Failed to fetch config from Redis, starting with empty config: {:?}", e);
+        Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+        }
     });
 
     let state = AppState {
@@ -206,7 +210,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config_manager,
     };
 
-    let cors = CorsLayer::permissive();
+    let cors = {
+        let allowed_origins = std::env::var("ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string());
+        let origins: Vec<_> = allowed_origins
+            .split(',')
+            .filter_map(|s| s.trim().parse().ok())
+            .collect();
+        if origins.is_empty() {
+            tracing::warn!("No valid CORS origins configured, defaulting to localhost:3000");
+            CorsLayer::new()
+                .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
+        } else {
+            CorsLayer::new()
+                .allow_origin(origins)
+        }
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_headers([axum::http::header::CONTENT_TYPE])
+    };
 
     let app = Router::new()
         .route("/v1/config/sync", get(config_sync))
