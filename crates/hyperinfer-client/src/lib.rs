@@ -28,16 +28,10 @@ impl HyperInferClient {
         let router =
             Router::new(config.routing_rules.clone()).with_aliases(config.model_aliases.clone());
         let rate_limiter = RateLimiter::new(Some(redis_url)).await.map_err(|e| {
-            HyperInferError::Config(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
+            HyperInferError::Config(std::io::Error::other(e.to_string()))
         })?;
         let telemetry = Telemetry::new(redis_url).await.map_err(|e| {
-            HyperInferError::Config(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
+            HyperInferError::Config(std::io::Error::other(e.to_string()))
         })?;
         let config = Arc::new(RwLock::new(config));
 

@@ -1,6 +1,7 @@
 use hyperinfer_core::types::{Config, Provider, RoutingRule};
 
 pub struct Router {
+    #[allow(dead_code)]
     rules: Vec<RoutingRule>,
     model_aliases: std::collections::HashMap<String, String>,
 }

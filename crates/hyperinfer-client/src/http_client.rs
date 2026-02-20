@@ -46,7 +46,7 @@ impl HttpCaller {
         api_key: &str,
         request: &ChatRequest,
     ) -> Result<ChatResponse, HyperInferError> {
-        let url = format!("https://api.openai.com/v1/chat/completions");
+        let url = "https://api.openai.com/v1/chat/completions".to_string();
 
         let body = serde_json::json!({
             "model": model,

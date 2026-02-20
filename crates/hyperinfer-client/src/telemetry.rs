@@ -1,4 +1,5 @@
 pub struct Telemetry {
+    #[allow(dead_code)]
     redis_url: String,
 }
 
