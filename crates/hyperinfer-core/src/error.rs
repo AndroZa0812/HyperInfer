@@ -16,6 +16,9 @@ pub enum HyperInferError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
+    #[error("API error ({status}): {message}")]
+    ApiError { status: u16, message: String },
+
     #[error("Database error")]
     Database(#[from] sqlx::Error),
 

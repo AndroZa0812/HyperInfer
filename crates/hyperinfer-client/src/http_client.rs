@@ -63,6 +63,15 @@ impl HttpCaller {
             .send()
             .await?;
 
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(HyperInferError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
+
         let data: OpenAiResponse = response.json().await?;
         
         Ok(ChatResponse {
@@ -121,6 +130,15 @@ impl HttpCaller {
             .json(&body)
             .send()
             .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(HyperInferError::ApiError {
+                status: status.as_u16(),
+                message: error_text,
+            });
+        }
 
         #[derive(Deserialize)]
         struct AnthropicResponse {
