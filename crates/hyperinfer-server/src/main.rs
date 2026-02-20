@@ -192,7 +192,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .await?;
 
     let db = Db::new(pool);
-    let config_manager = Arc::new(ConfigManager::new(&redis_url)?);
+    let config_manager = Arc::new(ConfigManager::new(&redis_url).await?);
     let config = config_manager.fetch_config().await.unwrap_or_else(|_| Config {
         api_keys: std::collections::HashMap::new(),
         routing_rules: Vec::new(),

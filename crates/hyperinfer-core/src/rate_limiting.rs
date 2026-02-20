@@ -11,18 +11,22 @@ const GCRA_SCRIPT: &str = r#"
 local key = KEYS[1]
 local limit = tonumber(ARGV[1])
 local window = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
+local tokens = tonumber(ARGV[3])
 
-local current = redis.call('GET', key)
-if current then
-    local remaining = limit - tonumber(current)
-    if remaining < 0 then
-        return {0, tonumber(current)}
-    end
+local current = tonumber(redis.call('GET', key) or "0")
+local new_total = current + tokens
+
+if new_total > limit then
+    return {0, current}
 end
 
-redis.call('SETEX', key, window, 1)
-return {1, 1}
+if current == 0 then
+    redis.call('SETEX', key, window, tokens)
+else
+    redis.call('INCRBY', key, tokens)
+end
+
+return {1, new_total}
 "#;
 
 const RPM_SCRIPT: &str = r#"
@@ -37,9 +41,9 @@ end
 
 if current > limit then
     local ttl = redis.call('TTL', key)
-    return {0, limit, ttl}
+    return {0, 0, ttl}
 end
-return {1, limit - current}
+return {1, limit - current, 0}
 "#;
 
 #[derive(Debug, Clone)]
@@ -79,7 +83,7 @@ impl RateLimiter {
         })
     }
 
-    pub async fn is_allowed(&self, key: &str, _amount: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn is_allowed(&self, key: &str, amount: u64) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
             
@@ -97,17 +101,17 @@ impl RateLimiter {
             }
 
             let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
-            let _: Vec<u64> = redis::cmd("EVAL")
+            let tpm_result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
                 .arg(&tpm_key)
                 .arg(self.default_tpm)
                 .arg(60)
-                .arg(0)
+                .arg(amount)
                 .query_async(&mut conn)
                 .await?;
 
-            Ok(true)
+            Ok(tpm_result[0] == 1)
         } else {
             Ok(true)
         }

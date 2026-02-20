@@ -40,10 +40,9 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-    pub fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::open(redis_url)?;
-        let runtime = tokio::runtime::Handle::current();
-        let manager = runtime.block_on(async { ConnectionManager::new(client.clone()).await })?;
+        let manager = ConnectionManager::new(client.clone()).await?;
         Ok(Self { client, manager })
     }
 
@@ -101,10 +100,17 @@ impl ConfigManager {
             let mut stream = pubsub.on_message();
             
             while let Some(msg) = stream.next().await {
-                if let Ok(payload) = msg.get_payload::<String>() {
-                    if let Ok(update) = serde_json::from_str::<PolicyUpdate>(&payload) {
-                        callback(update);
+                let payload = match msg.get_payload::<String>() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        error!("Failed to get policy message payload: {}", e);
+                        continue;
                     }
+                };
+                
+                match serde_json::from_str::<PolicyUpdate>(&payload) {
+                    Ok(update) => callback(update),
+                    Err(e) => error!("Failed to parse policy update: {}", e),
                 }
             }
         });
