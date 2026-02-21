@@ -7,6 +7,7 @@ use pyo3::prelude::*;
 
 /// A wrapper around the HyperInfer client for Python use
 #[pyclass]
+#[derive(Default)]
 pub struct HyperInferClient {
     // In a real implementation, this would contain the actual client
 }

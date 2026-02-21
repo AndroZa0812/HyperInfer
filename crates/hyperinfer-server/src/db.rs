@@ -1,6 +1,6 @@
-use sqlx::PgPool;
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use sqlx::PgPool;
 
 #[derive(Clone)]
 pub struct Db {
@@ -13,11 +13,14 @@ impl Db {
     }
 
     pub async fn get_team(&self, id: &str) -> Result<Option<Team>, sqlx::Error> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
-        sqlx::query_as::<_, Team>("SELECT id, name, budget_cents, created_at, updated_at FROM teams WHERE id = $1")
-            .bind(uuid)
-            .fetch_optional(&self.pool)
-            .await
+        let uuid =
+            uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        sqlx::query_as::<_, Team>(
+            "SELECT id, name, budget_cents, created_at, updated_at FROM teams WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await
     }
 
     pub async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, sqlx::Error> {
@@ -31,15 +34,24 @@ impl Db {
     }
 
     pub async fn get_user(&self, id: &str) -> Result<Option<User>, sqlx::Error> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
-        sqlx::query_as::<_, User>("SELECT id, team_id, email, role, created_at FROM users WHERE id = $1")
-            .bind(uuid)
-            .fetch_optional(&self.pool)
-            .await
+        let uuid =
+            uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        sqlx::query_as::<_, User>(
+            "SELECT id, team_id, email, role, created_at FROM users WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await
     }
 
-    pub async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, sqlx::Error> {
-        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+    pub async fn create_user(
+        &self,
+        team_id: &str,
+        email: &str,
+        role: &str,
+    ) -> Result<User, sqlx::Error> {
+        let team_uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, User>(
             "INSERT INTO users (team_id, email, role) VALUES ($1, $2, $3) RETURNING id, team_id, email, role, created_at"
         )
@@ -51,16 +63,25 @@ impl Db {
     }
 
     pub async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, sqlx::Error> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        let uuid =
+            uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, ApiKey>("SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE id = $1")
             .bind(uuid)
             .fetch_optional(&self.pool)
             .await
     }
 
-    pub async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<&str>) -> Result<ApiKey, sqlx::Error> {
-        let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
-        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+    pub async fn create_api_key(
+        &self,
+        key_hash: &str,
+        user_id: &str,
+        team_id: &str,
+        name: Option<&str>,
+    ) -> Result<ApiKey, sqlx::Error> {
+        let user_uuid = uuid::Uuid::parse_str(user_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        let team_uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, ApiKey>(
             "INSERT INTO api_keys (key_hash, user_id, team_id, name) VALUES ($1, $2, $3, $4) RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
         )
@@ -73,15 +94,23 @@ impl Db {
     }
 
     pub async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, sqlx::Error> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        let uuid =
+            uuid::Uuid::parse_str(id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, ModelAlias>("SELECT id, team_id, alias, target_model, provider, created_at FROM model_aliases WHERE id = $1")
             .bind(uuid)
             .fetch_optional(&self.pool)
             .await
     }
 
-    pub async fn create_model_alias(&self, team_id: &str, alias: &str, target_model: &str, provider: &str) -> Result<ModelAlias, sqlx::Error> {
-        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+    pub async fn create_model_alias(
+        &self,
+        team_id: &str,
+        alias: &str,
+        target_model: &str,
+        provider: &str,
+    ) -> Result<ModelAlias, sqlx::Error> {
+        let team_uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, ModelAlias>(
             "INSERT INTO model_aliases (team_id, alias, target_model, provider) VALUES ($1, $2, $3, $4) RETURNING id, team_id, alias, target_model, provider, created_at"
         )
@@ -94,15 +123,24 @@ impl Db {
     }
 
     pub async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, sqlx::Error> {
-        let uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
-        sqlx::query_as::<_, Quota>("SELECT id, team_id, rpm_limit, tpm_limit, updated_at FROM quotas WHERE team_id = $1")
-            .bind(uuid)
-            .fetch_optional(&self.pool)
-            .await
+        let uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+        sqlx::query_as::<_, Quota>(
+            "SELECT id, team_id, rpm_limit, tpm_limit, updated_at FROM quotas WHERE team_id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await
     }
 
-    pub async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32) -> Result<Quota, sqlx::Error> {
-        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
+    pub async fn create_quota(
+        &self,
+        team_id: &str,
+        rpm_limit: i32,
+        tpm_limit: i32,
+    ) -> Result<Quota, sqlx::Error> {
+        let team_uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| sqlx::Error::Protocol("Invalid UUID".into()))?;
         sqlx::query_as::<_, Quota>(
             "INSERT INTO quotas (team_id, rpm_limit, tpm_limit) VALUES ($1, $2, $3) RETURNING id, team_id, rpm_limit, tpm_limit, updated_at"
         )

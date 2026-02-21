@@ -1,6 +1,7 @@
+use hyperinfer_core::types::{ChatMessage, Choice, MessageRole};
+use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
 
 pub struct HttpCaller {
     client: Client,
@@ -9,12 +10,13 @@ pub struct HttpCaller {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAiResponse {
     pub id: String,
-    pub choices: Vec<Choice>,
+    pub choices: Vec<OpenAiChoice>,
     pub usage: Usage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Choice {
+pub struct OpenAiChoice {
+    pub index: u32,
     pub message: Message,
     pub finish_reason: Option<String>,
 }
@@ -46,8 +48,8 @@ impl HttpCaller {
         api_key: &str,
         request: &ChatRequest,
     ) -> Result<ChatResponse, HyperInferError> {
-        let url = format!("https://api.openai.com/v1/chat/completions");
-        
+        let url = "https://api.openai.com/v1/chat/completions".to_string();
+
         let body = serde_json::json!({
             "model": model,
             "messages": request.messages,
@@ -55,7 +57,8 @@ impl HttpCaller {
             "max_tokens": request.max_tokens,
         });
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
@@ -73,11 +76,33 @@ impl HttpCaller {
         }
 
         let data: OpenAiResponse = response.json().await?;
-        
+
         Ok(ChatResponse {
             id: data.id,
             model: model.to_string(),
-            choices: data.choices.into_iter().map(|c| c.message.content).collect(),
+            choices: data
+                .choices
+                .into_iter()
+                .map(|c| Choice {
+                    index: c.index,
+                    message: ChatMessage {
+                        role: match c.message.role.as_str() {
+                            "assistant" => MessageRole::Assistant,
+                            "user" => MessageRole::User,
+                            "system" => MessageRole::System,
+                            other => {
+                                tracing::warn!(
+                                    "Unknown OpenAI role '{}', defaulting to Assistant",
+                                    other
+                                );
+                                MessageRole::Assistant
+                            }
+                        },
+                        content: c.message.content,
+                    },
+                    finish_reason: c.finish_reason,
+                })
+                .collect(),
             usage: hyperinfer_core::types::Usage {
                 input_tokens: data.usage.prompt_tokens,
                 output_tokens: data.usage.completion_tokens,
@@ -92,21 +117,27 @@ impl HttpCaller {
         request: &ChatRequest,
     ) -> Result<ChatResponse, HyperInferError> {
         let url = "https://api.anthropic.com/v1/messages";
-        
-        let system = request.messages.iter()
+
+        let system = request
+            .messages
+            .iter()
             .find(|m| m.role == hyperinfer_core::types::MessageRole::System)
             .map(|m| m.content.clone());
-            
-        let messages: Vec<_> = request.messages.iter()
+
+        let messages: Vec<_> = request
+            .messages
+            .iter()
             .filter(|m| m.role != hyperinfer_core::types::MessageRole::System)
-            .map(|m| serde_json::json!({
-                "role": match m.role {
-                    hyperinfer_core::types::MessageRole::User => "user",
-                    hyperinfer_core::types::MessageRole::Assistant => "assistant",
-                    _ => "user",
-                },
-                "content": m.content
-            }))
+            .map(|m| {
+                serde_json::json!({
+                    "role": match m.role {
+                        hyperinfer_core::types::MessageRole::User => "user",
+                        hyperinfer_core::types::MessageRole::Assistant => "assistant",
+                        _ => "user",
+                    },
+                    "content": m.content
+                })
+            })
             .collect();
 
         let mut body = serde_json::json!({
@@ -114,7 +145,7 @@ impl HttpCaller {
             "messages": messages,
             "max_tokens": request.max_tokens.unwrap_or(1024),
         });
-        
+
         if let Some(s) = system {
             body["system"] = serde_json::json!(s);
         }
@@ -122,7 +153,8 @@ impl HttpCaller {
             body["temperature"] = serde_json::json!(t);
         }
 
-        let response = self.client
+        let response = self
+            .client
             .post(url)
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
@@ -146,12 +178,12 @@ impl HttpCaller {
             content: Vec<ContentBlock>,
             usage: AnthropicUsage,
         }
-        
+
         #[derive(Deserialize)]
         struct ContentBlock {
             text: Option<String>,
         }
-        
+
         #[derive(Deserialize)]
         struct AnthropicUsage {
             input_tokens: u32,
@@ -159,8 +191,10 @@ impl HttpCaller {
         }
 
         let data: AnthropicResponse = response.json().await?;
-        
-        let content = data.content.into_iter()
+
+        let content = data
+            .content
+            .into_iter()
             .filter_map(|b| b.text)
             .collect::<Vec<_>>()
             .join("\n");
@@ -168,7 +202,14 @@ impl HttpCaller {
         Ok(ChatResponse {
             id: data.id,
             model: model.to_string(),
-            choices: vec![content],
+            choices: vec![Choice {
+                index: 0,
+                message: ChatMessage {
+                    role: MessageRole::Assistant,
+                    content,
+                },
+                finish_reason: Some("stop".to_string()),
+            }],
             usage: hyperinfer_core::types::Usage {
                 input_tokens: data.usage.input_tokens,
                 output_tokens: data.usage.output_tokens,
