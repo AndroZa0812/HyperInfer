@@ -224,6 +224,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             routing_rules: Vec::new(),
             quotas: std::collections::HashMap::new(),
             model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
         }
     });
 

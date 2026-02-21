@@ -184,6 +184,7 @@ impl ConfigManager {
                 routing_rules: Vec::new(),
                 quotas: std::collections::HashMap::new(),
                 model_aliases: std::collections::HashMap::new(),
+                default_provider: None,
             }),
         }
     }

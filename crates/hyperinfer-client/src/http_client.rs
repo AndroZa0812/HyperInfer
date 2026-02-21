@@ -1,4 +1,5 @@
 use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
+use hyperinfer_core::types::{ChatMessage, Choice, MessageRole};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -9,12 +10,13 @@ pub struct HttpCaller {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OpenAiResponse {
     pub id: String,
-    pub choices: Vec<Choice>,
+    pub choices: Vec<OpenAiChoice>,
     pub usage: Usage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Choice {
+pub struct OpenAiChoice {
+    pub index: u32,
     pub message: Message,
     pub finish_reason: Option<String>,
 }
@@ -81,7 +83,19 @@ impl HttpCaller {
             choices: data
                 .choices
                 .into_iter()
-                .map(|c| c.message.content)
+                .map(|c| Choice {
+                    index: c.index,
+                    message: ChatMessage {
+                        role: match c.message.role.as_str() {
+                            "assistant" => MessageRole::Assistant,
+                            "user" => MessageRole::User,
+                            "system" => MessageRole::System,
+                            _ => MessageRole::Assistant,
+                        },
+                        content: c.message.content,
+                    },
+                    finish_reason: c.finish_reason,
+                })
                 .collect(),
             usage: hyperinfer_core::types::Usage {
                 input_tokens: data.usage.prompt_tokens,
@@ -182,7 +196,14 @@ impl HttpCaller {
         Ok(ChatResponse {
             id: data.id,
             model: model.to_string(),
-            choices: vec![content],
+            choices: vec![Choice {
+                index: 0,
+                message: ChatMessage {
+                    role: MessageRole::Assistant,
+                    content,
+                },
+                finish_reason: Some("stop".to_string()),
+            }],
             usage: hyperinfer_core::types::Usage {
                 input_tokens: data.usage.input_tokens,
                 output_tokens: data.usage.output_tokens,

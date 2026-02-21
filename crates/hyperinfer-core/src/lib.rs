@@ -12,6 +12,6 @@ pub mod types;
 pub use error::HyperInferError;
 pub use rate_limiting::RateLimiter;
 pub use types::{
-    ChatMessage, ChatRequest, ChatResponse, Config, MessageRole, Provider, Quota, RoutingRule,
-    Usage,
+    ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider, Quota,
+    RoutingRule, Usage,
 };

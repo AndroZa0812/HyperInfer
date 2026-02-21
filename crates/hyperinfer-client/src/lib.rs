@@ -25,8 +25,9 @@ pub struct HyperInferClient {
 impl HyperInferClient {
     pub async fn new(redis_url: &str, config: Config) -> Result<Self, HyperInferError> {
         let http_caller = HttpCaller::new().map_err(HyperInferError::Http)?;
-        let router =
-            Router::new(config.routing_rules.clone()).with_aliases(config.model_aliases.clone());
+        let router = Router::new(config.routing_rules.clone())
+            .with_aliases(config.model_aliases.clone())
+            .with_default_provider(config.default_provider.clone());
         let rate_limiter = RateLimiter::new(Some(redis_url)).await.map_err(|e| {
             HyperInferError::Config(std::io::Error::other(e.to_string()))
         })?;
@@ -69,10 +70,12 @@ impl HyperInferClient {
             let config = self.config.read().await;
             let resolved = self.router.resolve(&request.model, &config);
 
-            let (model, provider) = match resolved {
-                Some((m, p)) => (m, p),
-                None => (request.model.clone(), Provider::OpenAI),
-            };
+            let (model, provider) = resolved.ok_or_else(|| {
+                HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Unknown model: '{}'. No routing rule or alias found.", request.model),
+                ))
+            })?;
 
             let api_key = config
                 .api_keys
