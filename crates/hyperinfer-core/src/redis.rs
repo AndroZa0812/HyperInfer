@@ -3,8 +3,8 @@
 //! Provides functionality for Redis-based configuration and policy updates.
 
 use futures_util::stream::StreamExt;
-use redis::Client;
 use redis::aio::ConnectionManager;
+use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -244,6 +244,7 @@ impl ConfigManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Provider;
 
     #[test]
     fn test_config_update_serialization() {
@@ -262,10 +263,7 @@ mod tests {
         let json = serde_json::to_string(&update).unwrap();
         let deserialized: ConfigUpdate = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(
-            deserialized.config.default_provider,
-            Some(Provider::OpenAI)
-        );
+        assert_eq!(deserialized.config.default_provider, Some(Provider::OpenAI));
     }
 
     #[test]
@@ -338,7 +336,10 @@ mod tests {
         let update = ConfigUpdate { config };
         let cloned = update.clone();
 
-        assert_eq!(update.config.routing_rules.len(), cloned.config.routing_rules.len());
+        assert_eq!(
+            update.config.routing_rules.len(),
+            cloned.config.routing_rules.len()
+        );
     }
 
     #[test]

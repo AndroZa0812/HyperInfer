@@ -63,7 +63,7 @@ pub struct TokenBucket {
 /// Configuration structure for the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default)]
     pub api_keys: HashMap<String, String>,
     pub routing_rules: Vec<RoutingRule>,
     pub quotas: HashMap<String, Quota>,
@@ -269,7 +269,9 @@ mod tests {
             default_provider: Some(Provider::OpenAI),
         };
 
-        config.api_keys.insert("openai".to_string(), "sk-test".to_string());
+        config
+            .api_keys
+            .insert("openai".to_string(), "sk-test".to_string());
 
         let json = serde_json::to_string(&config).unwrap();
         // api_keys should be skipped during serialization

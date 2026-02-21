@@ -2,8 +2,8 @@
 //!
 //! Provides distributed quota enforcement using Redis and GCRA algorithm.
 
-use redis::Client;
 use redis::aio::ConnectionManager;
+use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -327,7 +327,10 @@ mod tests {
         };
 
         let cloned = quota.clone();
-        assert_eq!(quota.max_requests_per_minute, cloned.max_requests_per_minute);
+        assert_eq!(
+            quota.max_requests_per_minute,
+            cloned.max_requests_per_minute
+        );
         assert_eq!(quota.max_tokens_per_minute, cloned.max_tokens_per_minute);
         assert_eq!(quota.budget_cents, cloned.budget_cents);
     }

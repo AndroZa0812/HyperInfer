@@ -103,8 +103,7 @@ mod tests {
 
     #[test]
     fn test_router_with_default_provider() {
-        let router = Router::new(vec![])
-            .with_default_provider(Some(Provider::OpenAI));
+        let router = Router::new(vec![]).with_default_provider(Some(Provider::OpenAI));
         assert_eq!(router.default_provider, Some(Provider::OpenAI));
     }
 
@@ -136,7 +135,10 @@ mod tests {
     #[test]
     fn test_infer_provider_gpt() {
         assert_eq!(Router::infer_provider("gpt-4"), Some(Provider::OpenAI));
-        assert_eq!(Router::infer_provider("gpt-3.5-turbo"), Some(Provider::OpenAI));
+        assert_eq!(
+            Router::infer_provider("gpt-3.5-turbo"),
+            Some(Provider::OpenAI)
+        );
     }
 
     #[test]
@@ -152,8 +154,14 @@ mod tests {
 
     #[test]
     fn test_infer_provider_claude() {
-        assert_eq!(Router::infer_provider("claude-3-opus"), Some(Provider::Anthropic));
-        assert_eq!(Router::infer_provider("claude-2"), Some(Provider::Anthropic));
+        assert_eq!(
+            Router::infer_provider("claude-3-opus"),
+            Some(Provider::Anthropic)
+        );
+        assert_eq!(
+            Router::infer_provider("claude-2"),
+            Some(Provider::Anthropic)
+        );
     }
 
     #[test]
@@ -219,8 +227,7 @@ mod tests {
 
     #[test]
     fn test_resolve_with_default_provider() {
-        let router = Router::new(vec![])
-            .with_default_provider(Some(Provider::OpenAI));
+        let router = Router::new(vec![]).with_default_provider(Some(Provider::OpenAI));
         let config = create_test_config();
 
         let result = router.resolve("unknown-model", &config);
