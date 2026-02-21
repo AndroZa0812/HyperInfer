@@ -4,11 +4,14 @@
 //! used across the entire HyperInfer monorepo.
 
 pub mod error;
-pub mod types;
-pub mod redis;
 pub mod rate_limiting;
+pub mod redis;
+pub mod types;
 
 // Re-exports for convenient access
 pub use error::HyperInferError;
-pub use types::{ChatRequest, ChatResponse, Usage, Provider, Config, ChatMessage, MessageRole, RoutingRule, Quota};
 pub use rate_limiting::RateLimiter;
+pub use types::{
+    ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider, Quota,
+    RoutingRule, Usage,
+};

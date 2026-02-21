@@ -2,10 +2,10 @@
 
 use axum::{
     Router,
-    routing::{get, post},
-    extract::{State, Path, Json},
-    response::IntoResponse,
+    extract::{Json, Path, State},
     http::StatusCode,
+    response::IntoResponse,
+    routing::{get, post},
 };
 use hyperinfer_core::{Config, redis::ConfigManager};
 use serde::Deserialize;
@@ -30,10 +30,7 @@ async fn config_sync(State(state): State<AppState>) -> impl IntoResponse {
     Json(config.clone())
 }
 
-async fn get_team(
-    State(state): State<AppState>,
-    Path(team_id): Path<String>,
-) -> impl IntoResponse {
+async fn get_team(State(state): State<AppState>, Path(team_id): Path<String>) -> impl IntoResponse {
     match state.db.get_team(&team_id).await {
         Ok(Some(team)) => Json(team).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
@@ -51,10 +48,7 @@ async fn create_team(
     }
 }
 
-async fn get_user(
-    State(state): State<AppState>,
-    Path(user_id): Path<String>,
-) -> impl IntoResponse {
+async fn get_user(State(state): State<AppState>, Path(user_id): Path<String>) -> impl IntoResponse {
     match state.db.get_user(&user_id).await {
         Ok(Some(user)) => Json(user).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
@@ -66,7 +60,11 @@ async fn create_user(
     State(state): State<AppState>,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_user(&req.team_id, &req.email, &req.role).await {
+    match state
+        .db
+        .create_user(&req.team_id, &req.email, &req.role)
+        .await
+    {
         Ok(user) => Json(user).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
     }
@@ -87,9 +85,22 @@ async fn create_api_key(
     State(state): State<AppState>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_api_key(&req.key_hash, &req.user_id, &req.team_id, req.name.as_deref()).await {
+    match state
+        .db
+        .create_api_key(
+            &req.key_hash,
+            &req.user_id,
+            &req.team_id,
+            req.name.as_deref(),
+        )
+        .await
+    {
         Ok(key) => Json(key).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create API key").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create API key",
+        )
+            .into_response(),
     }
 }
 
@@ -108,9 +119,17 @@ async fn create_model_alias(
     State(state): State<AppState>,
     Json(req): Json<CreateModelAliasRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_model_alias(&req.team_id, &req.alias, &req.target_model, &req.provider).await {
+    match state
+        .db
+        .create_model_alias(&req.team_id, &req.alias, &req.target_model, &req.provider)
+        .await
+    {
         Ok(alias) => Json(alias).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create model alias").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create model alias",
+        )
+            .into_response(),
     }
 }
 
@@ -129,7 +148,11 @@ async fn create_quota(
     State(state): State<AppState>,
     Json(req): Json<CreateQuotaRequest>,
 ) -> impl IntoResponse {
-    match state.db.create_quota(&req.team_id, req.rpm_limit, req.tpm_limit).await {
+    match state
+        .db
+        .create_quota(&req.team_id, req.rpm_limit, req.tpm_limit)
+        .await
+    {
         Ok(quota) => Json(quota).into_response(),
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
     }
@@ -178,28 +201,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // NOTE: Default credentials are for development only. Set DATABASE_URL in production.
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/hyperinfer".to_string());
-    
-    let redis_url = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string());
+
+    let redis_url =
+        std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
     let pool = sqlx::postgres::PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await?;
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
 
     let db = Db::new(pool);
     let config_manager = Arc::new(ConfigManager::new(&redis_url).await?);
     let config = config_manager.fetch_config().await.unwrap_or_else(|e| {
-        tracing::warn!("Failed to fetch config from Redis, starting with empty config: {:?}", e);
+        tracing::warn!(
+            "Failed to fetch config from Redis, starting with empty config: {:?}",
+            e
+        );
         Config {
             api_keys: std::collections::HashMap::new(),
             routing_rules: Vec::new(),
             quotas: std::collections::HashMap::new(),
             model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
         }
     });
 
@@ -218,11 +243,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .collect();
         if origins.is_empty() {
             tracing::warn!("No valid CORS origins configured, defaulting to localhost:3000");
-            CorsLayer::new()
-                .allow_origin("http://localhost:3000".parse::<axum::http::HeaderValue>().unwrap())
+            CorsLayer::new().allow_origin(
+                "http://localhost:3000"
+                    .parse::<axum::http::HeaderValue>()
+                    .unwrap(),
+            )
         } else {
-            CorsLayer::new()
-                .allow_origin(origins)
+            CorsLayer::new().allow_origin(origins)
         }
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE])
