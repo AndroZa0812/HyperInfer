@@ -3,8 +3,8 @@
 //! Provides functionality for Redis-based configuration and policy updates.
 
 use futures_util::stream::StreamExt;
-use redis::aio::ConnectionManager;
 use redis::Client;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
