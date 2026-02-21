@@ -78,3 +78,219 @@ impl Router {
         Some((model.to_string(), provider))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn create_test_config() -> Config {
+        Config {
+            api_keys: HashMap::new(),
+            routing_rules: vec![],
+            quotas: HashMap::new(),
+            model_aliases: HashMap::new(),
+            default_provider: None,
+        }
+    }
+
+    #[test]
+    fn test_router_new() {
+        let router = Router::new(vec![]);
+        assert_eq!(router.model_aliases.len(), 0);
+        assert_eq!(router.default_provider, None);
+    }
+
+    #[test]
+    fn test_router_with_default_provider() {
+        let router = Router::new(vec![]).with_default_provider(Some(Provider::OpenAI));
+        assert_eq!(router.default_provider, Some(Provider::OpenAI));
+    }
+
+    #[test]
+    fn test_parse_target_model_with_provider() {
+        let result = Router::parse_target_model("openai/gpt-4").unwrap();
+        assert_eq!(result.0, "gpt-4");
+        assert_eq!(result.1, Some(Provider::OpenAI));
+
+        let result = Router::parse_target_model("anthropic/claude-3").unwrap();
+        assert_eq!(result.0, "claude-3");
+        assert_eq!(result.1, Some(Provider::Anthropic));
+    }
+
+    #[test]
+    fn test_parse_target_model_without_provider() {
+        let result = Router::parse_target_model("gpt-4").unwrap();
+        assert_eq!(result.0, "gpt-4");
+        assert_eq!(result.1, None);
+    }
+
+    #[test]
+    fn test_parse_target_model_unknown_provider() {
+        let result = Router::parse_target_model("unknown/model");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown provider"));
+    }
+
+    #[test]
+    fn test_infer_provider_gpt() {
+        assert_eq!(Router::infer_provider("gpt-4"), Some(Provider::OpenAI));
+        assert_eq!(
+            Router::infer_provider("gpt-3.5-turbo"),
+            Some(Provider::OpenAI)
+        );
+    }
+
+    #[test]
+    fn test_infer_provider_o1() {
+        assert_eq!(Router::infer_provider("o1-preview"), Some(Provider::OpenAI));
+        assert_eq!(Router::infer_provider("o1-mini"), Some(Provider::OpenAI));
+    }
+
+    #[test]
+    fn test_infer_provider_o3() {
+        assert_eq!(Router::infer_provider("o3-mini"), Some(Provider::OpenAI));
+    }
+
+    #[test]
+    fn test_infer_provider_claude() {
+        assert_eq!(
+            Router::infer_provider("claude-3-opus"),
+            Some(Provider::Anthropic)
+        );
+        assert_eq!(
+            Router::infer_provider("claude-2"),
+            Some(Provider::Anthropic)
+        );
+    }
+
+    #[test]
+    fn test_infer_provider_unknown() {
+        assert_eq!(Router::infer_provider("unknown-model"), None);
+        assert_eq!(Router::infer_provider("llama-2"), None);
+    }
+
+    #[test]
+    fn test_with_aliases_valid() {
+        let mut aliases = HashMap::new();
+        aliases.insert("my-gpt".to_string(), "openai/gpt-4".to_string());
+        aliases.insert("my-claude".to_string(), "anthropic/claude-3".to_string());
+
+        let router = Router::new(vec![]).with_aliases(aliases);
+        assert_eq!(router.model_aliases.len(), 2);
+    }
+
+    #[test]
+    fn test_with_aliases_invalid_skipped() {
+        let mut aliases = HashMap::new();
+        aliases.insert("valid".to_string(), "openai/gpt-4".to_string());
+        aliases.insert("invalid".to_string(), "unknown/model".to_string());
+
+        let router = Router::new(vec![]).with_aliases(aliases);
+        assert_eq!(router.model_aliases.len(), 1);
+        assert!(router.model_aliases.contains_key("valid"));
+        assert!(!router.model_aliases.contains_key("invalid"));
+    }
+
+    #[test]
+    fn test_resolve_with_alias() {
+        let mut aliases = HashMap::new();
+        aliases.insert("my-model".to_string(), "openai/gpt-4".to_string());
+
+        let router = Router::new(vec![]).with_aliases(aliases);
+        let config = create_test_config();
+
+        let result = router.resolve("my-model", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "gpt-4");
+        assert_eq!(provider, Provider::OpenAI);
+    }
+
+    #[test]
+    fn test_resolve_with_inference() {
+        let router = Router::new(vec![]);
+        let config = create_test_config();
+
+        let result = router.resolve("gpt-4", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "gpt-4");
+        assert_eq!(provider, Provider::OpenAI);
+
+        let result = router.resolve("claude-3", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "claude-3");
+        assert_eq!(provider, Provider::Anthropic);
+    }
+
+    #[test]
+    fn test_resolve_with_default_provider() {
+        let router = Router::new(vec![]).with_default_provider(Some(Provider::OpenAI));
+        let config = create_test_config();
+
+        let result = router.resolve("unknown-model", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "unknown-model");
+        assert_eq!(provider, Provider::OpenAI);
+    }
+
+    #[test]
+    fn test_resolve_no_match() {
+        let router = Router::new(vec![]);
+        let config = create_test_config();
+
+        let result = router.resolve("unknown-model", &config);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_resolve_alias_without_explicit_provider() {
+        let mut aliases = HashMap::new();
+        aliases.insert("my-gpt".to_string(), "gpt-4".to_string());
+
+        let router = Router::new(vec![]).with_aliases(aliases);
+        let config = create_test_config();
+
+        let result = router.resolve("my-gpt", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "gpt-4");
+        assert_eq!(provider, Provider::OpenAI);
+    }
+
+    #[test]
+    fn test_resolve_alias_with_default_provider() {
+        let mut aliases = HashMap::new();
+        aliases.insert("my-model".to_string(), "custom-model".to_string());
+
+        let router = Router::new(vec![])
+            .with_aliases(aliases)
+            .with_default_provider(Some(Provider::Anthropic));
+        let config = create_test_config();
+
+        let result = router.resolve("my-model", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "custom-model");
+        assert_eq!(provider, Provider::Anthropic);
+    }
+
+    #[test]
+    fn test_resolve_priority_explicit_over_inference() {
+        let mut aliases = HashMap::new();
+        // Map a gpt-like name to anthropic explicitly
+        aliases.insert("gpt-custom".to_string(), "anthropic/claude-3".to_string());
+
+        let router = Router::new(vec![]).with_aliases(aliases);
+        let config = create_test_config();
+
+        let result = router.resolve("gpt-custom", &config);
+        assert!(result.is_some());
+        let (model, provider) = result.unwrap();
+        assert_eq!(model, "claude-3");
+        assert_eq!(provider, Provider::Anthropic);
+    }
+}

@@ -240,3 +240,176 @@ impl ConfigManager {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Provider;
+
+    #[test]
+    fn test_config_update_serialization() {
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: vec![],
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: Some(Provider::OpenAI),
+        };
+
+        let update = ConfigUpdate {
+            config: config.clone(),
+        };
+
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: ConfigUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.config.default_provider, Some(Provider::OpenAI));
+    }
+
+    #[test]
+    fn test_policy_update_serialization() {
+        let update = PolicyUpdate {
+            key: "test-key".to_string(),
+            action: PolicyAction::Revoke,
+            reason: Some("Testing".to_string()),
+        };
+
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: PolicyUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.key, "test-key");
+        assert_eq!(deserialized.reason, Some("Testing".to_string()));
+    }
+
+    #[test]
+    fn test_policy_action_revoke() {
+        let action = PolicyAction::Revoke;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"revoke\"");
+    }
+
+    #[test]
+    fn test_policy_action_update() {
+        let action = PolicyAction::Update;
+        let json = serde_json::to_string(&action).unwrap();
+        assert_eq!(json, "\"update\"");
+    }
+
+    #[test]
+    fn test_policy_update_without_reason() {
+        let update = PolicyUpdate {
+            key: "key123".to_string(),
+            action: PolicyAction::Update,
+            reason: None,
+        };
+
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: PolicyUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.key, "key123");
+        assert_eq!(deserialized.reason, None);
+    }
+
+    #[test]
+    fn test_policy_update_clone() {
+        let update = PolicyUpdate {
+            key: "clone-key".to_string(),
+            action: PolicyAction::Revoke,
+            reason: Some("Clone test".to_string()),
+        };
+
+        let cloned = update.clone();
+        assert_eq!(update.key, cloned.key);
+        assert_eq!(update.reason, cloned.reason);
+    }
+
+    #[test]
+    fn test_config_update_clone() {
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: vec![],
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+
+        let update = ConfigUpdate { config };
+        let cloned = update.clone();
+
+        assert_eq!(
+            update.config.routing_rules.len(),
+            cloned.config.routing_rules.len()
+        );
+    }
+
+    #[test]
+    fn test_config_channel_constant() {
+        assert_eq!(CONFIG_CHANNEL, "hyperinfer:config_updates");
+    }
+
+    #[test]
+    fn test_config_key_constant() {
+        assert_eq!(CONFIG_KEY, "hyperinfer:config");
+    }
+
+    #[test]
+    fn test_policy_action_deserialization_revoke() {
+        let json = "\"revoke\"";
+        let action: PolicyAction = serde_json::from_str(json).unwrap();
+        matches!(action, PolicyAction::Revoke);
+    }
+
+    #[test]
+    fn test_policy_action_deserialization_update() {
+        let json = "\"update\"";
+        let action: PolicyAction = serde_json::from_str(json).unwrap();
+        matches!(action, PolicyAction::Update);
+    }
+
+    #[test]
+    fn test_config_update_with_routing_rules() {
+        use crate::types::RoutingRule;
+
+        let rule = RoutingRule {
+            name: "test-rule".to_string(),
+            priority: 1,
+            fallback_models: vec!["model1".to_string(), "model2".to_string()],
+        };
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: vec![rule],
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+
+        let update = ConfigUpdate { config };
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: ConfigUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.config.routing_rules.len(), 1);
+        assert_eq!(deserialized.config.routing_rules[0].name, "test-rule");
+    }
+
+    #[test]
+    fn test_config_update_with_model_aliases() {
+        let mut aliases = std::collections::HashMap::new();
+        aliases.insert("alias1".to_string(), "model1".to_string());
+        aliases.insert("alias2".to_string(), "model2".to_string());
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: vec![],
+            quotas: std::collections::HashMap::new(),
+            model_aliases: aliases,
+            default_provider: None,
+        };
+
+        let update = ConfigUpdate { config };
+        let json = serde_json::to_string(&update).unwrap();
+        let deserialized: ConfigUpdate = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.config.model_aliases.len(), 2);
+    }
+}

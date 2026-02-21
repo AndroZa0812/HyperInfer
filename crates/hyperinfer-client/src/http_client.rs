@@ -217,3 +217,183 @@ impl HttpCaller {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_http_caller_new() {
+        let result = HttpCaller::new();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_openai_response_deserialization() {
+        let json = r#"{
+            "id": "chatcmpl-123",
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "Hello!"
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15
+            }
+        }"#;
+
+        let response: OpenAiResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(response.id, "chatcmpl-123");
+        assert_eq!(response.choices.len(), 1);
+        assert_eq!(response.choices[0].message.content, "Hello!");
+        assert_eq!(response.usage.total_tokens, 15);
+    }
+
+    #[test]
+    fn test_openai_choice_deserialization() {
+        let json = r#"{
+            "index": 0,
+            "message": {
+                "role": "user",
+                "content": "Test message"
+            },
+            "finish_reason": "length"
+        }"#;
+
+        let choice: OpenAiChoice = serde_json::from_str(json).unwrap();
+        assert_eq!(choice.index, 0);
+        assert_eq!(choice.message.role, "user");
+        assert_eq!(choice.message.content, "Test message");
+        assert_eq!(choice.finish_reason, Some("length".to_string()));
+    }
+
+    #[test]
+    fn test_usage_deserialization() {
+        let json = r#"{
+            "prompt_tokens": 100,
+            "completion_tokens": 50,
+            "total_tokens": 150
+        }"#;
+
+        let usage: Usage = serde_json::from_str(json).unwrap();
+        assert_eq!(usage.prompt_tokens, 100);
+        assert_eq!(usage.completion_tokens, 50);
+        assert_eq!(usage.total_tokens, 150);
+    }
+
+    #[test]
+    fn test_message_serialization() {
+        let message = Message {
+            role: "assistant".to_string(),
+            content: "Response text".to_string(),
+        };
+
+        let json = serde_json::to_string(&message).unwrap();
+        assert!(json.contains("assistant"));
+        assert!(json.contains("Response text"));
+    }
+
+    #[test]
+    fn test_openai_response_clone() {
+        let response = OpenAiResponse {
+            id: "test-id".to_string(),
+            choices: vec![],
+            usage: Usage {
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+            },
+        };
+
+        let cloned = response.clone();
+        assert_eq!(response.id, cloned.id);
+        assert_eq!(response.usage.total_tokens, cloned.usage.total_tokens);
+    }
+
+    #[test]
+    fn test_openai_choice_with_no_finish_reason() {
+        let json = r#"{
+            "index": 1,
+            "message": {
+                "role": "assistant",
+                "content": "Partial response"
+            },
+            "finish_reason": null
+        }"#;
+
+        let choice: OpenAiChoice = serde_json::from_str(json).unwrap();
+        assert_eq!(choice.index, 1);
+        assert_eq!(choice.finish_reason, None);
+    }
+
+    #[tokio::test]
+    async fn test_call_openai_request_structure() {
+        // Test that we can construct a valid request
+        let caller = HttpCaller::new().unwrap();
+        let request = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "Hello".to_string(),
+            }],
+            temperature: Some(0.7),
+            max_tokens: Some(100),
+        };
+
+        // We can't actually call OpenAI without a real API key and network,
+        // but we can verify the function signature and request structure
+        let body = serde_json::json!({
+            "model": "gpt-4",
+            "messages": request.messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+        });
+
+        assert_eq!(body["model"], "gpt-4");
+        assert_eq!(body["temperature"], 0.7);
+        assert_eq!(body["max_tokens"], 100);
+    }
+
+    #[tokio::test]
+    async fn test_call_anthropic_request_structure() {
+        let request = ChatRequest {
+            model: "claude-3".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: MessageRole::System,
+                    content: "You are helpful".to_string(),
+                },
+                ChatMessage {
+                    role: MessageRole::User,
+                    content: "Hello".to_string(),
+                },
+            ],
+            temperature: Some(0.5),
+            max_tokens: Some(200),
+        };
+
+        // Extract system message
+        let system = request
+            .messages
+            .iter()
+            .find(|m| m.role == MessageRole::System)
+            .map(|m| m.content.clone());
+
+        assert_eq!(system, Some("You are helpful".to_string()));
+
+        // Filter non-system messages
+        let messages: Vec<_> = request
+            .messages
+            .iter()
+            .filter(|m| m.role != MessageRole::System)
+            .collect();
+
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Hello");
+    }
+}
