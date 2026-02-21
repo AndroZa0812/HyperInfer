@@ -1,4 +1,5 @@
 # HyperInfer - Next-Generation LLM Gateway
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/AndroZa0812/HyperInfer?utm_source=oss&utm_medium=github&utm_campaign=AndroZa0812%2FHyperInfer&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 A modular Rust & SvelteKit monorepo for building high-performance AI infrastructure.
 

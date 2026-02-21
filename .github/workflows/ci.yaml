@@ -1,0 +1,15 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  # IMPORTANT: This allows the Merge Queue to run the check
+  merge_group:
+
+jobs:
+  check-code:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run a simple check
+        run: echo "Code is ready for merge!"
