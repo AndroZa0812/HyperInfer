@@ -1,4 +1,5 @@
 use hyperinfer_core::types::{Config, Provider};
+use tracing::warn;
 
 pub struct Router {
     #[allow(dead_code)]
@@ -19,9 +20,12 @@ impl Router {
     pub fn with_aliases(mut self, aliases: std::collections::HashMap<String, String>) -> Self {
         self.model_aliases = aliases
             .into_iter()
-            .map(|(alias, target)| {
-                let (model, provider) = Self::parse_target_model(&target);
-                (alias, (model, provider))
+            .filter_map(|(alias, target)| match Self::parse_target_model(&target) {
+                Ok((model, provider)) => Some((alias, (model, provider))),
+                Err(err) => {
+                    warn!("Invalid alias '{}': {}", alias, err);
+                    None
+                }
             })
             .collect();
         self
@@ -32,18 +36,18 @@ impl Router {
         self
     }
 
-    fn parse_target_model(target: &str) -> (String, Option<Provider>) {
+    fn parse_target_model(target: &str) -> Result<(String, Option<Provider>), String> {
         if let Some(slash_pos) = target.find('/') {
             let provider_str = &target[..slash_pos];
             let model = target[slash_pos + 1..].to_string();
             let provider = match provider_str.to_lowercase().as_str() {
                 "openai" => Some(Provider::OpenAI),
                 "anthropic" => Some(Provider::Anthropic),
-                _ => None,
+                unknown => return Err(format!("Unknown provider: '{}'", unknown)),
             };
-            (model, provider)
+            Ok((model, provider))
         } else {
-            (target.to_string(), None)
+            Ok((target.to_string(), None))
         }
     }
 

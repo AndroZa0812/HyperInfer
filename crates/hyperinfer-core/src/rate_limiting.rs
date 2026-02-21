@@ -2,8 +2,8 @@
 //!
 //! Provides distributed quota enforcement using Redis and GCRA algorithm.
 
-use redis::aio::ConnectionManager;
 use redis::Client;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
@@ -107,7 +107,8 @@ impl RateLimiter {
                 .query_async(&mut conn)
                 .await?;
 
-            if result[0] == 0 {
+            let allowed = result.first().copied().unwrap_or(0);
+            if allowed == 0 {
                 return Ok(false);
             }
 
@@ -128,7 +129,7 @@ impl RateLimiter {
                 .query_async(&mut conn)
                 .await?;
 
-            Ok(tpm_result[0] == 1)
+            Ok(tpm_result.first().copied().unwrap_or(0) == 1)
         } else {
             Ok(true)
         }
@@ -151,7 +152,9 @@ impl RateLimiter {
                 .query_async(&mut conn)
                 .await?;
 
-            Ok((result[0] == 1, result[1]))
+            let allowed = result.first().copied().unwrap_or(0) == 1;
+            let remaining = result.get(1).copied().unwrap_or(0);
+            Ok((allowed, remaining))
         } else {
             Ok((true, limit))
         }
@@ -183,7 +186,7 @@ impl RateLimiter {
                 .query_async(&mut conn)
                 .await?;
 
-            Ok(result[0] == 1)
+            Ok(result.first().copied().unwrap_or(0) == 1)
         } else {
             Ok(true)
         }

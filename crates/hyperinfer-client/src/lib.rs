@@ -9,7 +9,7 @@ pub use router::Router;
 pub use telemetry::Telemetry;
 
 use hyperinfer_core::{
-    rate_limiting::RateLimiter, types::Provider, ChatRequest, ChatResponse, Config, HyperInferError,
+    ChatRequest, ChatResponse, Config, HyperInferError, rate_limiting::RateLimiter, types::Provider,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -28,12 +28,12 @@ impl HyperInferClient {
         let router = Router::new(config.routing_rules.clone())
             .with_aliases(config.model_aliases.clone())
             .with_default_provider(config.default_provider.clone());
-        let rate_limiter = RateLimiter::new(Some(redis_url)).await.map_err(|e| {
-            HyperInferError::Config(std::io::Error::other(e.to_string()))
-        })?;
-        let telemetry = Telemetry::new(redis_url).await.map_err(|e| {
-            HyperInferError::Config(std::io::Error::other(e.to_string()))
-        })?;
+        let rate_limiter = RateLimiter::new(Some(redis_url))
+            .await
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+        let telemetry = Telemetry::new(redis_url)
+            .await
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
         let config = Arc::new(RwLock::new(config));
 
         Ok(Self {
@@ -73,7 +73,10 @@ impl HyperInferClient {
             let (model, provider) = resolved.ok_or_else(|| {
                 HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Unknown model: '{}'. No routing rule or alias found.", request.model),
+                    format!(
+                        "Unknown model: '{}'. No routing rule or alias found.",
+                        request.model
+                    ),
                 ))
             })?;
 

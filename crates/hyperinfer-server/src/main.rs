@@ -1,13 +1,13 @@
 //! HyperInfer Server (Control Plane)
 
 use axum::{
+    Router,
     extract::{Json, Path, State},
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
-use hyperinfer_core::{redis::ConfigManager, Config};
+use hyperinfer_core::{Config, redis::ConfigManager};
 use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::RwLock;

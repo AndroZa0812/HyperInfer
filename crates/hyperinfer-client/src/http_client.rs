@@ -1,5 +1,5 @@
-use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
 use hyperinfer_core::types::{ChatMessage, Choice, MessageRole};
+use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -90,7 +90,13 @@ impl HttpCaller {
                             "assistant" => MessageRole::Assistant,
                             "user" => MessageRole::User,
                             "system" => MessageRole::System,
-                            _ => MessageRole::Assistant,
+                            other => {
+                                tracing::warn!(
+                                    "Unknown OpenAI role '{}', defaulting to Assistant",
+                                    other
+                                );
+                                MessageRole::Assistant
+                            }
                         },
                         content: c.message.content,
                     },
