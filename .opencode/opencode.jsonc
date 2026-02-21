@@ -7,4 +7,19 @@
       "enabled": true,
     },
   },
+  "agent": {
+    "coderabbit:code-reviewer": {
+      "mode": "primary",
+      "description": "CodeRabbit Code Reviewer.",
+      "permission": {
+        "code-review": "allow",
+        "edit": "deny",
+        "websearch": "allow",
+        "bash": "ask",
+        "webfetch": "allow",
+        "read": "allow",
+      },
+      "prompt": "{file:./prompts/code-reviewer.md}",
+    },
+  },
 }
