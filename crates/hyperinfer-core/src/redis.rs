@@ -3,12 +3,12 @@
 //! Provides functionality for Redis-based configuration and policy updates.
 
 use futures_util::stream::StreamExt;
-use redis::aio::ConnectionManager;
 use redis::Client;
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, error};
+use tracing::{error, info};
 
 use crate::types::Config;
 
@@ -51,20 +51,23 @@ impl ConfigManager {
         config: Arc<RwLock<Config>>,
     ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
         let redis_url = self.client.get_connection_info().addr().to_string();
-        
+
         let handle = tokio::spawn(async move {
             let mut backoff = 1u64;
-            
+
             loop {
                 let result = async {
                     let client = Client::open(redis_url.as_str())?;
                     let mut pubsub = client.get_async_pubsub().await?;
                     pubsub.subscribe(CONFIG_CHANNEL).await?;
-                    
-                    info!("Subscribed to Redis config updates channel: {}", CONFIG_CHANNEL);
-                    
+
+                    info!(
+                        "Subscribed to Redis config updates channel: {}",
+                        CONFIG_CHANNEL
+                    );
+
                     let mut stream = pubsub.on_message();
-                    
+
                     while let Some(msg) = stream.next().await {
                         let payload_str = match msg.get_payload::<String>() {
                             Ok(p) => p,
@@ -73,7 +76,7 @@ impl ConfigManager {
                                 continue;
                             }
                         };
-                        
+
                         let new_config = match serde_json::from_str::<ConfigUpdate>(&payload_str) {
                             Ok(update) => update.config,
                             Err(e) => {
@@ -81,7 +84,7 @@ impl ConfigManager {
                                 continue;
                             }
                         };
-                        
+
                         {
                             let mut cfg = config.write().await;
                             *cfg = new_config;
@@ -89,10 +92,14 @@ impl ConfigManager {
                         }
                     }
                     Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
-                }.await;
-                
+                }
+                .await;
+
                 if let Err(e) = result {
-                    error!("Config subscription error: {}, reconnecting in {}s", e, backoff);
+                    error!(
+                        "Config subscription error: {}, reconnecting in {}s",
+                        e, backoff
+                    );
                     tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
                     backoff = (backoff * 2).min(60);
                 } else {
@@ -101,7 +108,7 @@ impl ConfigManager {
                 }
             }
         });
-        
+
         Ok(handle)
     }
 
@@ -110,20 +117,20 @@ impl ConfigManager {
         callback: impl Fn(PolicyUpdate) + Send + Sync + 'static,
     ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
         let redis_url = self.client.get_connection_info().addr().to_string();
-        
+
         let handle = tokio::spawn(async move {
             let mut backoff = 1u64;
-            
+
             loop {
                 let result = async {
                     let client = Client::open(redis_url.as_str())?;
                     let mut pubsub = client.get_async_pubsub().await?;
                     pubsub.subscribe("hyperinfer:policy_updates").await?;
-                    
+
                     info!("Subscribed to Redis policy updates channel");
-                    
+
                     let mut stream = pubsub.on_message();
-                    
+
                     while let Some(msg) = stream.next().await {
                         let payload = match msg.get_payload::<String>() {
                             Ok(p) => p,
@@ -132,17 +139,21 @@ impl ConfigManager {
                                 continue;
                             }
                         };
-                        
+
                         match serde_json::from_str::<PolicyUpdate>(&payload) {
                             Ok(update) => callback(update),
                             Err(e) => error!("Failed to parse policy update: {}", e),
                         }
                     }
                     Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
-                }.await;
-                
+                }
+                .await;
+
                 if let Err(e) = result {
-                    error!("Policy subscription error: {}, reconnecting in {}s", e, backoff);
+                    error!(
+                        "Policy subscription error: {}, reconnecting in {}s",
+                        e, backoff
+                    );
                     tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
                     backoff = (backoff * 2).min(60);
                 } else {
@@ -151,76 +162,81 @@ impl ConfigManager {
                 }
             }
         });
-        
+
         Ok(handle)
     }
 
     pub async fn fetch_config(&self) -> Result<Config, Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.manager.clone();
-        
+
         let data: Option<Vec<u8>> = redis::cmd("GET")
             .arg(CONFIG_KEY)
             .query_async(&mut conn)
             .await?;
-        
+
         match data {
             Some(bytes) => {
                 let config: Config = serde_json::from_slice(&bytes)?;
                 Ok(config)
             }
-            None => {
-                Ok(Config {
-                    api_keys: std::collections::HashMap::new(),
-                    routing_rules: Vec::new(),
-                    quotas: std::collections::HashMap::new(),
-                    model_aliases: std::collections::HashMap::new(),
-                })
-            }
+            None => Ok(Config {
+                api_keys: std::collections::HashMap::new(),
+                routing_rules: Vec::new(),
+                quotas: std::collections::HashMap::new(),
+                model_aliases: std::collections::HashMap::new(),
+                default_provider: None,
+            }),
         }
     }
 
-    pub async fn publish_config_update(&self, config: &Config) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn publish_config_update(
+        &self,
+        config: &Config,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.manager.clone();
-        
+
         // Store config first so it's available when subscribers receive notification
         let config_bytes = serde_json::to_vec(config)?;
-        
+
         redis::cmd("SET")
             .arg(CONFIG_KEY)
             .arg(config_bytes)
             .query_async::<()>(&mut conn)
             .await?;
-        
+
         let update = ConfigUpdate {
             config: config.clone(),
         };
-        
+
         let payload = serde_json::to_string(&update)?;
-        
+
         redis::cmd("PUBLISH")
             .arg(CONFIG_CHANNEL)
             .arg(&payload)
             .query_async::<()>(&mut conn)
             .await?;
-        
+
         info!("Published config update to channel: {}", CONFIG_CHANNEL);
-        
+
         Ok(())
     }
 
-    pub async fn publish_policy_update(&self, update: &PolicyUpdate) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn publish_policy_update(
+        &self,
+        update: &PolicyUpdate,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let mut conn = self.manager.clone();
-        
+
         let payload = serde_json::to_string(update)?;
-        
+
         redis::cmd("PUBLISH")
             .arg("hyperinfer:policy_updates")
             .arg(&payload)
             .query_async::<()>(&mut conn)
             .await?;
-        
+
         info!("Published policy update: {:?}", update.action);
-        
+
         Ok(())
     }
 }

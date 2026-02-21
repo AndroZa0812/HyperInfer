@@ -68,6 +68,8 @@ pub struct Config {
     pub routing_rules: Vec<RoutingRule>,
     pub quotas: HashMap<String, Quota>,
     pub model_aliases: HashMap<String, String>,
+    #[serde(default)]
+    pub default_provider: Option<Provider>,
 }
 
 /// A routing rule for LLM providers
@@ -115,6 +117,14 @@ pub struct Usage {
     pub output_tokens: u32,
 }
 
+/// A choice in a chat response
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Choice {
+    pub index: u32,
+    pub message: ChatMessage,
+    pub finish_reason: Option<String>,
+}
+
 /// A chat response from an LLM provider
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ChatResponse {
@@ -123,7 +133,7 @@ pub struct ChatResponse {
     #[serde(default)]
     pub model: String,
     #[serde(default)]
-    pub choices: Vec<String>,
+    pub choices: Vec<Choice>,
     #[serde(default)]
     pub usage: Usage,
 }
