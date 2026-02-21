@@ -2,8 +2,8 @@
 //!
 //! Provides distributed quota enforcement using Redis and GCRA algorithm.
 
-use redis::Client;
 use redis::aio::ConnectionManager;
+use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 

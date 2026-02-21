@@ -3,8 +3,8 @@
 //! Provides functionality for Redis-based configuration and policy updates.
 
 use futures_util::stream::StreamExt;
-use redis::Client;
 use redis::aio::ConnectionManager;
+use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -356,14 +356,14 @@ mod tests {
     fn test_policy_action_deserialization_revoke() {
         let json = "\"revoke\"";
         let action: PolicyAction = serde_json::from_str(json).unwrap();
-        matches!(action, PolicyAction::Revoke);
+        assert!(matches!(action, PolicyAction::Revoke));
     }
 
     #[test]
     fn test_policy_action_deserialization_update() {
         let json = "\"update\"";
         let action: PolicyAction = serde_json::from_str(json).unwrap();
-        matches!(action, PolicyAction::Update);
+        assert!(matches!(action, PolicyAction::Update));
     }
 
     #[test]

@@ -9,7 +9,7 @@ pub use router::Router;
 pub use telemetry::Telemetry;
 
 use hyperinfer_core::{
-    ChatRequest, ChatResponse, Config, HyperInferError, rate_limiting::RateLimiter, types::Provider,
+    rate_limiting::RateLimiter, types::Provider, ChatRequest, ChatResponse, Config, HyperInferError,
 };
 use std::sync::Arc;
 use tokio::sync::RwLock;
