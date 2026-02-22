@@ -193,7 +193,10 @@ async fn test_get_nonexistent_api_key() {
         .get_api_key("00000000-0000-0000-0000-000000000000")
         .await
         .expect("Query failed");
-    assert!(result.is_none(), "Should return None for non-existent API key");
+    assert!(
+        result.is_none(),
+        "Should return None for non-existent API key"
+    );
 }
 
 #[tokio::test]
@@ -204,7 +207,10 @@ async fn test_get_nonexistent_model_alias() {
         .get_model_alias("00000000-0000-0000-0000-000000000000")
         .await
         .expect("Query failed");
-    assert!(result.is_none(), "Should return None for non-existent model alias");
+    assert!(
+        result.is_none(),
+        "Should return None for non-existent model alias"
+    );
 }
 
 #[tokio::test]
@@ -215,7 +221,10 @@ async fn test_get_nonexistent_quota() {
         .get_quota("00000000-0000-0000-0000-000000000000")
         .await
         .expect("Query failed");
-    assert!(result.is_none(), "Should return None for non-existent quota");
+    assert!(
+        result.is_none(),
+        "Should return None for non-existent quota"
+    );
 }
 
 #[tokio::test]
@@ -243,7 +252,9 @@ async fn test_duplicate_user_email() {
         .await
         .expect("Failed to create first user");
 
-    let result = db.create_user(&team.id, "unique@example.com", "member").await;
+    let result = db
+        .create_user(&team.id, "unique@example.com", "member")
+        .await;
     assert!(result.is_err(), "Should fail on duplicate user email");
 }
 
@@ -265,7 +276,9 @@ async fn test_duplicate_api_key_hash() {
         .await
         .expect("Failed to create first API key");
 
-    let result = db.create_api_key("unique_hash", &user.id, &team.id, None).await;
+    let result = db
+        .create_api_key("unique_hash", &user.id, &team.id, None)
+        .await;
     assert!(result.is_err(), "Should fail on duplicate API key hash");
 }
 
@@ -285,7 +298,10 @@ async fn test_duplicate_model_alias_per_team() {
     let result = db
         .create_model_alias(&team.id, "gpt-4", "gpt-4o", "openai")
         .await;
-    assert!(result.is_err(), "Should fail on duplicate model alias per team");
+    assert!(
+        result.is_err(),
+        "Should fail on duplicate model alias per team"
+    );
 }
 
 #[tokio::test]
@@ -318,7 +334,11 @@ async fn test_create_user_invalid_team_fk() {
     let (db, _container) = setup_test_db().await;
 
     let result = db
-        .create_user("00000000-0000-0000-0000-000000000000", "test@example.com", "admin")
+        .create_user(
+            "00000000-0000-0000-0000-000000000000",
+            "test@example.com",
+            "admin",
+        )
         .await;
     assert!(result.is_err(), "Should fail on invalid team foreign key");
 }

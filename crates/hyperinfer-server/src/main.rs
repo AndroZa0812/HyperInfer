@@ -19,6 +19,7 @@ use tracing::info;
 struct AppState<D: Database, C: ConfigStore> {
     config: Arc<RwLock<Config>>,
     db: D,
+    #[allow(dead_code)]
     config_manager: C,
 }
 
