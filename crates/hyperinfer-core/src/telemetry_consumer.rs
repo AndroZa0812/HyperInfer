@@ -12,6 +12,11 @@ use crate::types::UsageRecord;
 
 const DEFAULT_TELEMETRY_STREAM: &str = "hyperinfer:telemetry";
 const DEFAULT_CONSUMER_GROUP: &str = "telemetry-consumer";
+const XAUTOCLAIM_IDLE_MS: &str = "600000";
+const XREADGROUP_BLOCK_MS: u32 = 5000;
+const XREADGROUP_COUNT: u32 = 10;
+const XAUTOCLAIM_COUNT: u32 = 100;
+const MAX_BACKOFF_SECS: u64 = 60;
 
 type StreamEntry = (String, Vec<(String, String)>);
 
@@ -61,6 +66,142 @@ impl TelemetryConsumer {
         Ok(())
     }
 
+    async fn ack_message(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        msg_id: &str,
+    ) -> Result<(), redis::RedisError> {
+        redis::cmd("XACK")
+            .arg(stream_key)
+            .arg(consumer_group)
+            .arg(msg_id)
+            .query_async::<()>(conn)
+            .await
+    }
+
+    async fn process_entry<F, Fut>(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        msg_id: &str,
+        fields: &[(String, String)],
+        handler: &F,
+    ) where
+        F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+            + Send,
+    {
+        if let Some(record) = Self::parse_entry(fields) {
+            match handler(record).await {
+                Ok(_) => {
+                    if let Err(e) =
+                        Self::ack_message(conn, stream_key, consumer_group, msg_id).await
+                    {
+                        warn!("Failed to XACK message {}: {}", msg_id, e);
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to process message {}: {:?}", msg_id, e);
+                }
+            }
+        } else {
+            warn!("Failed to parse message {}", msg_id);
+            if let Err(e) = Self::ack_message(conn, stream_key, consumer_group, msg_id).await {
+                warn!("Failed to XACK unparseable message {}: {}", msg_id, e);
+            }
+        }
+    }
+
+    async fn recover_pending_messages<F, Fut>(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        consumer_name: &str,
+        handler: &F,
+    ) where
+        F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+            + Send,
+    {
+        let mut start_id = "0".to_string();
+        loop {
+            let result: Result<(String, Vec<StreamEntry>), redis::RedisError> =
+                redis::cmd("XAUTOCLAIM")
+                    .arg(stream_key)
+                    .arg(consumer_group)
+                    .arg(consumer_name)
+                    .arg(XAUTOCLAIM_IDLE_MS)
+                    .arg(&start_id)
+                    .arg("COUNT")
+                    .arg(XAUTOCLAIM_COUNT)
+                    .query_async(conn)
+                    .await;
+
+            let (next_start, claimed) = match result {
+                Ok(res) => res,
+                Err(e) => {
+                    warn!("XAUTOCLAIM failed: {}", e);
+                    return;
+                }
+            };
+
+            for (msg_id, fields) in claimed {
+                Self::process_entry(conn, stream_key, consumer_group, &msg_id, &fields, handler)
+                    .await;
+            }
+
+            if next_start == "0" {
+                return;
+            }
+            start_id = next_start;
+        }
+    }
+
+    async fn read_and_process_batch<F, Fut>(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        consumer_name: &str,
+        handler: &F,
+    ) -> Result<(), redis::RedisError>
+    where
+        F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+            + Send,
+    {
+        #[allow(clippy::type_complexity)]
+        let results: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREADGROUP")
+            .arg("GROUP")
+            .arg(consumer_group)
+            .arg(consumer_name)
+            .arg("COUNT")
+            .arg(XREADGROUP_COUNT)
+            .arg("BLOCK")
+            .arg(XREADGROUP_BLOCK_MS)
+            .arg("STREAMS")
+            .arg(stream_key)
+            .arg(">")
+            .query_async(conn)
+            .await?;
+
+        for (_stream, entries) in results {
+            for (entry_id, fields) in entries {
+                Self::process_entry(
+                    conn,
+                    stream_key,
+                    consumer_group,
+                    &entry_id,
+                    &fields,
+                    handler,
+                )
+                .await;
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn start_consuming<F, Fut>(
         &self,
         handler: F,
@@ -86,7 +227,7 @@ impl TelemetryConsumer {
                         e, backoff
                     );
                     tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                    backoff = (backoff * 2).min(60);
+                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
                     continue;
                 }
 
@@ -97,106 +238,32 @@ impl TelemetryConsumer {
                     warn!("Failed to ensure consumer group: {}", e);
                 }
 
-                // Recover any pending messages from previous consumers or failed attempts
-                let mut start_id = "0".to_string();
-                loop {
-                    let (next_start, claimed): (String, Vec<StreamEntry>) =
-                        match redis::cmd("XAUTOCLAIM")
-                            .arg(&stream_key)
-                            .arg(&consumer_group)
-                            .arg(&consumer_name)
-                            .arg("600") // min-idle-time in seconds (10 minutes)
-                            .arg(&start_id)
-                            .arg("COUNT")
-                            .arg("100")
-                            .query_async(&mut conn)
-                            .await
-                        {
-                            Ok(res) => res,
-                            Err(e) => {
-                                warn!("XAUTOCLAIM failed: {}", e);
-                                break;
-                            }
-                        };
-                    for (msg_id, fields) in claimed {
-                        if let Some(record) = Self::parse_entry(&fields) {
-                            match handler(record).await {
-                                Ok(_) => {
-                                    if let Err(e) = redis::cmd("XACK")
-                                        .arg(&stream_key)
-                                        .arg(&consumer_group)
-                                        .arg(&msg_id)
-                                        .query_async::<()>(&mut conn)
-                                        .await
-                                    {
-                                        warn!("Failed to XACK claimed message {}: {}", msg_id, e);
-                                    }
-                                }
-                                Err(e) => {
-                                    warn!("Failed to process claimed message {}: {:?}", msg_id, e);
-                                }
-                            }
-                        } else {
-                            warn!("Failed to parse claimed message {}", msg_id);
-                        }
-                    }
-                    if next_start == "0" {
-                        break;
-                    }
-                    start_id = next_start;
-                }
-
                 info!(
                     "Starting telemetry consumption from stream: {} (group: {})",
                     stream_key, consumer_group
                 );
 
-                loop {
-                    #[allow(clippy::type_complexity)]
-                    let results: Result<
-                        Vec<(String, Vec<(String, Vec<(String, String)>)>)>,
-                        redis::RedisError,
-                    > = redis::cmd("XREADGROUP")
-                        .arg("GROUP")
-                        .arg(&consumer_group)
-                        .arg(&consumer_name)
-                        .arg("COUNT")
-                        .arg(10)
-                        .arg("BLOCK")
-                        .arg(5000)
-                        .arg("STREAMS")
-                        .arg(&stream_key)
-                        .arg(">")
-                        .query_async(&mut conn)
-                        .await;
+                Self::recover_pending_messages(
+                    &mut conn,
+                    &stream_key,
+                    &consumer_group,
+                    &consumer_name,
+                    &handler,
+                )
+                .await;
 
-                    match results {
-                        Ok(results) => {
-                            backoff = 1; // Reset backoff on successful read
-                            for (_stream, entries) in results {
-                                for (entry_id, fields) in entries {
-                                    if let Some(record) = Self::parse_entry(&fields) {
-                                        let handler_result = handler(record).await;
-                                        if handler_result.is_ok() {
-                                            let ack_result: Result<(), redis::RedisError> =
-                                                redis::cmd("XACK")
-                                                    .arg(&stream_key)
-                                                    .arg(&consumer_group)
-                                                    .arg(&entry_id)
-                                                    .query_async(&mut conn)
-                                                    .await;
-                                            if let Err(e) = ack_result {
-                                                warn!("Failed to XACK entry {}: {}", entry_id, e);
-                                            }
-                                        } else {
-                                            warn!(
-                                                "Failed to process telemetry record: {:?}",
-                                                handler_result.err()
-                                            );
-                                        }
-                                    }
-                                }
-                            }
+                loop {
+                    match Self::read_and_process_batch(
+                        &mut conn,
+                        &stream_key,
+                        &consumer_group,
+                        &consumer_name,
+                        &handler,
+                    )
+                    .await
+                    {
+                        Ok(_) => {
+                            backoff = 1;
                         }
                         Err(e) => {
                             error!(
@@ -204,7 +271,7 @@ impl TelemetryConsumer {
                                 e, backoff
                             );
                             tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                            backoff = (backoff * 2).min(60);
+                            backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
                             break;
                         }
                     }
