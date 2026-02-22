@@ -1,3 +1,5 @@
+use hex;
+use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_STREAM_KEY: &str = "hyperinfer:telemetry";
@@ -8,6 +10,19 @@ pub struct Telemetry {
 }
 
 impl Telemetry {
+    /// Returns a truncated hash suffix of the key for safe logging
+    fn key_id(key: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(key.as_bytes());
+        let hash = hasher.finalize();
+        let hex_hash = hex::encode(hash);
+        // Return last 8 characters of hash
+        if hex_hash.len() >= 8 {
+            format!("...{}", &hex_hash[hex_hash.len() - 8..])
+        } else {
+            hex_hash
+        }
+    }
     pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let manager = match redis::Client::open(redis_url) {
             Ok(client) => match redis::aio::ConnectionManager::new(client).await {
@@ -29,7 +44,7 @@ impl Telemetry {
         })
     }
 
-    pub async fn with_stream_key(mut self, stream_key: &str) -> Self {
+    pub fn with_stream_key(mut self, stream_key: &str) -> Self {
         self.stream_key = stream_key.to_string();
         self
     }
@@ -91,8 +106,8 @@ impl Telemetry {
             });
         } else {
             tracing::debug!(
-                "Telemetry skipped (Redis unavailable): key={}, model={}, input_tokens={}, output_tokens={}, response_time_ms={}",
-                key, model, input_tokens, output_tokens, response_time_ms
+                "Telemetry skipped (Redis unavailable): key_id={}, model={}, input_tokens={}, output_tokens={}, response_time_ms={}",
+                Self::key_id(key), model, input_tokens, output_tokens, response_time_ms
             );
         }
 
@@ -125,8 +140,7 @@ mod tests {
         let telemetry = Telemetry::new("redis://localhost:6379")
             .await
             .unwrap()
-            .with_stream_key("custom:stream")
-            .await;
+            .with_stream_key("custom:stream");
         assert_eq!(telemetry.stream_key, "custom:stream");
     }
 

@@ -240,6 +240,16 @@ fn hash_key(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
+fn key_id(key: &str) -> String {
+    let hash = hash_key(key);
+    // Return last 8 characters of hash
+    if hash.len() >= 8 {
+        format!("...{}", &hash[hash.len() - 8..])
+    } else {
+        hash
+    }
+}
+
 async fn resolve_api_key<D: Database>(db: &D, key: &str) -> Option<(String, String)> {
     let key_hash = hash_key(key);
     match db.get_api_key_by_hash(&key_hash).await {
@@ -320,8 +330,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         )
                         .await
                     {
-                        Ok(_) => tracing::debug!("Recorded usage for key: {}", record.key),
-                        Err(e) => tracing::error!("Failed to record usage: {:?}", e),
+                        Ok(_) => {
+                            tracing::debug!("Recorded usage for key_id: {}", key_id(&record.key))
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to record usage for key_id {}: {:?}",
+                                key_id(&record.key),
+                                e
+                            );
+                            return Err(e.into());
+                        }
                     }
                 }
                 Ok(())

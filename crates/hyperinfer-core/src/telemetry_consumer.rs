@@ -13,6 +13,8 @@ use crate::types::UsageRecord;
 const DEFAULT_TELEMETRY_STREAM: &str = "hyperinfer:telemetry";
 const DEFAULT_CONSUMER_GROUP: &str = "telemetry-consumer";
 
+type StreamEntry = (String, Vec<(String, String)>);
+
 pub struct TelemetryConsumer {
     client: Arc<Client>,
     stream_key: String,
@@ -93,6 +95,55 @@ impl TelemetryConsumer {
                     Self::ensure_consumer_group(&mut conn, &stream_key, &consumer_group).await
                 {
                     warn!("Failed to ensure consumer group: {}", e);
+                }
+
+                // Recover any pending messages from previous consumers or failed attempts
+                let mut start_id = "0".to_string();
+                loop {
+                    let (next_start, claimed): (String, Vec<StreamEntry>) =
+                        match redis::cmd("XAUTOCLAIM")
+                            .arg(&stream_key)
+                            .arg(&consumer_group)
+                            .arg(&consumer_name)
+                            .arg("600") // min-idle-time in seconds (10 minutes)
+                            .arg(&start_id)
+                            .arg("COUNT")
+                            .arg("100")
+                            .query_async(&mut conn)
+                            .await
+                        {
+                            Ok(res) => res,
+                            Err(e) => {
+                                warn!("XAUTOCLAIM failed: {}", e);
+                                break;
+                            }
+                        };
+                    for (msg_id, fields) in claimed {
+                        if let Some(record) = Self::parse_entry(&fields) {
+                            match handler(record).await {
+                                Ok(_) => {
+                                    if let Err(e) = redis::cmd("XACK")
+                                        .arg(&stream_key)
+                                        .arg(&consumer_group)
+                                        .arg(&msg_id)
+                                        .query_async::<()>(&mut conn)
+                                        .await
+                                    {
+                                        warn!("Failed to XACK claimed message {}: {}", msg_id, e);
+                                    }
+                                }
+                                Err(e) => {
+                                    warn!("Failed to process claimed message {}: {:?}", msg_id, e);
+                                }
+                            }
+                        } else {
+                            warn!("Failed to parse claimed message {}", msg_id);
+                        }
+                    }
+                    if next_start == "0" {
+                        break;
+                    }
+                    start_id = next_start;
                 }
 
                 info!(

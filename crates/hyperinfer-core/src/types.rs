@@ -118,6 +118,8 @@ pub struct Usage {
 }
 
 /// A usage record for telemetry (stored in Redis Stream and PostgreSQL)
+///
+/// All timestamps are in milliseconds since Unix epoch.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub key: String,

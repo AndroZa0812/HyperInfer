@@ -5,10 +5,10 @@ CREATE TABLE usage_logs (
     team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
     api_key_id UUID NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
     model VARCHAR(255) NOT NULL,
-    input_tokens INTEGER NOT NULL DEFAULT 0,
-    output_tokens INTEGER NOT NULL DEFAULT 0,
-    response_time_ms BIGINT NOT NULL DEFAULT 0,
-    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    input_tokens INTEGER NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+    output_tokens INTEGER NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+    response_time_ms BIGINT NOT NULL DEFAULT 0 CHECK (response_time_ms >= 0),
+    recorded_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX idx_usage_logs_team_id ON usage_logs(team_id);
