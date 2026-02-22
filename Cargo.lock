@@ -1147,6 +1147,7 @@ dependencies = [
  "mockall",
  "redis",
  "serde",
+ "sha2",
  "sqlx",
  "testcontainers",
  "testcontainers-modules",

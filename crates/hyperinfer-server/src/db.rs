@@ -93,6 +93,17 @@ impl Database for SqlxDb {
         Ok(result.map(ApiKey::from))
     }
 
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError> {
+        let result: Option<ApiKeyRow> = sqlx::query_as(
+            "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE key_hash = $1 AND is_active = true"
+        )
+        .bind(key_hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(ApiKey::from))
+    }
+
     async fn create_api_key(
         &self,
         key_hash: &str,

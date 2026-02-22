@@ -11,6 +11,7 @@ pub trait Database: Clone + Send + Sync + 'static {
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
     async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError>;
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
     async fn create_api_key(
         &self,
         key_hash: &str,

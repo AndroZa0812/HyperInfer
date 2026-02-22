@@ -10,6 +10,7 @@ use axum::{
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{RedisConfigStore, SqlxDb};
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
@@ -233,14 +234,28 @@ struct CreateQuotaRequest {
     tpm_limit: i32,
 }
 
-#[allow(dead_code)]
-async fn resolve_team_for_key<D: Database>(_db: &D, _key: &str) -> Option<String> {
-    todo!("Implement lookup of team_id from api_key in database")
+fn hash_key(key: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(key.as_bytes());
+    format!("{:x}", hasher.finalize())
 }
 
-#[allow(dead_code)]
-async fn resolve_api_key_id<D: Database>(_db: &D, _key: &str) -> Option<String> {
-    todo!("Implement lookup of api_key_id from key hash in database")
+async fn resolve_team_for_key<D: Database>(db: &D, key: &str) -> Option<String> {
+    let key_hash = hash_key(key);
+    db.get_api_key_by_hash(&key_hash)
+        .await
+        .ok()
+        .flatten()
+        .map(|k| k.team_id)
+}
+
+async fn resolve_api_key_id<D: Database>(db: &D, key: &str) -> Option<String> {
+    let key_hash = hash_key(key);
+    db.get_api_key_by_hash(&key_hash)
+        .await
+        .ok()
+        .flatten()
+        .map(|k| k.id)
 }
 
 #[tokio::main]
@@ -296,9 +311,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                             &team_id,
                             &api_key_id,
                             &record.model,
-                            record.input_tokens as i32,
-                            record.output_tokens as i32,
-                            record.response_time_ms as i64,
+                            i32::try_from(record.input_tokens).unwrap_or(i32::MAX),
+                            i32::try_from(record.output_tokens).unwrap_or(i32::MAX),
+                            i64::try_from(record.response_time_ms).unwrap_or(i64::MAX),
                         )
                         .await
                     {
@@ -386,6 +401,7 @@ mod tests {
             async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
             async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError>;
             async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
+            async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
             async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<String>) -> Result<ApiKey, DbError>;
             async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError>;
             async fn create_model_alias(&self, team_id: &str, alias: &str, target_model: &str, provider: &str) -> Result<ModelAlias, DbError>;

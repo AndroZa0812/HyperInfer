@@ -45,11 +45,13 @@ impl TelemetryConsumer {
 
     async fn ensure_consumer_group(
         conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _: Result<(), redis::RedisError> = redis::cmd("XGROUP")
             .arg("CREATE")
-            .arg("hyperinfer:telemetry")
-            .arg("telemetry-consumer")
+            .arg(stream_key)
+            .arg(consumer_group)
             .arg("0")
             .arg("MKSTREAM")
             .query_async(conn)
@@ -87,7 +89,9 @@ impl TelemetryConsumer {
                 }
 
                 let mut conn = conn_result.unwrap();
-                if let Err(e) = Self::ensure_consumer_group(&mut conn).await {
+                if let Err(e) =
+                    Self::ensure_consumer_group(&mut conn, &stream_key, &consumer_group).await
+                {
                     warn!("Failed to ensure consumer group: {}", e);
                 }
 
@@ -117,6 +121,7 @@ impl TelemetryConsumer {
 
                     match results {
                         Ok(results) => {
+                            backoff = 1; // Reset backoff on successful read
                             for (_stream, entries) in results {
                                 for (entry_id, fields) in entries {
                                     if let Some(record) = Self::parse_entry(&fields) {

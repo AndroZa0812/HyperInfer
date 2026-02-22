@@ -2,8 +2,8 @@
 
 CREATE TABLE usage_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
-    api_key_id UUID REFERENCES api_keys(id) ON DELETE CASCADE,
+    team_id UUID NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    api_key_id UUID NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
     model VARCHAR(255) NOT NULL,
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
