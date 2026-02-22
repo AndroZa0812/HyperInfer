@@ -12,6 +12,16 @@ pub struct SqlxDb {
 }
 
 impl SqlxDb {
+    /// Creates a new SqlxDb that uses the provided Postgres connection pool.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use sqlx::PgPool;
+    /// // Create a lazy connection pool (does not establish network connections immediately).
+    /// let pool = PgPool::connect_lazy("postgres://user:password@localhost/dbname");
+    /// let db = SqlxDb::new(pool);
+    /// ```
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -19,6 +29,28 @@ impl SqlxDb {
 
 #[async_trait]
 impl Database for SqlxDb {
+    /// Fetches a team by its UUID string.
+    ///
+    /// Attempts to parse `id` as a UUID; if parsing fails this returns `DbError::InvalidUuid`.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The team's UUID string.
+    ///
+    /// # Returns
+    ///
+    /// `Some(Team)` if a team with the given id exists, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(db: &SqlxDb) -> Result<(), Box<dyn std::error::Error>> {
+    /// let maybe = db.get_team("550e8400-e29b-41d4-a716-446655440000").await?;
+    /// if let Some(team) = maybe {
+    ///     println!("{}", team.name);
+    /// }
+    /// # Ok(()) }
+    /// ```
     async fn get_team(&self, id: &str) -> Result<Option<Team>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
         let result: Option<TeamRow> = sqlx::query_as(
@@ -37,6 +69,17 @@ impl Database for SqlxDb {
         }))
     }
 
+    /// Creates a new team record with the specified name and budget and returns the created team.
+    ///
+    /// The returned `Team` is populated with the database-assigned `id` and the `created_at` / `updated_at` timestamps.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// // assuming `db` is a ready `SqlxDb` instance connected to the database
+    /// let team = db.create_team("Acme Corp", 1_000_00).await.unwrap();
+    /// assert_eq!(team.name, "Acme Corp");
+    /// ```
     async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError> {
         let result: TeamRow = sqlx::query_as(
             "INSERT INTO teams (name, budget_cents) VALUES ($1, $2) RETURNING id, name, budget_cents, created_at, updated_at"
@@ -55,6 +98,35 @@ impl Database for SqlxDb {
         })
     }
 
+    /// Fetches a user by UUID string and maps the database row to a domain `User`.
+    ///
+    /// The `id` parameter must be a UUID string; if a matching row is found it is converted
+    /// into a `User` with stringified UUID fields.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - UUID string identifying the user to fetch.
+    ///
+    /// # Returns
+    ///
+    /// `Some(User)` if a user with the given id exists, `None` if no matching row is found.
+    ///
+    /// # Errors
+    ///
+    /// Returns `DbError::InvalidUuid` if `id` is not a valid UUID. Other database errors are
+    /// returned as `DbError` variants.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn example(db: &SqlxDb) -> Result<(), DbError> {
+    /// let maybe_user = db.get_user("00000000-0000-0000-0000-000000000000").await?;
+    /// if let Some(user) = maybe_user {
+    ///     assert_eq!(user.id, "00000000-0000-0000-0000-000000000000");
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
         let result: Option<UserRow> =
@@ -72,6 +144,24 @@ impl Database for SqlxDb {
         }))
     }
 
+    /// Creates a new user associated with the given team.
+    ///
+    /// The `team_id` must be a UUID string; the function inserts a row into `users` and returns
+    /// the newly created `User` model populated from the database `RETURNING` values.
+    ///
+    /// Returns `DbError::InvalidUuid(team_id.to_string())` if `team_id` is not a valid UUID.
+    /// Other database failures are returned as `DbError`.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use hyperinfer_server::db::SqlxDb;
+    /// # use hyperinfer_core::db::User;
+    /// # async fn example(db: &SqlxDb) -> Result<(), Box<dyn std::error::Error>> {
+    /// let user = db.create_user("550e8400-e29b-41d4-a716-446655440000", "alice@example.com", "member").await?;
+    /// println!("created user id = {}", user.id);
+    /// # Ok(()) }
+    /// ```
     async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id)
             .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
@@ -93,6 +183,26 @@ impl Database for SqlxDb {
         })
     }
 
+    /// Fetches an API key by its UUID string and returns the corresponding `ApiKey` when found.
+    ///
+    /// Returns `Err(DbError::InvalidUuid(_))` if `id` is not a valid UUID string. Database failures
+    /// are returned as other `DbError` variants.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ApiKey)` if a matching API key exists, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use crates::db::SqlxDb; // adjust path to your SqlxDb type
+    /// # async fn _example(db: &SqlxDb) -> Result<(), Box<dyn std::error::Error>> {
+    /// let maybe_key = db.get_api_key("3fa85f64-5717-4562-b3fc-2c963f66afa6").await?;
+    /// if let Some(api_key) = maybe_key {
+    ///     println!("found api key: {}", api_key.id);
+    /// }
+    /// # Ok(()) }
+    /// ```
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
         let result: Option<ApiKeyRow> = sqlx::query_as(
@@ -114,6 +224,27 @@ impl Database for SqlxDb {
         }))
     }
 
+    /// Create a new API key record associated with the given user and team.
+    ///
+    /// Parses `user_id` and `team_id` as UUIDs, inserts a new row into `api_keys`, and returns the created `ApiKey`.
+    ///
+    /// # Errors
+    ///
+    /// - `DbError::InvalidUuid` if `user_id` or `team_id` is not a valid UUID.
+    /// - Other `DbError` variants may be returned for database-related failures.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// // Example (async context):
+    /// // let api_key = db.create_api_key(
+    /// //     "hashed_value",
+    /// //     "00000000-0000-0000-0000-000000000000",
+    /// //     "00000000-0000-0000-0000-000000000001",
+    /// //     Some("my key".to_string()),
+    /// // ).await?;
+    /// // assert_eq!(api_key.name.as_deref(), Some("my key"));
+    /// ```
     async fn create_api_key(
         &self,
         key_hash: &str,
@@ -147,6 +278,27 @@ impl Database for SqlxDb {
         })
     }
 
+    /// Fetches a model alias by its UUID string.
+    ///
+    /// Parses `id` as a UUID and returns the corresponding `ModelAlias` if found.
+    ///
+    /// # Returns
+    ///
+    /// `Some(ModelAlias)` if a row with the given UUID exists, `None` otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use futures::executor::block_on;
+    /// # use crate::{SqlxDb, DbError};
+    /// # let db: SqlxDb = todo!();
+    /// let alias = block_on(db.get_model_alias("3fa85f64-5717-4562-b3fc-2c963f66afa6"));
+    /// match alias {
+    ///     Ok(Some(model_alias)) => println!("Found alias: {}", model_alias.alias),
+    ///     Ok(None) => println!("No alias found"),
+    ///     Err(e) => eprintln!("DB error: {:?}", e),
+    /// }
+    /// ```
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
         let result: Option<ModelAliasRow> = sqlx::query_as(
@@ -166,6 +318,24 @@ impl Database for SqlxDb {
         }))
     }
 
+    /// Creates a new model alias for a team.
+    ///
+    /// On success returns the created `ModelAlias` with its `id` and `team_id` as strings and the `created_at` timestamp populated.
+    /// Returns `DbError::InvalidUuid` if `team_id` is not a valid UUID; other database failures are returned as other `DbError` variants.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use std::str::FromStr;
+    /// # async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let db: crate::SqlxDb = unimplemented!(); // obtain a configured SqlxDb
+    /// let created = db
+    ///     .create_model_alias("550e8400-e29b-41d4-a716-446655440000", "my-alias", "gpt-4", "openai")
+    ///     .await?;
+    /// assert_eq!(created.alias, "my-alias");
+    /// assert_eq!(created.target_model, "gpt-4");
+    /// # Ok(()) }
+    /// ```
     async fn create_model_alias(
         &self,
         team_id: &str,
@@ -195,6 +365,29 @@ impl Database for SqlxDb {
         })
     }
 
+    /// Fetches the quota record for the given team UUID string.
+    ///
+    /// Parses `team_id` as a UUID and returns the associated `Quota` if one exists for that team.
+    /// Returns `Err(DbError::InvalidUuid(_))` when `team_id` is not a valid UUID string.
+    ///
+    /// # Returns
+    ///
+    /// `Some(Quota)` with the team's quota when found, `None` if no quota exists for the team.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use hyperinfer_server::db::SqlxDb;
+    /// # use hyperinfer_core::DbError;
+    /// # async fn example(db: &SqlxDb) -> Result<(), DbError> {
+    /// let team_id = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+    /// let quota_opt = db.get_quota(team_id).await?;
+    /// if let Some(quota) = quota_opt {
+    ///     println!("RPM limit: {}", quota.rpm_limit);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError> {
         let uuid = uuid::Uuid::parse_str(team_id)
             .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
@@ -214,6 +407,25 @@ impl Database for SqlxDb {
         }))
     }
 
+    /// Creates a quota record for the specified team and returns the persisted Quota.
+    ///
+    /// The `team_id` argument must be a UUID string; if parsing fails the call returns `DbError::InvalidUuid`.
+    ///
+    /// # Returns
+    ///
+    /// `Quota` containing the inserted row's fields: `id` and `team_id` as strings, `rpm_limit`, `tpm_limit`, and `updated_at`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use hyperinfer_server::db::SqlxDb;
+    /// # use hyperinfer_core::models::Quota;
+    /// # async fn _example(db: &SqlxDb) {
+    /// let quota: Quota = db.create_quota("3fa85f64-5717-4562-b3fc-2c963f66afa6", 100, 1000).await.unwrap();
+    /// assert_eq!(quota.rpm_limit, 100);
+    /// assert_eq!(quota.tpm_limit, 1000);
+    /// # }
+    /// ```
     async fn create_quota(
         &self,
         team_id: &str,
@@ -296,6 +508,24 @@ pub struct RedisConfigStore {
 }
 
 impl RedisConfigStore {
+    /// Creates a Redis-backed configuration store by initializing a `ConfigManager` with the given Redis URL.
+    ///
+    /// # Parameters
+    ///
+    /// - `redis_url`: Redis connection URL (for example, `redis://localhost:6379`).
+    ///
+    /// # Returns
+    ///
+    /// `Ok(RedisConfigStore)` containing an initialized manager on success, or `Err(hyperinfer_core::ConfigError::Other(_))` with a stringified error message if initialization fails.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn doc() -> Result<(), Box<dyn std::error::Error>> {
+    /// let store = RedisConfigStore::new("redis://localhost:6379").await?;
+    /// // use `store`...
+    /// # Ok(()) }
+    /// ```
     pub async fn new(redis_url: &str) -> Result<Self, hyperinfer_core::ConfigError> {
         let manager = hyperinfer_core::redis::ConfigManager::new(redis_url)
             .await
@@ -309,6 +539,22 @@ impl RedisConfigStore {
 // propagation (Redis vs Serialization errors).
 #[async_trait]
 impl ConfigStore for RedisConfigStore {
+    /// Fetches the current configuration from Redis.
+    ///
+    /// On failure, converts the underlying manager error into `hyperinfer_core::ConfigError::Other` using the error's string representation.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// #[tokio::test]
+    /// async fn fetch_config_example() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let store = RedisConfigStore::new("redis://127.0.0.1/").await?;
+    ///     let config = store.fetch_config().await?;
+    ///     // use `config`...
+    ///     let _ = config;
+    ///     Ok(())
+    /// }
+    /// ```
     async fn fetch_config(&self) -> Result<hyperinfer_core::Config, hyperinfer_core::ConfigError> {
         self.manager
             .fetch_config()
@@ -316,6 +562,19 @@ impl ConfigStore for RedisConfigStore {
             .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
     }
 
+    /// Publishes a configuration update to the underlying config manager.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # async fn run() -> Result<(), hyperinfer_core::ConfigError> {
+    /// // `store` is a RedisConfigStore created via `RedisConfigStore::new`.
+    /// let store = /* RedisConfigStore::new(...).await? */ unimplemented!();
+    /// let config = hyperinfer_core::Config::default();
+    /// store.publish_config_update(&config).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     async fn publish_config_update(
         &self,
         config: &hyperinfer_core::Config,
@@ -326,6 +585,19 @@ impl ConfigStore for RedisConfigStore {
             .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
     }
 
+    /// Publishes a policy update to the configured Redis-backed ConfigManager.
+    ///
+    /// On success the update is published and the method returns `Ok(())`. If the underlying
+    /// manager fails the error is converted to `hyperinfer_core::ConfigError::Other` containing
+    /// the manager's error message.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// # async fn example(store: &RedisConfigStore, update: &PolicyUpdate) {
+    /// store.publish_policy_update(update).await?;
+    /// # }
+    /// ```
     async fn publish_policy_update(
         &self,
         update: &PolicyUpdate,
