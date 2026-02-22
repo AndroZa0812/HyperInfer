@@ -127,13 +127,16 @@ impl TelemetryConsumer {
                                     if let Some(record) = Self::parse_entry(&fields) {
                                         let handler_result = handler(record).await;
                                         if handler_result.is_ok() {
-                                            let _: Result<(), redis::RedisError> =
+                                            let ack_result: Result<(), redis::RedisError> =
                                                 redis::cmd("XACK")
                                                     .arg(&stream_key)
                                                     .arg(&consumer_group)
                                                     .arg(&entry_id)
                                                     .query_async(&mut conn)
                                                     .await;
+                                            if let Err(e) = ack_result {
+                                                warn!("Failed to XACK entry {}: {}", entry_id, e);
+                                            }
                                         } else {
                                             warn!(
                                                 "Failed to process telemetry record: {:?}",
@@ -184,6 +187,12 @@ impl TelemetryConsumer {
         })
     }
 
+    /// Read a single batch of messages from the stream.
+    ///
+    /// **Note**: This method always reads from the beginning of the stream (ID "0")
+    /// and is intended for one-time reads or testing purposes only. For production
+    /// use with repeated batch reads, use `start_consuming` which leverages
+    /// consumer groups for proper message tracking and acknowledgment.
     pub async fn read_single_batch(
         &self,
     ) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {

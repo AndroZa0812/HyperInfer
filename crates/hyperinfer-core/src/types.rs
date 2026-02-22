@@ -118,7 +118,7 @@ pub struct Usage {
 }
 
 /// A usage record for telemetry (stored in Redis Stream and PostgreSQL)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageRecord {
     pub key: String,
     pub model: String,

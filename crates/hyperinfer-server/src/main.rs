@@ -240,22 +240,16 @@ fn hash_key(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-async fn resolve_team_for_key<D: Database>(db: &D, key: &str) -> Option<String> {
+async fn resolve_api_key<D: Database>(db: &D, key: &str) -> Option<(String, String)> {
     let key_hash = hash_key(key);
-    db.get_api_key_by_hash(&key_hash)
-        .await
-        .ok()
-        .flatten()
-        .map(|k| k.team_id)
-}
-
-async fn resolve_api_key_id<D: Database>(db: &D, key: &str) -> Option<String> {
-    let key_hash = hash_key(key);
-    db.get_api_key_by_hash(&key_hash)
-        .await
-        .ok()
-        .flatten()
-        .map(|k| k.id)
+    match db.get_api_key_by_hash(&key_hash).await {
+        Ok(Some(api_key)) => Some((api_key.team_id, api_key.id)),
+        Ok(None) => None,
+        Err(e) => {
+            tracing::warn!("Failed to resolve API key: {:?}", e);
+            None
+        }
+    }
 }
 
 #[tokio::main]
@@ -302,18 +296,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .start_consuming(move |record: UsageRecord| {
             let db = db_clone.clone();
             async move {
-                let team_id = resolve_team_for_key(&db, &record.key).await;
-                let api_key_id = resolve_api_key_id(&db, &record.key).await;
-
-                if let (Some(team_id), Some(api_key_id)) = (team_id, api_key_id) {
+                if let Some((team_id, api_key_id)) = resolve_api_key(&db, &record.key).await {
                     match db
                         .record_usage(
                             &team_id,
                             &api_key_id,
                             &record.model,
-                            i32::try_from(record.input_tokens).unwrap_or(i32::MAX),
-                            i32::try_from(record.output_tokens).unwrap_or(i32::MAX),
-                            i64::try_from(record.response_time_ms).unwrap_or(i64::MAX),
+                            i32::try_from(record.input_tokens).unwrap_or_else(|_| {
+                                tracing::warn!("input_tokens overflow: {}", record.input_tokens);
+                                i32::MAX
+                            }),
+                            i32::try_from(record.output_tokens).unwrap_or_else(|_| {
+                                tracing::warn!("output_tokens overflow: {}", record.output_tokens);
+                                i32::MAX
+                            }),
+                            i64::try_from(record.response_time_ms).unwrap_or_else(|_| {
+                                tracing::warn!(
+                                    "response_time_ms overflow: {}",
+                                    record.response_time_ms
+                                );
+                                i64::MAX
+                            }),
                         )
                         .await
                     {

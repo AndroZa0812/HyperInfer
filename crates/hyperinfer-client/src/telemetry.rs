@@ -1,17 +1,22 @@
-use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_STREAM_KEY: &str = "hyperinfer:telemetry";
 
 pub struct Telemetry {
-    client: Option<Arc<redis::Client>>,
+    manager: Option<redis::aio::ConnectionManager>,
     stream_key: String,
 }
 
 impl Telemetry {
     pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let client = match redis::Client::open(redis_url) {
-            Ok(c) => Some(Arc::new(c)),
+        let manager = match redis::Client::open(redis_url) {
+            Ok(client) => match redis::aio::ConnectionManager::new(client).await {
+                Ok(m) => Some(m),
+                Err(e) => {
+                    tracing::warn!("Failed to create Redis connection manager: {}", e);
+                    None
+                }
+            },
             Err(e) => {
                 tracing::warn!("Invalid Redis URL for telemetry: {}", e);
                 None
@@ -19,7 +24,7 @@ impl Telemetry {
         };
 
         Ok(Self {
-            client,
+            manager,
             stream_key: DEFAULT_STREAM_KEY.to_string(),
         })
     }
@@ -55,20 +60,13 @@ impl Telemetry {
             .unwrap_or_default()
             .as_millis() as u64;
 
-        if let Some(ref client) = self.client {
+        if let Some(ref manager) = self.manager {
             let stream_key = self.stream_key.clone();
             let key_clone = key.to_string();
             let model_clone = model.to_string();
-            let client = Arc::clone(client);
+            let mut manager = manager.clone();
 
             tokio::spawn(async move {
-                let conn_result = client.get_multiplexed_async_connection().await;
-                if conn_result.is_err() {
-                    tracing::error!("Failed to get Redis connection for telemetry");
-                    return;
-                }
-
-                let mut conn = conn_result.unwrap();
                 let result: Result<(), redis::RedisError> = redis::cmd("XADD")
                     .arg(&stream_key)
                     .arg("*")
@@ -84,14 +82,11 @@ impl Telemetry {
                     .arg(response_time_ms.to_string())
                     .arg("timestamp")
                     .arg(timestamp.to_string())
-                    .query_async(&mut conn)
+                    .query_async(&mut manager)
                     .await;
 
-                if result.is_err() {
-                    tracing::error!(
-                        "Failed to push telemetry to Redis stream: {:?}",
-                        result.err()
-                    );
+                if let Err(e) = result {
+                    tracing::error!("Failed to push telemetry to Redis stream: {:?}", e);
                 }
             });
         } else {
