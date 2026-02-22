@@ -162,3 +162,233 @@ async fn test_database_create_and_get_quota() {
     assert_eq!(fetched.team_id, team.id);
     assert_eq!(fetched.rpm_limit, 100);
 }
+
+#[tokio::test]
+async fn test_get_nonexistent_team() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_team("00000000-0000-0000-0000-000000000000")
+        .await
+        .expect("Query failed");
+    assert!(result.is_none(), "Should return None for non-existent team");
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_user() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_user("00000000-0000-0000-0000-000000000000")
+        .await
+        .expect("Query failed");
+    assert!(result.is_none(), "Should return None for non-existent user");
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_api_key() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_api_key("00000000-0000-0000-0000-000000000000")
+        .await
+        .expect("Query failed");
+    assert!(result.is_none(), "Should return None for non-existent API key");
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_model_alias() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_model_alias("00000000-0000-0000-0000-000000000000")
+        .await
+        .expect("Query failed");
+    assert!(result.is_none(), "Should return None for non-existent model alias");
+}
+
+#[tokio::test]
+async fn test_get_nonexistent_quota() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_quota("00000000-0000-0000-0000-000000000000")
+        .await
+        .expect("Query failed");
+    assert!(result.is_none(), "Should return None for non-existent quota");
+}
+
+#[tokio::test]
+async fn test_duplicate_team_name() {
+    let (db, _container) = setup_test_db().await;
+
+    db.create_team("Unique Team", 10000)
+        .await
+        .expect("Failed to create first team");
+
+    let result = db.create_team("Unique Team", 20000).await;
+    assert!(result.is_err(), "Should fail on duplicate team name");
+}
+
+#[tokio::test]
+async fn test_duplicate_user_email() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    db.create_user(&team.id, "unique@example.com", "admin")
+        .await
+        .expect("Failed to create first user");
+
+    let result = db.create_user(&team.id, "unique@example.com", "member").await;
+    assert!(result.is_err(), "Should fail on duplicate user email");
+}
+
+#[tokio::test]
+async fn test_duplicate_api_key_hash() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    db.create_api_key("unique_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create first API key");
+
+    let result = db.create_api_key("unique_hash", &user.id, &team.id, None).await;
+    assert!(result.is_err(), "Should fail on duplicate API key hash");
+}
+
+#[tokio::test]
+async fn test_duplicate_model_alias_per_team() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    db.create_model_alias(&team.id, "gpt-4", "gpt-4-turbo", "openai")
+        .await
+        .expect("Failed to create first alias");
+
+    let result = db
+        .create_model_alias(&team.id, "gpt-4", "gpt-4o", "openai")
+        .await;
+    assert!(result.is_err(), "Should fail on duplicate model alias per team");
+}
+
+#[tokio::test]
+async fn test_duplicate_quota_per_team() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    db.create_quota(&team.id, 100, 10000)
+        .await
+        .expect("Failed to create first quota");
+
+    let result = db.create_quota(&team.id, 200, 20000).await;
+    assert!(result.is_err(), "Should fail on duplicate quota per team");
+}
+
+#[tokio::test]
+async fn test_invalid_uuid_format() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db.get_team("not-a-uuid").await;
+    assert!(result.is_err(), "Should fail on invalid UUID format");
+}
+
+#[tokio::test]
+async fn test_create_user_invalid_team_fk() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .create_user("00000000-0000-0000-0000-000000000000", "test@example.com", "admin")
+        .await;
+    assert!(result.is_err(), "Should fail on invalid team foreign key");
+}
+
+#[tokio::test]
+async fn test_create_api_key_invalid_user_fk() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let result = db
+        .create_api_key(
+            "hash123",
+            "00000000-0000-0000-0000-000000000000",
+            &team.id,
+            None,
+        )
+        .await;
+    assert!(result.is_err(), "Should fail on invalid user foreign key");
+}
+
+#[tokio::test]
+async fn test_create_api_key_invalid_team_fk() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let result = db
+        .create_api_key(
+            "hash123",
+            &user.id,
+            "00000000-0000-0000-0000-000000000000",
+            None,
+        )
+        .await;
+    assert!(result.is_err(), "Should fail on invalid team foreign key");
+}
+
+#[tokio::test]
+async fn test_create_model_alias_invalid_team_fk() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .create_model_alias(
+            "00000000-0000-0000-0000-000000000000",
+            "gpt-4",
+            "gpt-4-turbo",
+            "openai",
+        )
+        .await;
+    assert!(result.is_err(), "Should fail on invalid team foreign key");
+}
+
+#[tokio::test]
+async fn test_create_quota_invalid_team_fk() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .create_quota("00000000-0000-0000-0000-000000000000", 100, 10000)
+        .await;
+    assert!(result.is_err(), "Should fail on invalid team foreign key");
+}
