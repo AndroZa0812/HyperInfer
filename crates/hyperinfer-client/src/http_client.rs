@@ -333,8 +333,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_call_openai_request_structure() {
-        // Test that we can construct a valid request
-        let caller = HttpCaller::new().unwrap();
         let request = ChatRequest {
             model: "gpt-4".to_string(),
             messages: vec![ChatMessage {

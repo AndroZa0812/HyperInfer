@@ -17,6 +17,7 @@ runtimes:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   enabled:
+    - actionlint@1.7.11
     - yamllint@1.38.0
     - osv-scanner@2.3.3
     - checkov@3.2.504

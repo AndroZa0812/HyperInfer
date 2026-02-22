@@ -1,0 +1,93 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Run unit tests
+        run: cargo test --workspace --lib --no-default-features
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check changed files
+        uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            integration:
+              - '**/db.rs'
+              - '**/redis.rs'
+              - 'crates/hyperinfer-server/src/main.rs'
+              - 'migrations/**'
+
+      - name: Install Rust toolchain
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-integration-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-integration-
+
+      - name: Run integration tests
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
+        run: cargo test --workspace --test integration
