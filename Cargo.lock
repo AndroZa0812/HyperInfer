@@ -1100,6 +1100,7 @@ name = "hyperinfer-client"
 version = "0.1.0"
 dependencies = [
  "hyperinfer-core",
+ "redis",
  "reqwest",
  "serde",
  "serde_json",
@@ -1123,6 +1124,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

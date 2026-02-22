@@ -7,7 +7,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use hyperinfer_core::{Config, ConfigStore, Database, DbError};
+use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{RedisConfigStore, SqlxDb};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -233,6 +233,16 @@ struct CreateQuotaRequest {
     tpm_limit: i32,
 }
 
+#[allow(dead_code)]
+async fn resolve_team_for_key<D: Database>(_db: &D, _key: &str) -> Option<String> {
+    todo!("Implement lookup of team_id from api_key in database")
+}
+
+#[allow(dead_code)]
+async fn resolve_api_key_id<D: Database>(_db: &D, _key: &str) -> Option<String> {
+    todo!("Implement lookup of api_key_id from key hash in database")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
@@ -269,6 +279,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let config = Arc::new(RwLock::new(config));
     let _config_subscriber = config_manager
         .subscribe_to_config_updates(config.clone())
+        .await?;
+
+    let db_clone = db.clone();
+    let telemetry_consumer = TelemetryConsumer::new(&redis_url).await?;
+    let _telemetry_handle = telemetry_consumer
+        .start_consuming(move |record: UsageRecord| {
+            let db = db_clone.clone();
+            async move {
+                let team_id = resolve_team_for_key(&db, &record.key).await;
+                let api_key_id = resolve_api_key_id(&db, &record.key).await;
+
+                if let (Some(team_id), Some(api_key_id)) = (team_id, api_key_id) {
+                    match db
+                        .record_usage(
+                            &team_id,
+                            &api_key_id,
+                            &record.model,
+                            record.input_tokens as i32,
+                            record.output_tokens as i32,
+                            record.response_time_ms as i64,
+                        )
+                        .await
+                    {
+                        Ok(_) => tracing::debug!("Recorded usage for key: {}", record.key),
+                        Err(e) => tracing::error!("Failed to record usage: {:?}", e),
+                    }
+                }
+                Ok(())
+            }
+        })
         .await?;
 
     let state: ProdState = AppState {
@@ -325,7 +365,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 mod tests {
     use super::*;
     use hyperinfer_core::{
-        ApiKey, ConfigError, DbError, ModelAlias, PolicyUpdate, Quota, Team, User,
+        ApiKey, ConfigError, DbError, ModelAlias, PolicyUpdate, Quota, Team, UsageLog, User,
     };
     use mockall::mock;
     use mockall::predicate::*;
@@ -351,6 +391,7 @@ mod tests {
             async fn create_model_alias(&self, team_id: &str, alias: &str, target_model: &str, provider: &str) -> Result<ModelAlias, DbError>;
             async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError>;
             async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32) -> Result<Quota, DbError>;
+            async fn record_usage(&self, team_id: &str, api_key_id: &str, model: &str, input_tokens: i32, output_tokens: i32, response_time_ms: i64) -> Result<UsageLog, DbError>;
         }
     }
 

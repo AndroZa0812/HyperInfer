@@ -117,6 +117,17 @@ pub struct Usage {
     pub output_tokens: u32,
 }
 
+/// A usage record for telemetry (stored in Redis Stream and PostgreSQL)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageRecord {
+    pub key: String,
+    pub model: String,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub response_time_ms: u64,
+    pub timestamp: u64,
+}
+
 /// A choice in a chat response
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Choice {

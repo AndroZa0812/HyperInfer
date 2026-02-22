@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use hyperinfer_core::{
-    ApiKey, ConfigStore, Database, DbError, ModelAlias, PolicyUpdate, Quota, Team, User,
+    ApiKey, ConfigStore, Database, DbError, ModelAlias, PolicyUpdate, Quota, Team, UsageLog, User,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -183,6 +183,35 @@ impl Database for SqlxDb {
 
         Ok(Quota::from(result))
     }
+
+    async fn record_usage(
+        &self,
+        team_id: &str,
+        api_key_id: &str,
+        model: &str,
+        input_tokens: i32,
+        output_tokens: i32,
+        response_time_ms: i64,
+    ) -> Result<UsageLog, DbError> {
+        let team_uuid = uuid::Uuid::parse_str(team_id)
+            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let api_key_uuid = uuid::Uuid::parse_str(api_key_id)
+            .map_err(|_| DbError::InvalidUuid(api_key_id.to_string()))?;
+
+        let result: UsageLogRow = sqlx::query_as(
+            "INSERT INTO usage_logs (team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms, recorded_at"
+        )
+        .bind(team_uuid)
+        .bind(api_key_uuid)
+        .bind(model)
+        .bind(input_tokens)
+        .bind(output_tokens)
+        .bind(response_time_ms)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(UsageLog::from(result))
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -294,6 +323,33 @@ impl From<QuotaRow> for Quota {
             rpm_limit: row.rpm_limit,
             tpm_limit: row.tpm_limit,
             updated_at: row.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+struct UsageLogRow {
+    id: uuid::Uuid,
+    team_id: uuid::Uuid,
+    api_key_id: uuid::Uuid,
+    model: String,
+    input_tokens: i32,
+    output_tokens: i32,
+    response_time_ms: i64,
+    recorded_at: DateTime<Utc>,
+}
+
+impl From<UsageLogRow> for UsageLog {
+    fn from(row: UsageLogRow) -> Self {
+        UsageLog {
+            id: row.id.to_string(),
+            team_id: row.team_id.to_string(),
+            api_key_id: row.api_key_id.to_string(),
+            model: row.model,
+            input_tokens: row.input_tokens,
+            output_tokens: row.output_tokens,
+            response_time_ms: row.response_time_ms,
+            recorded_at: row.recorded_at,
         }
     }
 }

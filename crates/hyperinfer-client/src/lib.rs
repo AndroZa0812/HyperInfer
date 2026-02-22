@@ -116,7 +116,12 @@ impl HyperInferClient {
 
         // 4. Record telemetry
         let elapsed = start.elapsed().as_millis() as u64;
-        let _ = self.telemetry.record(key, &model, elapsed).await;
+        let input_tokens = response.usage.input_tokens;
+        let output_tokens = response.usage.output_tokens;
+        let _ = self
+            .telemetry
+            .record_with_tokens(key, &model, input_tokens, output_tokens, elapsed)
+            .await;
 
         // Record usage
         let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
