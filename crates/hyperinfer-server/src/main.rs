@@ -7,7 +7,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use hyperinfer_core::{Config, ConfigStore, Database};
+use hyperinfer_core::{Config, ConfigStore, Database, DbError};
 use hyperinfer_server::{RedisConfigStore, SqlxDb};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -39,7 +39,11 @@ async fn get_team<D: Database, C: ConfigStore>(
     match state.db.get_team(&team_id).await {
         Ok(Some(team)) => Json(team).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
     }
 }
 
@@ -49,7 +53,10 @@ async fn create_team<D: Database, C: ConfigStore>(
 ) -> impl IntoResponse {
     match state.db.create_team(&req.name, req.budget_cents).await {
         Ok(team) => Json(team).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
+        },
     }
 }
 
@@ -60,7 +67,11 @@ async fn get_user<D: Database, C: ConfigStore>(
     match state.db.get_user(&user_id).await {
         Ok(Some(user)) => Json(user).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "User not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
     }
 }
 
@@ -74,7 +85,10 @@ async fn create_user<D: Database, C: ConfigStore>(
         .await
     {
         Ok(user) => Json(user).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
+        },
     }
 }
 
@@ -85,7 +99,11 @@ async fn get_api_key<D: Database, C: ConfigStore>(
     match state.db.get_api_key(&key_id).await {
         Ok(Some(key)) => Json(key).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "API key not found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "API key not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
     }
 }
 
@@ -99,11 +117,14 @@ async fn create_api_key<D: Database, C: ConfigStore>(
         .await
     {
         Ok(key) => Json(key).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create API key",
-        )
-            .into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create API key",
+            )
+                .into_response(),
+        },
     }
 }
 
@@ -114,7 +135,11 @@ async fn get_model_alias<D: Database, C: ConfigStore>(
     match state.db.get_model_alias(&alias_id).await {
         Ok(Some(alias)) => Json(alias).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
     }
 }
 
@@ -128,11 +153,14 @@ async fn create_model_alias<D: Database, C: ConfigStore>(
         .await
     {
         Ok(alias) => Json(alias).into_response(),
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to create model alias",
-        )
-            .into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create model alias",
+            )
+                .into_response(),
+        },
     }
 }
 
@@ -143,7 +171,11 @@ async fn get_quota<D: Database, C: ConfigStore>(
     match state.db.get_quota(&team_id).await {
         Ok(Some(quota)) => Json(quota).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
     }
 }
 
@@ -157,7 +189,10 @@ async fn create_quota<D: Database, C: ConfigStore>(
         .await
     {
         Ok(quota) => Json(quota).into_response(),
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
+        },
     }
 }
 
@@ -230,8 +265,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     });
 
+    let config = Arc::new(RwLock::new(config));
+    let _config_subscriber = config_manager.subscribe_to_config_updates(config.clone()).await?;
+
     let state: ProdState = AppState {
-        config: Arc::new(RwLock::new(config)),
+        config,
         db,
         config_manager,
     };

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
+use crate::error::ConfigError;
 use crate::types::Config;
 
 pub const CONFIG_CHANNEL: &str = "hyperinfer:config_updates";
@@ -41,7 +42,7 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-    pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new(redis_url: &str) -> Result<Self, ConfigError> {
         let client = Client::open(redis_url)?;
         let manager = ConnectionManager::new(client.clone()).await?;
         Ok(Self {
@@ -53,15 +54,14 @@ impl ConfigManager {
     pub async fn subscribe_to_config_updates(
         &self,
         config: Arc<RwLock<Config>>,
-    ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
-        let redis_url = self.client.get_connection_info().addr().to_string();
+    ) -> Result<tokio::task::JoinHandle<()>, ConfigError> {
+        let client = Arc::clone(&self.client);
 
         let handle = tokio::spawn(async move {
             let mut backoff = 1u64;
 
             loop {
                 let result = async {
-                    let client = Client::open(redis_url.as_str())?;
                     let mut pubsub = client.get_async_pubsub().await?;
                     pubsub.subscribe(CONFIG_CHANNEL).await?;
 
@@ -99,16 +99,19 @@ impl ConfigManager {
                 }
                 .await;
 
-                if let Err(e) = result {
-                    error!(
-                        "Config subscription error: {}, reconnecting in {}s",
-                        e, backoff
-                    );
-                    tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                    backoff = (backoff * 2).min(60);
-                } else {
-                    error!("Config updates subscription stream ended unexpectedly");
-                    break;
+                match result {
+                    Err(e) => {
+                        error!(
+                            "Config subscription error: {}, reconnecting in {}s",
+                            e, backoff
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+                        backoff = (backoff * 2).min(60);
+                    }
+                    Ok(()) => {
+                        info!("Config updates stream ended, reconnecting in {}s", backoff);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+                    }
                 }
             }
         });
@@ -119,15 +122,14 @@ impl ConfigManager {
     pub async fn subscribe_to_policy_updates(
         &self,
         callback: impl Fn(PolicyUpdate) + Send + Sync + 'static,
-    ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>> {
-        let redis_url = self.client.get_connection_info().addr().to_string();
+    ) -> Result<tokio::task::JoinHandle<()>, ConfigError> {
+        let client = Arc::clone(&self.client);
 
         let handle = tokio::spawn(async move {
             let mut backoff = 1u64;
 
             loop {
                 let result = async {
-                    let client = Client::open(redis_url.as_str())?;
                     let mut pubsub = client.get_async_pubsub().await?;
                     pubsub.subscribe("hyperinfer:policy_updates").await?;
 
@@ -153,16 +155,19 @@ impl ConfigManager {
                 }
                 .await;
 
-                if let Err(e) = result {
-                    error!(
-                        "Policy subscription error: {}, reconnecting in {}s",
-                        e, backoff
-                    );
-                    tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                    backoff = (backoff * 2).min(60);
-                } else {
-                    error!("Policy updates subscription stream ended unexpectedly");
-                    break;
+                match result {
+                    Err(e) => {
+                        error!(
+                            "Policy subscription error: {}, reconnecting in {}s",
+                            e, backoff
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+                        backoff = (backoff * 2).min(60);
+                    }
+                    Ok(()) => {
+                        info!("Policy updates stream ended, reconnecting in {}s", backoff);
+                        tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+                    }
                 }
             }
         });
@@ -170,7 +175,7 @@ impl ConfigManager {
         Ok(handle)
     }
 
-    pub async fn fetch_config(&self) -> Result<Config, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn fetch_config(&self) -> Result<Config, ConfigError> {
         let mut conn = self.manager.clone();
 
         let data: Option<Vec<u8>> = redis::cmd("GET")
@@ -196,7 +201,7 @@ impl ConfigManager {
     pub async fn publish_config_update(
         &self,
         config: &Config,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), ConfigError> {
         let mut conn = self.manager.clone();
 
         // Store config first so it's available when subscribers receive notification
@@ -228,7 +233,7 @@ impl ConfigManager {
     pub async fn publish_policy_update(
         &self,
         update: &PolicyUpdate,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), ConfigError> {
         let mut conn = self.manager.clone();
 
         let payload = serde_json::to_string(update)?;

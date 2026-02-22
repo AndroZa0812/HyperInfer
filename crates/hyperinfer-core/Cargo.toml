@@ -23,8 +23,8 @@ tokio = { version = "1.0", features = ["sync", "rt"] }
 tracing = "0.1"
 futures-util = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
-mockall = { version = "0.13", optional = true }
+mockall = { version = "0.14", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
-mockall = "0.13"
+mockall = "0.14"

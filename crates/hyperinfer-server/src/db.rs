@@ -28,13 +28,7 @@ impl Database for SqlxDb {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(|r| Team {
-            id: r.id.to_string(),
-            name: r.name,
-            budget_cents: r.budget_cents,
-            created_at: r.created_at,
-            updated_at: r.updated_at,
-        }))
+        Ok(result.map(Team::from))
     }
 
     async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError> {
@@ -46,13 +40,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(Team {
-            id: result.id.to_string(),
-            name: result.name,
-            budget_cents: result.budget_cents,
-            created_at: result.created_at,
-            updated_at: result.updated_at,
-        })
+        Ok(Team::from(result))
     }
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError> {
@@ -63,13 +51,7 @@ impl Database for SqlxDb {
                 .fetch_optional(&self.pool)
                 .await?;
 
-        Ok(result.map(|r| User {
-            id: r.id.to_string(),
-            team_id: r.team_id.to_string(),
-            email: r.email,
-            role: r.role,
-            created_at: r.created_at,
-        }))
+        Ok(result.map(User::from))
     }
 
     async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError> {
@@ -84,13 +66,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(User {
-            id: result.id.to_string(),
-            team_id: result.team_id.to_string(),
-            email: result.email,
-            role: result.role,
-            created_at: result.created_at,
-        })
+        Ok(User::from(result))
     }
 
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError> {
@@ -102,16 +78,7 @@ impl Database for SqlxDb {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(|r| ApiKey {
-            id: r.id.to_string(),
-            key_hash: r.key_hash,
-            user_id: r.user_id.to_string(),
-            team_id: r.team_id.to_string(),
-            name: r.name,
-            is_active: r.is_active,
-            created_at: r.created_at,
-            expires_at: r.expires_at,
-        }))
+        Ok(result.map(ApiKey::from))
     }
 
     async fn create_api_key(
@@ -135,16 +102,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(ApiKey {
-            id: result.id.to_string(),
-            key_hash: result.key_hash,
-            user_id: result.user_id.to_string(),
-            team_id: result.team_id.to_string(),
-            name: result.name,
-            is_active: result.is_active,
-            created_at: result.created_at,
-            expires_at: result.expires_at,
-        })
+        Ok(ApiKey::from(result))
     }
 
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError> {
@@ -156,14 +114,7 @@ impl Database for SqlxDb {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(|r| ModelAlias {
-            id: r.id.to_string(),
-            team_id: r.team_id.to_string(),
-            alias: r.alias,
-            target_model: r.target_model,
-            provider: r.provider,
-            created_at: r.created_at,
-        }))
+        Ok(result.map(ModelAlias::from))
     }
 
     async fn create_model_alias(
@@ -185,14 +136,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(ModelAlias {
-            id: result.id.to_string(),
-            team_id: result.team_id.to_string(),
-            alias: result.alias,
-            target_model: result.target_model,
-            provider: result.provider,
-            created_at: result.created_at,
-        })
+        Ok(ModelAlias::from(result))
     }
 
     async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError> {
@@ -205,13 +149,7 @@ impl Database for SqlxDb {
         .fetch_optional(&self.pool)
         .await?;
 
-        Ok(result.map(|r| Quota {
-            id: r.id.to_string(),
-            team_id: r.team_id.to_string(),
-            rpm_limit: r.rpm_limit,
-            tpm_limit: r.tpm_limit,
-            updated_at: r.updated_at,
-        }))
+        Ok(result.map(Quota::from))
     }
 
     async fn create_quota(
@@ -231,13 +169,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await?;
 
-        Ok(Quota {
-            id: result.id.to_string(),
-            team_id: result.team_id.to_string(),
-            rpm_limit: result.rpm_limit,
-            tpm_limit: result.tpm_limit,
-            updated_at: result.updated_at,
-        })
+        Ok(Quota::from(result))
     }
 }
 
@@ -250,6 +182,18 @@ struct TeamRow {
     updated_at: DateTime<Utc>,
 }
 
+impl From<TeamRow> for Team {
+    fn from(row: TeamRow) -> Self {
+        Team {
+            id: row.id.to_string(),
+            name: row.name,
+            budget_cents: row.budget_cents,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 struct UserRow {
     id: uuid::Uuid,
@@ -257,6 +201,18 @@ struct UserRow {
     email: String,
     role: String,
     created_at: DateTime<Utc>,
+}
+
+impl From<UserRow> for User {
+    fn from(row: UserRow) -> Self {
+        User {
+            id: row.id.to_string(),
+            team_id: row.team_id.to_string(),
+            email: row.email,
+            role: row.role,
+            created_at: row.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -271,6 +227,21 @@ struct ApiKeyRow {
     expires_at: Option<DateTime<Utc>>,
 }
 
+impl From<ApiKeyRow> for ApiKey {
+    fn from(row: ApiKeyRow) -> Self {
+        ApiKey {
+            id: row.id.to_string(),
+            key_hash: row.key_hash,
+            user_id: row.user_id.to_string(),
+            team_id: row.team_id.to_string(),
+            name: row.name,
+            is_active: row.is_active,
+            created_at: row.created_at,
+            expires_at: row.expires_at,
+        }
+    }
+}
+
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
 struct ModelAliasRow {
     id: uuid::Uuid,
@@ -279,6 +250,19 @@ struct ModelAliasRow {
     target_model: String,
     provider: String,
     created_at: DateTime<Utc>,
+}
+
+impl From<ModelAliasRow> for ModelAlias {
+    fn from(row: ModelAliasRow) -> Self {
+        ModelAlias {
+            id: row.id.to_string(),
+            team_id: row.team_id.to_string(),
+            alias: row.alias,
+            target_model: row.target_model,
+            provider: row.provider,
+            created_at: row.created_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -290,6 +274,18 @@ struct QuotaRow {
     updated_at: DateTime<Utc>,
 }
 
+impl From<QuotaRow> for Quota {
+    fn from(row: QuotaRow) -> Self {
+        Quota {
+            id: row.id.to_string(),
+            team_id: row.team_id.to_string(),
+            rpm_limit: row.rpm_limit,
+            tpm_limit: row.tpm_limit,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RedisConfigStore {
     manager: hyperinfer_core::redis::ConfigManager,
@@ -297,42 +293,35 @@ pub struct RedisConfigStore {
 
 impl RedisConfigStore {
     pub async fn new(redis_url: &str) -> Result<Self, hyperinfer_core::ConfigError> {
-        let manager = hyperinfer_core::redis::ConfigManager::new(redis_url)
-            .await
-            .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))?;
+        let manager = hyperinfer_core::redis::ConfigManager::new(redis_url).await?;
         Ok(Self { manager })
+    }
+
+    pub async fn subscribe_to_config_updates(
+        &self,
+        config: std::sync::Arc<tokio::sync::RwLock<hyperinfer_core::Config>>,
+    ) -> Result<tokio::task::JoinHandle<()>, hyperinfer_core::ConfigError> {
+        Ok(self.manager.subscribe_to_config_updates(config).await?)
     }
 }
 
-// TODO: ConfigManager returns Box<dyn Error>, so all errors are mapped to ConfigError::Other.
-// Consider updating ConfigManager to return ConfigError directly for proper error variant
-// propagation (Redis vs Serialization errors).
 #[async_trait]
 impl ConfigStore for RedisConfigStore {
     async fn fetch_config(&self) -> Result<hyperinfer_core::Config, hyperinfer_core::ConfigError> {
-        self.manager
-            .fetch_config()
-            .await
-            .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
+        Ok(self.manager.fetch_config().await?)
     }
 
     async fn publish_config_update(
         &self,
         config: &hyperinfer_core::Config,
     ) -> Result<(), hyperinfer_core::ConfigError> {
-        self.manager
-            .publish_config_update(config)
-            .await
-            .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
+        Ok(self.manager.publish_config_update(config).await?)
     }
 
     async fn publish_policy_update(
         &self,
         update: &PolicyUpdate,
     ) -> Result<(), hyperinfer_core::ConfigError> {
-        self.manager
-            .publish_policy_update(update)
-            .await
-            .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
+        Ok(self.manager.publish_policy_update(update).await?)
     }
 }

@@ -1,11 +1,13 @@
 use hyperinfer_core::Database;
 use hyperinfer_server::SqlxDb;
 use sqlx::postgres::PgPoolOptions;
+use testcontainers::ImageExt;
 use testcontainers::{runners::AsyncRunner, ContainerAsync};
 use testcontainers_modules::postgres::Postgres;
 
 async fn setup_test_db() -> (impl Database, ContainerAsync<Postgres>) {
     let postgres = Postgres::default()
+        .with_tag("13-alpine")
         .start()
         .await
         .expect("Failed to start PostgreSQL container");

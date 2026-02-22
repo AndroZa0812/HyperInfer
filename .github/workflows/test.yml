@@ -49,9 +49,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: |
-      github.event_name == 'push' && github.ref == 'refs/heads/main' ||
-      contains(github.event.pull_request.labels.*.name, 'needs-integration-tests')
     steps:
       - uses: actions/checkout@v4
 
@@ -67,11 +64,17 @@ jobs:
               - 'migrations/**'
 
       - name: Install Rust toolchain
-        if: steps.changes.outputs.integration == 'true' || github.event_name != 'pull_request'
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
         uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry
-        if: steps.changes.outputs.integration == 'true' || github.event_name != 'pull_request'
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -83,5 +86,8 @@ jobs:
             ${{ runner.os }}-cargo-integration-
 
       - name: Run integration tests
-        if: steps.changes.outputs.integration == 'true' || github.event_name != 'pull_request'
+        if: |
+          github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true'
         run: cargo test --workspace --test integration
