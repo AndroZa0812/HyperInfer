@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::DbError;
 
@@ -35,7 +35,7 @@ pub trait Database: Clone + Send + Sync + 'static {
     ) -> Result<Quota, DbError>;
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Team {
     pub id: String,
     pub name: String,
@@ -44,7 +44,7 @@ pub struct Team {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: String,
     pub team_id: String,
@@ -53,7 +53,7 @@ pub struct User {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: String,
     pub key_hash: String,
@@ -65,7 +65,7 @@ pub struct ApiKey {
     pub expires_at: Option<DateTime<Utc>>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelAlias {
     pub id: String,
     pub team_id: String,
@@ -75,7 +75,7 @@ pub struct ModelAlias {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Quota {
     pub id: String,
     pub team_id: String,

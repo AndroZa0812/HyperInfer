@@ -290,6 +290,7 @@ struct QuotaRow {
     updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone)]
 pub struct RedisConfigStore {
     manager: hyperinfer_core::redis::ConfigManager,
 }
@@ -303,6 +304,9 @@ impl RedisConfigStore {
     }
 }
 
+// TODO: ConfigManager returns Box<dyn Error>, so all errors are mapped to ConfigError::Other.
+// Consider updating ConfigManager to return ConfigError directly for proper error variant
+// propagation (Redis vs Serialization errors).
 #[async_trait]
 impl ConfigStore for RedisConfigStore {
     async fn fetch_config(&self) -> Result<hyperinfer_core::Config, hyperinfer_core::ConfigError> {
@@ -330,13 +334,5 @@ impl ConfigStore for RedisConfigStore {
             .publish_policy_update(update)
             .await
             .map_err(|e| hyperinfer_core::ConfigError::Other(e.to_string()))
-    }
-}
-
-impl Clone for RedisConfigStore {
-    fn clone(&self) -> Self {
-        Self {
-            manager: self.manager.clone(),
-        }
     }
 }
