@@ -55,6 +55,7 @@ async fn create_team<D: Database, C: ConfigStore>(
         Ok(team) => Json(team).into_response(),
         Err(e) => match e {
             DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
         },
     }

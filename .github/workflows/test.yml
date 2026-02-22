@@ -60,7 +60,7 @@ jobs:
             integration:
               - '**/db.rs'
               - '**/redis.rs'
-              - '**/main.rs'
+              - 'crates/hyperinfer-server/src/main.rs'
               - 'migrations/**'
 
       - name: Install Rust toolchain

@@ -32,13 +32,25 @@ impl Database for SqlxDb {
     }
 
     async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError> {
-        let result: TeamRow = sqlx::query_as(
+        let result: TeamRow = match sqlx::query_as(
             "INSERT INTO teams (name, budget_cents) VALUES ($1, $2) RETURNING id, name, budget_cents, created_at, updated_at"
         )
         .bind(name)
         .bind(budget_cents)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation(format!(
+                        "Team with name '{}' already exists",
+                        name
+                    )));
+                }
+                return Err(DbError::Sqlx(e));
+            }
+        };
 
         Ok(Team::from(result))
     }
@@ -308,20 +320,20 @@ impl RedisConfigStore {
 #[async_trait]
 impl ConfigStore for RedisConfigStore {
     async fn fetch_config(&self) -> Result<hyperinfer_core::Config, hyperinfer_core::ConfigError> {
-        Ok(self.manager.fetch_config().await?)
+        self.manager.fetch_config().await
     }
 
     async fn publish_config_update(
         &self,
         config: &hyperinfer_core::Config,
     ) -> Result<(), hyperinfer_core::ConfigError> {
-        Ok(self.manager.publish_config_update(config).await?)
+        self.manager.publish_config_update(config).await
     }
 
     async fn publish_policy_update(
         &self,
         update: &PolicyUpdate,
     ) -> Result<(), hyperinfer_core::ConfigError> {
-        Ok(self.manager.publish_policy_update(update).await?)
+        self.manager.publish_policy_update(update).await
     }
 }

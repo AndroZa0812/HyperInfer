@@ -109,6 +109,7 @@ impl ConfigManager {
                         backoff = (backoff * 2).min(60);
                     }
                     Ok(()) => {
+                        backoff = 1;
                         info!("Config updates stream ended, reconnecting in {}s", backoff);
                         tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
                     }
@@ -165,6 +166,7 @@ impl ConfigManager {
                         backoff = (backoff * 2).min(60);
                     }
                     Ok(()) => {
+                        backoff = 1;
                         info!("Policy updates stream ended, reconnecting in {}s", backoff);
                         tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
                     }

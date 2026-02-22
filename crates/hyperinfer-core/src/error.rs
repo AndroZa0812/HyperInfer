@@ -34,6 +34,8 @@ pub enum DbError {
     InvalidUuid(String),
     #[error("Not found")]
     NotFound,
+    #[error("Unique constraint violation: {0}")]
+    UniqueViolation(String),
 }
 
 #[derive(Debug, Error)]
