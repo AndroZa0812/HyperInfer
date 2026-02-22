@@ -189,4 +189,143 @@ mod tests {
         let result = telemetry.record("test-key", "gpt-4", 250).await;
         assert!(result.is_ok());
     }
+
+    #[tokio::test]
+    async fn test_telemetry_with_empty_stream_key() {
+        let telemetry = Telemetry::new("redis://localhost:6379")
+            .await
+            .unwrap()
+            .with_stream_key("");
+        assert_eq!(telemetry.stream_key, "");
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_empty_key() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry.record("", "gpt-4", 250).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_empty_model() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry.record("test-key", "", 250).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_max_values() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry
+            .record_with_tokens("test-key", "gpt-4", u32::MAX, u32::MAX, u64::MAX)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_special_characters_in_key() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry.record("test-key-!@#$%^&*()", "gpt-4", 250).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_special_characters_in_model() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry
+            .record("test-key", "gpt-4-turbo-preview-2024", 250)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_unicode() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let result = telemetry.record("test-key-🔑", "gpt-4", 250).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_very_long_strings() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let long_key = "a".repeat(10000);
+        let long_model = "b".repeat(10000);
+        let result = telemetry.record(&long_key, &long_model, 250).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_concurrent_records() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+        let telemetry = std::sync::Arc::new(telemetry);
+
+        let mut handles = vec![];
+        for i in 0..10 {
+            let telemetry_clone = telemetry.clone();
+            let handle = tokio::spawn(async move {
+                telemetry_clone
+                    .record(&format!("key-{}", i), "gpt-4", 100 + i * 10)
+                    .await
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let result = handle.await.unwrap();
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_sequential() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+
+        for i in 0..5 {
+            let result = telemetry
+                .record(&format!("key-{}", i), "gpt-4", 100 + i * 10)
+                .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_different_token_counts() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+
+        let test_cases = vec![
+            (0, 0),
+            (1, 1),
+            (100, 50),
+            (u32::MAX, u32::MAX),
+            (500, 0),
+            (0, 500),
+        ];
+
+        for (input, output) in test_cases {
+            let result = telemetry
+                .record_with_tokens("test-key", "gpt-4", input, output, 250)
+                .await;
+            assert!(result.is_ok());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_with_very_long_stream_key() {
+        let long_key = "a".repeat(1000);
+        let telemetry = Telemetry::new("redis://localhost:6379")
+            .await
+            .unwrap()
+            .with_stream_key(&long_key);
+        assert_eq!(telemetry.stream_key, long_key);
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_record_rapid_succession() {
+        let telemetry = Telemetry::new("redis://localhost:6379").await.unwrap();
+
+        for _ in 0..100 {
+            let result = telemetry.record("test-key", "gpt-4", 250).await;
+            assert!(result.is_ok());
+        }
+    }
 }

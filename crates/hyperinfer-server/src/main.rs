@@ -706,4 +706,334 @@ mod tests {
         let resp = response.into_response();
         assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
+
+    #[test]
+    fn test_hash_key() {
+        let key = "test-api-key";
+        let hash1 = hash_key(key);
+        let hash2 = hash_key(key);
+
+        // Same input should produce same hash
+        assert_eq!(hash1, hash2);
+
+        // Hash should be hex string
+        assert!(hash1.chars().all(|c| c.is_ascii_hexdigit()));
+
+        // Different inputs should produce different hashes
+        let different_hash = hash_key("different-key");
+        assert_ne!(hash1, different_hash);
+    }
+
+    #[test]
+    fn test_hash_key_empty_string() {
+        let hash = hash_key("");
+        assert!(!hash.is_empty());
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_hash_key_special_characters() {
+        let key = "test-key-with-!@#$%^&*()";
+        let hash = hash_key(key);
+        assert!(!hash.is_empty());
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_hash_key_unicode() {
+        let key = "test-key-with-unicode-🔑";
+        let hash = hash_key(key);
+        assert!(!hash.is_empty());
+        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_hash_key_long_string() {
+        let key = "a".repeat(10000);
+        let hash = hash_key(&key);
+        assert!(!hash.is_empty());
+        // SHA-256 produces 64 hex characters
+        assert_eq!(hash.len(), 64);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_api_key_found() {
+        use chrono::Utc;
+
+        let mut db = MockDatabase::new();
+        let now = Utc::now();
+        let api_key = ApiKey {
+            id: "key-id".to_string(),
+            key_hash: hash_key("test-key"),
+            user_id: "user-id".to_string(),
+            team_id: "team-id".to_string(),
+            name: None,
+            is_active: true,
+            created_at: now,
+            expires_at: None,
+        };
+        let api_key_clone = api_key.clone();
+
+        db.expect_get_api_key_by_hash()
+            .withf(|hash: &str| hash == hash_key("test-key"))
+            .times(1)
+            .returning(move |_| Ok(Some(api_key_clone.clone())));
+
+        let result = resolve_api_key(&db, "test-key").await;
+        assert!(result.is_some());
+        let (team_id, key_id) = result.unwrap();
+        assert_eq!(team_id, "team-id");
+        assert_eq!(key_id, "key-id");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_api_key_not_found() {
+        let mut db = MockDatabase::new();
+
+        db.expect_get_api_key_by_hash()
+            .times(1)
+            .returning(|_| Ok(None));
+
+        let result = resolve_api_key(&db, "nonexistent-key").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_api_key_database_error() {
+        let mut db = MockDatabase::new();
+
+        db.expect_get_api_key_by_hash()
+            .times(1)
+            .returning(|_| Err(DbError::Sqlx(sqlx::Error::Protocol("test error".into()))));
+
+        let result = resolve_api_key(&db, "test-key").await;
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_create_user_success() {
+        use chrono::Utc;
+
+        let mut db = MockDatabase::new();
+        let now = Utc::now();
+        let user = User {
+            id: "new-user-id".to_string(),
+            team_id: "team-id".to_string(),
+            email: "new@example.com".to_string(),
+            role: "member".to_string(),
+            created_at: now,
+        };
+        db.expect_create_user()
+            .with(eq("team-id"), eq("new@example.com"), eq("member"))
+            .times(1)
+            .returning(move |_, _, _| Ok(user.clone()));
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+        let state: AppState<MockDatabase, MockConfigStore> = AppState {
+            config: Arc::new(RwLock::new(config)),
+            db,
+            config_manager: MockConfigStore::new(),
+        };
+
+        let response = create_user(
+            State(state),
+            Json(CreateUserRequest {
+                team_id: "team-id".to_string(),
+                email: "new@example.com".to_string(),
+                role: "member".to_string(),
+            }),
+        )
+        .await;
+        let resp = response.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_api_key_success() {
+        use chrono::Utc;
+
+        let mut db = MockDatabase::new();
+        let now = Utc::now();
+        let api_key = ApiKey {
+            id: "new-key-id".to_string(),
+            key_hash: "hash123".to_string(),
+            user_id: "user-id".to_string(),
+            team_id: "team-id".to_string(),
+            name: Some("Test Key".to_string()),
+            is_active: true,
+            created_at: now,
+            expires_at: None,
+        };
+        db.expect_create_api_key()
+            .with(
+                eq("hash123"),
+                eq("user-id"),
+                eq("team-id"),
+                eq(Some("Test Key".to_string())),
+            )
+            .times(1)
+            .returning(move |_, _, _, _| Ok(api_key.clone()));
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+        let state: AppState<MockDatabase, MockConfigStore> = AppState {
+            config: Arc::new(RwLock::new(config)),
+            db,
+            config_manager: MockConfigStore::new(),
+        };
+
+        let response = create_api_key(
+            State(state),
+            Json(CreateApiKeyRequest {
+                key_hash: "hash123".to_string(),
+                user_id: "user-id".to_string(),
+                team_id: "team-id".to_string(),
+                name: Some("Test Key".to_string()),
+            }),
+        )
+        .await;
+        let resp = response.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_model_alias_success() {
+        use chrono::Utc;
+
+        let mut db = MockDatabase::new();
+        let now = Utc::now();
+        let alias = ModelAlias {
+            id: "alias-id".to_string(),
+            team_id: "team-id".to_string(),
+            alias: "gpt-4-fast".to_string(),
+            target_model: "gpt-4-turbo".to_string(),
+            provider: "openai".to_string(),
+            created_at: now,
+        };
+        db.expect_create_model_alias()
+            .with(
+                eq("team-id"),
+                eq("gpt-4-fast"),
+                eq("gpt-4-turbo"),
+                eq("openai"),
+            )
+            .times(1)
+            .returning(move |_, _, _, _| Ok(alias.clone()));
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+        let state: AppState<MockDatabase, MockConfigStore> = AppState {
+            config: Arc::new(RwLock::new(config)),
+            db,
+            config_manager: MockConfigStore::new(),
+        };
+
+        let response = create_model_alias(
+            State(state),
+            Json(CreateModelAliasRequest {
+                team_id: "team-id".to_string(),
+                alias: "gpt-4-fast".to_string(),
+                target_model: "gpt-4-turbo".to_string(),
+                provider: "openai".to_string(),
+            }),
+        )
+        .await;
+        let resp = response.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_quota_success() {
+        use chrono::Utc;
+
+        let mut db = MockDatabase::new();
+        let now = Utc::now();
+        let quota = Quota {
+            id: "quota-id".to_string(),
+            team_id: "team-id".to_string(),
+            rpm_limit: 100,
+            tpm_limit: 10000,
+            updated_at: now,
+        };
+        db.expect_create_quota()
+            .with(eq("team-id"), eq(100i32), eq(10000i32))
+            .times(1)
+            .returning(move |_, _, _| Ok(quota.clone()));
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+        let state: AppState<MockDatabase, MockConfigStore> = AppState {
+            config: Arc::new(RwLock::new(config)),
+            db,
+            config_manager: MockConfigStore::new(),
+        };
+
+        let response = create_quota(
+            State(state),
+            Json(CreateQuotaRequest {
+                team_id: "team-id".to_string(),
+                rpm_limit: 100,
+                tpm_limit: 10000,
+            }),
+        )
+        .await;
+        let resp = response.into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_team_unique_violation() {
+        let mut db = MockDatabase::new();
+        db.expect_create_team().times(1).returning(|name, _| {
+            Err(DbError::UniqueViolation(format!(
+                "Team with name '{}' already exists",
+                name
+            )))
+        });
+
+        let config = Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        };
+        let state: AppState<MockDatabase, MockConfigStore> = AppState {
+            config: Arc::new(RwLock::new(config)),
+            db,
+            config_manager: MockConfigStore::new(),
+        };
+
+        let response = create_team(
+            State(state),
+            Json(CreateTeamRequest {
+                name: "Duplicate Team".to_string(),
+                budget_cents: 5000,
+            }),
+        )
+        .await;
+        let resp = response.into_response();
+        assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
 }

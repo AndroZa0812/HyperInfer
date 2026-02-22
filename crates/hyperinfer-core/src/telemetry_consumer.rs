@@ -410,4 +410,202 @@ mod tests {
         assert_eq!(consumer.stream_key, "custom:stream");
         assert_eq!(consumer.consumer_group, "custom-group");
     }
+
+    #[test]
+    fn test_parse_entry_extra_fields() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+            ("extra_field".to_string(), "ignored".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "test-key");
+    }
+
+    #[test]
+    fn test_parse_entry_empty() {
+        let fields = vec![];
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_partial_fields() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_negative_numbers() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "-100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_overflow_u32() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "4294967296".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_overflow_u64() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            (
+                "response_time_ms".to_string(),
+                "18446744073709551616".to_string(),
+            ),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_max_values() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), u32::MAX.to_string()),
+            ("output_tokens".to_string(), u32::MAX.to_string()),
+            ("response_time_ms".to_string(), u64::MAX.to_string()),
+            ("timestamp".to_string(), u64::MAX.to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.input_tokens, u32::MAX);
+        assert_eq!(record.output_tokens, u32::MAX);
+        assert_eq!(record.response_time_ms, u64::MAX);
+        assert_eq!(record.timestamp, u64::MAX);
+    }
+
+    #[test]
+    fn test_parse_entry_zero_values() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "0".to_string()),
+            ("output_tokens".to_string(), "0".to_string()),
+            ("response_time_ms".to_string(), "0".to_string()),
+            ("timestamp".to_string(), "0".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.input_tokens, 0);
+        assert_eq!(record.output_tokens, 0);
+        assert_eq!(record.response_time_ms, 0);
+        assert_eq!(record.timestamp, 0);
+    }
+
+    #[test]
+    fn test_parse_entry_empty_strings() {
+        let fields = vec![
+            ("key".to_string(), "".to_string()),
+            ("model".to_string(), "".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "");
+        assert_eq!(record.model, "");
+    }
+
+    #[test]
+    fn test_parse_entry_special_characters() {
+        let fields = vec![
+            ("key".to_string(), "test-key-!@#$%".to_string()),
+            ("model".to_string(), "gpt-4-turbo-preview".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "test-key-!@#$%");
+        assert_eq!(record.model, "gpt-4-turbo-preview");
+    }
+
+    #[test]
+    fn test_parse_entry_unicode() {
+        let fields = vec![
+            ("key".to_string(), "test-key-🔑".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "test-key-🔑");
+    }
+
+    #[test]
+    fn test_parse_entry_very_long_strings() {
+        let long_key = "a".repeat(10000);
+        let long_model = "b".repeat(10000);
+        let fields = vec![
+            ("key".to_string(), long_key.clone()),
+            ("model".to_string(), long_model.clone()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, long_key);
+        assert_eq!(record.model, long_model);
+    }
 }
