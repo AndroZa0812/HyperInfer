@@ -34,8 +34,9 @@ pub enum PolicyAction {
     Update,
 }
 
+#[derive(Clone)]
 pub struct ConfigManager {
-    client: Client,
+    client: Arc<Client>,
     manager: ConnectionManager,
 }
 
@@ -43,7 +44,10 @@ impl ConfigManager {
     pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::open(redis_url)?;
         let manager = ConnectionManager::new(client.clone()).await?;
-        Ok(Self { client, manager })
+        Ok(Self {
+            client: Arc::new(client),
+            manager,
+        })
     }
 
     pub async fn subscribe_to_config_updates(

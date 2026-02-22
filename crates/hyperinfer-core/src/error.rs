@@ -25,3 +25,23 @@ pub enum HyperInferError {
     #[error("Redis error")]
     Redis(#[from] redis::RedisError),
 }
+
+#[derive(Debug, Error)]
+pub enum DbError {
+    #[error("Database error: {0}")]
+    Sqlx(#[from] sqlx::Error),
+    #[error("Invalid UUID: {0}")]
+    InvalidUuid(String),
+    #[error("Not found")]
+    NotFound,
+}
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("Redis error: {0}")]
+    Redis(#[from] redis::RedisError),
+    #[error("Serialization error: {0}")]
+    Serialization(#[from] serde_json::Error),
+    #[error("Configuration error: {0}")]
+    Other(String),
+}

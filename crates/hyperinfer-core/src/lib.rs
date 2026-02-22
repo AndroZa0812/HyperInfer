@@ -6,12 +6,14 @@
 pub mod error;
 pub mod rate_limiting;
 pub mod redis;
+pub mod traits;
 pub mod types;
 
-// Re-exports for convenient access
-pub use error::HyperInferError;
+pub use error::{ConfigError, DbError, HyperInferError};
 pub use rate_limiting::RateLimiter;
+pub use redis::PolicyUpdate;
+pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, User};
 pub use types::{
-    ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider, Quota,
-    RoutingRule, Usage,
+    ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider, RoutingRule,
+    Usage,
 };

@@ -4,8 +4,17 @@ version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 
+[lib]
+name = "hyperinfer_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hyperinfer-server"
+path = "src/main.rs"
+
 [dependencies]
 hyperinfer-core = { path = "../hyperinfer-core" }
+async-trait = "0.1"
 axum = "0.8"
 tokio = { version = "1.0", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -23,6 +32,17 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+redis = { version = "1.0", features = [
+  "aio",
+  "tokio-comp",
+  "connection-manager",
+] }
 
 [dev-dependencies]
+hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["postgres", "redis"] }
+tower = "0.5"
+http-body-util = "0.1"
+mockall = "0.13"
