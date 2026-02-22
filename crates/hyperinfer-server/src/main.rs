@@ -266,7 +266,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let config = Arc::new(RwLock::new(config));
-    let _config_subscriber = config_manager.subscribe_to_config_updates(config.clone()).await?;
+    let _config_subscriber = config_manager
+        .subscribe_to_config_updates(config.clone())
+        .await?;
 
     let state: ProdState = AppState {
         config,

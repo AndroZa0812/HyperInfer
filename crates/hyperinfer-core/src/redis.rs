@@ -198,10 +198,7 @@ impl ConfigManager {
         }
     }
 
-    pub async fn publish_config_update(
-        &self,
-        config: &Config,
-    ) -> Result<(), ConfigError> {
+    pub async fn publish_config_update(&self, config: &Config) -> Result<(), ConfigError> {
         let mut conn = self.manager.clone();
 
         // Store config first so it's available when subscribers receive notification
@@ -230,10 +227,7 @@ impl ConfigManager {
         Ok(())
     }
 
-    pub async fn publish_policy_update(
-        &self,
-        update: &PolicyUpdate,
-    ) -> Result<(), ConfigError> {
+    pub async fn publish_policy_update(&self, update: &PolicyUpdate) -> Result<(), ConfigError> {
         let mut conn = self.manager.clone();
 
         let payload = serde_json::to_string(update)?;

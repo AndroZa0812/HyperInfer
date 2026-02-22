@@ -301,7 +301,7 @@ impl RedisConfigStore {
         &self,
         config: std::sync::Arc<tokio::sync::RwLock<hyperinfer_core::Config>>,
     ) -> Result<tokio::task::JoinHandle<()>, hyperinfer_core::ConfigError> {
-        Ok(self.manager.subscribe_to_config_updates(config).await?)
+        self.manager.subscribe_to_config_updates(config).await
     }
 }
 
