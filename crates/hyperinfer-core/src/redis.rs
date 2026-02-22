@@ -41,20 +41,6 @@ pub struct ConfigManager {
 }
 
 impl ConfigManager {
-    /// Create a new ConfigManager connected to the specified Redis URL.
-    ///
-    /// Attempts to open a Redis client and build an asynchronous connection manager; on success the returned manager holds a shared client and an async connection manager.
-    ///
-    /// # Errors
-    /// Returns an error if the Redis client cannot be opened or if the connection manager cannot be created.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    /// let mgr = hyperinfer_core::redis::ConfigManager::new("redis://127.0.0.1/").await?;
-    /// # Ok(()) }
-    /// ```
     pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let client = Client::open(redis_url)?;
         let manager = ConnectionManager::new(client.clone()).await?;
@@ -64,37 +50,6 @@ impl ConfigManager {
         })
     }
 
-    /// Spawns a background task that subscribes to Redis config update messages and applies them to the provided config.
-    ///
-    /// The spawned task connects to the instance used by this manager, subscribes to the CONFIG_CHANNEL, listens for
-    /// JSON-encoded ConfigUpdate messages, and replaces the contents of the supplied `Arc<RwLock<Config>>` whenever a
-    /// valid update is received. If the subscription or stream fails, the task will retry with exponential backoff
-    /// (starting at 1s, doubling up to 60s).
-    ///
-    /// # Parameters
-    ///
-    /// - `config`: an `Arc<RwLock<Config>>` whose inner value will be replaced when a new config is received.
-    ///
-    /// # Returns
-    ///
-    /// Returns the `tokio::task::JoinHandle<()>` for the spawned background task.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use std::sync::Arc;
-    /// # use tokio::sync::RwLock;
-    /// # use hyperinfer_core::redis::ConfigManager;
-    /// # use hyperinfer_core::config::Config;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    /// let manager = ConfigManager::new("redis://127.0.0.1/").await?;
-    /// let config = Arc::new(RwLock::new(Config::default()));
-    /// let handle = manager.subscribe_to_config_updates(config.clone()).await?;
-    /// // Background task is now listening for updates. When finished:
-    /// handle.abort();
-    /// # Ok(())
-    /// # }
-    /// ```
     pub async fn subscribe_to_config_updates(
         &self,
         config: Arc<RwLock<Config>>,

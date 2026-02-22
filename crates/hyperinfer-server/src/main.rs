@@ -25,17 +25,6 @@ struct AppState<D: Database, C: ConfigStore> {
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
 
-/// Returns the in-memory configuration currently held in the application state.
-///
-/// Reads and clones the shared `Config` from the state's `config` RwLock and returns it as JSON.
-///
-/// # Examples
-///
-/// ```
-/// // In an async handler or test with access to `state: State<AppState<_, _>>`:
-/// // let response = config_sync(state).await;
-/// // The response contains the current `Config` serialized as JSON.
-/// ```
 async fn config_sync<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
 ) -> impl IntoResponse {
@@ -43,27 +32,6 @@ async fn config_sync<D: Database, C: ConfigStore>(
     Json(config.clone())
 }
 
-/// Fetches a team by its ID from the application's database and returns an HTTP response.
-///
-/// On success returns the team as JSON. If the team is not found returns 404 with the
-/// message "Team not found". If the database operation fails returns 500 with the
-/// message "Database error".
-///
-/// # Examples
-///
-/// ```
-/// # use axum::extract::{State, Path};
-/// # use axum::response::IntoResponse;
-/// # use axum::http::StatusCode;
-/// # // `create_test_state` and `MockDatabase`/`MockConfigStore` are provided by the test helpers in this crate.
-/// # use crate::tests::create_test_state;
-/// #[tokio::test]
-/// async fn example_get_team_not_found() {
-///     let state = create_test_state();
-///     let resp = super::get_team(State(state), Path("nonexistent".to_string())).await.into_response();
-///     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-/// }
-/// ```
 async fn get_team<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(team_id): Path<String>,
@@ -75,23 +43,6 @@ async fn get_team<D: Database, C: ConfigStore>(
     }
 }
 
-/// Creates a new team with the provided name and budget.
-///
-/// On success returns the created `Team` as JSON; on failure returns a 500 response with a
-/// "Failed to create team" message.
-///
-/// # Examples
-///
-/// ```
-/// # use axum::{extract::State, extract::Json};
-/// # use hyperinfer_server::{create_team, AppState, CreateTeamRequest};
-/// # // The following is a conceptual example; in tests you would construct an AppState with a mock Database.
-/// # async fn example(state: State<AppState<impl hyperinfer_core::Database, impl hyperinfer_core::ConfigStore>>) {
-/// let req = Json(CreateTeamRequest { name: "acme".into(), budget_cents: 1_000_00 });
-/// let response = create_team(state, req).await;
-/// // `response` is an HTTP response: 200 with JSON body on success, 500 with error message on failure.
-/// # }
-/// ```
 async fn create_team<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateTeamRequest>,
@@ -102,22 +53,6 @@ async fn create_team<D: Database, C: ConfigStore>(
     }
 }
 
-/// Fetches a user by ID and returns an appropriate HTTP response.
-///
-/// Returns a JSON-encoded user with status 200 when the user exists, a 404 status with the message
-/// "User not found" when no user is found, or a 500 status with the message "Database error" on
-/// database failures.
-///
-/// # Examples
-///
-/// ```
-/// # use axum::extract::{State, Path};
-/// # async fn example() {
-/// // Construct a test AppState with a mock Database and ConfigStore, then:
-/// // let state = AppState { config: ..., db: mock_db, config_manager: mock_cfg };
-/// // let response = get_user(State(state), Path("user-123".to_string())).await;
-/// # }
-/// ```
 async fn get_user<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(user_id): Path<String>,
@@ -129,26 +64,6 @@ async fn get_user<D: Database, C: ConfigStore>(
     }
 }
 
-/// Creates a new user for the given team and returns the created user on success.
-///
-/// On success the response contains the created user serialized as JSON. On failure the response
-/// is a 500 Internal Server Error with the message "Failed to create user".
-///
-/// # Examples
-///
-/// ```
-/// // Assume `state` is an `AppState` with a test `Database` and `ConfigStore`.
-/// // let state = create_test_state();
-/// let req = CreateUserRequest {
-///     team_id: "team1".into(),
-///     email: "alice@example.com".into(),
-///     role: "member".into(),
-/// };
-///
-/// // Call the handler (in an async context)
-/// // let resp = create_user(State(state), Json(req)).await;
-/// // assert!(resp.status().is_success());
-/// ```
 async fn create_user<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateUserRequest>,
@@ -163,29 +78,6 @@ async fn create_user<D: Database, C: ConfigStore>(
     }
 }
 
-/// Fetches an API key by its ID and returns an HTTP response.
-///
-/// Calls the configured database to retrieve the API key and maps outcomes to HTTP responses.
-///
-/// # Returns
-///
-/// An HTTP response containing the API key as JSON on success; `404 Not Found` with the message
-/// "API key not found" if no key exists for the given ID; `500 Internal Server Error` with the
-/// message "Database error" if the database query fails.
-///
-/// # Examples
-///
-/// ```no_run
-/// use axum::response::IntoResponse;
-/// use axum::extract::State;
-/// use axum::extract::Path;
-///
-/// // `state` must be an AppState implementing the required traits; this example is illustrative.
-/// # async fn example<D, C>(state: State<crate::AppState<D, C>>) where D: crate::Database, C: crate::ConfigStore {
-/// let resp = crate::get_api_key::<D, C>(state, Path("api_key_id".to_string())).await.into_response();
-/// // match on the response status or body as needed
-/// # }
-/// ```
 async fn get_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(key_id): Path<String>,
@@ -197,29 +89,6 @@ async fn get_api_key<D: Database, C: ConfigStore>(
     }
 }
 
-/// Creates a new API key for the specified user and team.
-///
-/// On success, returns an HTTP response containing the created API key as JSON.
-/// On failure, returns a 500 Internal Server Error with the message "Failed to create API key".
-///
-/// # Examples
-///
-/// ```no_run
-/// use axum::Json;
-/// use hyperinfer_server::CreateApiKeyRequest;
-///
-/// // Build a request body and let the server route invoke this handler.
-/// let req = CreateApiKeyRequest {
-///     key_hash: "hash".into(),
-///     user_id: "user".into(),
-///     team_id: "team".into(),
-///     name: Some("my-key".into()),
-/// };
-///
-/// // Handler invocation is performed by the Axum router in normal usage:
-/// // POST /v1/api_keys with JSON body -> create_api_key
-/// let _ = Json(req);
-/// ```
 async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateApiKeyRequest>,
@@ -238,17 +107,6 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     }
 }
 
-/// Fetches a model alias by its identifier and maps the result to an HTTP response.
-///
-/// Returns `200` with the alias as JSON if found, `404` with the text "Model alias not found" if no alias exists for the given id, or `500` with the text "Database error" if the database query fails.
-///
-/// # Examples
-///
-/// ```no_run
-/// use axum::{extract::State, extract::Path};
-/// // `state` and `alias_id` would be provided by the Axum runtime in real usage.
-/// // get_model_alias(State(state), Path(alias_id)).await;
-/// ```
 async fn get_model_alias<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(alias_id): Path<String>,
@@ -260,28 +118,6 @@ async fn get_model_alias<D: Database, C: ConfigStore>(
     }
 }
 
-/// Creates a model alias for a team and returns an HTTP response.
-///
-/// On success returns a 200 OK response with the created model alias serialized as JSON.
-/// If the database operation fails returns a 500 Internal Server Error with the message
-/// "Failed to create model alias".
-///
-/// # Examples
-///
-/// ```no_run
-/// use axum::response::IntoResponse;
-/// use hyperinfer_server::CreateModelAliasRequest;
-///
-/// // When mounted in the router, calling the endpoint with a valid request
-/// // results in a 200 response containing the created model alias as JSON,
-/// // or a 500 response with the text "Failed to create model alias" on error.
-/// let _req = CreateModelAliasRequest {
-///     team_id: "team-123".into(),
-///     alias: "my-alias".into(),
-///     target_model: "gpt-4".into(),
-///     provider: "openai".into(),
-/// };
-/// ```
 async fn create_model_alias<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateModelAliasRequest>,
@@ -300,22 +136,6 @@ async fn create_model_alias<D: Database, C: ConfigStore>(
     }
 }
 
-/// Fetches the quota for the given team and returns an HTTP response.
-///
-/// On success returns the quota serialized as JSON; if no quota exists for the
-/// team returns HTTP 404 with "Quota not found"; on database errors returns
-/// HTTP 500 with "Database error".
-///
-/// # Examples
-///
-/// ```no_run
-/// use axum::extract::{State, Path};
-/// # async fn example() {
-/// // `state` must be an `AppState` with a `Database` implementation.
-/// let state = /* AppState::<_, _> */ unimplemented!();
-/// let resp = get_quota(State(state), Path("team-id".to_string())).await;
-/// # }
-/// ```
 async fn get_quota<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(team_id): Path<String>,
@@ -327,31 +147,6 @@ async fn get_quota<D: Database, C: ConfigStore>(
     }
 }
 
-/// Creates a quota for a team.
-///
-/// Attempts to create a quota record using the provided request and returns the created quota as JSON on success.
-/// On failure, responds with HTTP 500 and a plain text error message.
-///
-/// # Returns
-///
-/// `Json<Quota>` containing the created quota on success, or a `(StatusCode::INTERNAL_SERVER_ERROR, &str)` response on failure.
-///
-/// # Examples
-///
-/// ```
-/// # // The following is a hidden example outline; actual construction of `state` depends on the test helpers in this crate.
-/// # use axum::Json;
-/// # use hyperinfer_core::CreateQuotaRequest;
-/// # async fn example_call(state: crate::AppState<impl crate::Database, impl crate::ConfigStore>) {
-/// let req = CreateQuotaRequest {
-///     team_id: "team-123".to_string(),
-///     rpm_limit: 100,
-///     tpm_limit: 1000,
-/// };
-/// // call the handler (async) and inspect the response
-/// let _resp = crate::create_quota(axum::extract::State(state), Json(req)).await;
-/// # }
-/// ```
 async fn create_quota<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateQuotaRequest>,
@@ -402,24 +197,6 @@ struct CreateQuotaRequest {
     tpm_limit: i32,
 }
 
-/// Initializes logging, database, config store, HTTP routes, and starts the control-plane server.
-///
-/// This function:
-/// - configures tracing subscriber for logging,
-/// - reads DATABASE_URL and REDIS_URL (with sensible defaults),
-/// - creates a Postgres connection pool and runs SQL migrations,
-/// - initializes a SqlxDb and a RedisConfigStore, loading stored config or falling back to an empty default,
-/// - constructs application state and CORS policy (driven by ALLOWED_ORIGINS, defaulting to http://localhost:3000),
-/// - registers REST routes for config, teams, users, API keys, model aliases, and quotas,
-/// - binds to 0.0.0.0:3000 and serves the Axum application.
-///
-/// # Examples
-///
-/// ```no_run
-/// // Run the server (sets defaults for DATABASE_URL and REDIS_URL when not provided).
-/// // From a shell:
-/// //   DATABASE_URL="postgres://..." REDIS_URL="redis://..." cargo run --bin hyperinfer-server
-/// ```
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
@@ -551,22 +328,6 @@ mod tests {
         }
     }
 
-    /// Constructs a test AppState preconfigured with mock implementations and an empty Config.
-    ///
-    /// The returned state contains:
-    /// - an empty `Config` (no API keys, routing rules, quotas, or model aliases, and `default_provider` set to `None`),
-    /// - a `MockDatabase` as `db`,
-    /// - a `MockConfigStore` as `config_manager`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// let _state = create_test_state();
-    /// ```
-    ///
-    /// # Returns
-    ///
-    /// An `AppState<MockDatabase, MockConfigStore>` populated for use in unit tests.
     fn create_test_state() -> AppState<MockDatabase, MockConfigStore> {
         let config = Config {
             api_keys: std::collections::HashMap::new(),
@@ -774,41 +535,6 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
-    /// Verifies that requesting a quota for a non-existent team yields a 404 response.
-    ///
-    /// Sets up a mock database that returns `Ok(None)` for the requested team ID and
-    /// asserts that `get_quota` responds with HTTP 404 Not Found.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// // Arrange: mock database returns no quota for "nonexistent-team"
-    /// let mut db = MockDatabase::new();
-    /// db.expect_get_quota()
-    ///     .with(eq("nonexistent-team"))
-    ///     .times(1)
-    ///     .returning(|_| Ok(None));
-    ///
-    /// let config = Config {
-    ///     api_keys: std::collections::HashMap::new(),
-    ///     routing_rules: Vec::new(),
-    ///     quotas: std::collections::HashMap::new(),
-    ///     model_aliases: std::collections::HashMap::new(),
-    ///     default_provider: None,
-    /// };
-    /// let state: AppState<MockDatabase, MockConfigStore> = AppState {
-    ///     config: Arc::new(RwLock::new(config)),
-    ///     db,
-    ///     config_manager: MockConfigStore::new(),
-    /// };
-    ///
-    /// // Act
-    /// let response = get_quota(State(state), Path("nonexistent-team".to_string())).await;
-    /// let resp = response.into_response();
-    ///
-    /// // Assert
-    /// assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-    /// ```
     #[tokio::test]
     async fn test_get_quota_not_found() {
         let mut db = MockDatabase::new();
