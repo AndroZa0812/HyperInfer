@@ -135,7 +135,7 @@ impl TelemetryConsumer {
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
-        let mut start_id = "0".to_string();
+        let mut start_id = "0-0".to_string();
         loop {
             let result: Result<(String, Vec<StreamEntry>), redis::RedisError> =
                 redis::cmd("XAUTOCLAIM")
@@ -162,7 +162,7 @@ impl TelemetryConsumer {
                     .await;
             }
 
-            if next_start == "0" {
+            if next_start == "0-0" {
                 return;
             }
             start_id = next_start;

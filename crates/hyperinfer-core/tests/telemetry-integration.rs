@@ -1,13 +1,17 @@
 use hyperinfer_core::{TelemetryConsumer, UsageRecord};
-use testcontainers::{runners::AsyncRunner, ContainerAsync};
-use testcontainers_modules::redis::Redis;
+use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
+use testcontainers_modules::redis::REDIS_PORT;
 
-async fn setup_redis() -> (String, ContainerAsync<Redis>) {
-    let redis = Redis::default()
+async fn setup_redis() -> (String, testcontainers::ContainerAsync<GenericImage>) {
+    let redis = GenericImage::new("redis", "7.2")
+        .with_exposed_port(REDIS_PORT.tcp())
+        .with_wait_for(testcontainers::core::WaitFor::message_on_stdout(
+            "Ready to accept connections",
+        ))
         .start()
         .await
         .expect("Failed to start Redis container");
-    let port = redis.get_host_port_ipv4(6379).await.unwrap();
+    let port = redis.get_host_port_ipv4(REDIS_PORT).await.unwrap();
     let redis_url = format!("redis://127.0.0.1:{}", port);
     (redis_url, redis)
 }
@@ -195,7 +199,7 @@ async fn test_telemetry_consumer_start_consuming() {
         .expect("Failed to create consumer");
 
     let cancellation_token = CancellationToken::new();
-    let _handle = consumer
+    let handle = consumer
         .start_consuming(
             move |record: UsageRecord| {
                 let received = Arc::clone(&received_clone);
@@ -247,6 +251,9 @@ async fn test_telemetry_consumer_start_consuming() {
     assert_eq!(records.len(), 1, "Should have consumed 1 record");
     assert_eq!(records[0].key, "consume-test-key");
     assert_eq!(records[0].model, "gpt-4");
+
+    cancellation_token.cancel();
+    handle.await.expect("Consumer task panicked");
 }
 
 #[tokio::test]
