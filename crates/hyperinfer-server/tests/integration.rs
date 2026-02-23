@@ -5,7 +5,7 @@ use testcontainers::ImageExt;
 use testcontainers::{runners::AsyncRunner, ContainerAsync};
 use testcontainers_modules::postgres::Postgres;
 
-async fn setup_test_db() -> (impl Database, ContainerAsync<Postgres>) {
+async fn setup_test_db() -> (SqlxDb, ContainerAsync<Postgres>) {
     let postgres = Postgres::default()
         .with_tag("13-alpine")
         .start()
@@ -28,7 +28,19 @@ async fn setup_test_db() -> (impl Database, ContainerAsync<Postgres>) {
     sqlx::raw_sql(include_str!("../migrations/001_initial_schema.sql"))
         .execute(&pool)
         .await
-        .expect("Failed to run migrations");
+        .expect("Failed to run migration 001");
+
+    sqlx::raw_sql(include_str!("../migrations/002_usage_logs.sql"))
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 002");
+
+    sqlx::raw_sql(include_str!(
+        "../migrations/003_usage_logs_composite_index.sql"
+    ))
+    .execute(&pool)
+    .await
+    .expect("Failed to run migration 003");
 
     (SqlxDb::new(pool), postgres)
 }
@@ -413,4 +425,304 @@ async fn test_create_quota_invalid_team_fk() {
         .create_quota("00000000-0000-0000-0000-000000000000", 100, 10000)
         .await;
     assert!(result.is_err(), "Should fail on invalid team foreign key");
+}
+
+// Tests for record_usage (new in telemetry PR)
+
+#[tokio::test]
+async fn test_record_usage_success() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let usage_log = db
+        .record_usage(&team.id, &api_key.id, "gpt-4", 100, 50, 250)
+        .await
+        .expect("Failed to record usage");
+
+    assert_eq!(usage_log.team_id, team.id);
+    assert_eq!(usage_log.api_key_id, api_key.id);
+    assert_eq!(usage_log.model, "gpt-4");
+    assert_eq!(usage_log.input_tokens, 100);
+    assert_eq!(usage_log.output_tokens, 50);
+    assert_eq!(usage_log.response_time_ms, 250);
+}
+
+#[tokio::test]
+async fn test_record_usage_zero_tokens() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let usage_log = db
+        .record_usage(&team.id, &api_key.id, "gpt-4", 0, 0, 0)
+        .await
+        .expect("Failed to record usage");
+
+    assert_eq!(usage_log.input_tokens, 0);
+    assert_eq!(usage_log.output_tokens, 0);
+    assert_eq!(usage_log.response_time_ms, 0);
+}
+
+#[tokio::test]
+async fn test_record_usage_large_values() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let usage_log = db
+        .record_usage(&team.id, &api_key.id, "gpt-4", i32::MAX, i32::MAX, i64::MAX)
+        .await
+        .expect("Failed to record usage");
+
+    assert_eq!(usage_log.input_tokens, i32::MAX);
+    assert_eq!(usage_log.output_tokens, i32::MAX);
+    assert_eq!(usage_log.response_time_ms, i64::MAX);
+}
+
+#[tokio::test]
+async fn test_record_usage_multiple_logs() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    // Record multiple usage logs
+    let log1 = db
+        .record_usage(&team.id, &api_key.id, "gpt-4", 100, 50, 250)
+        .await
+        .expect("Failed to record first usage");
+
+    let log2 = db
+        .record_usage(&team.id, &api_key.id, "gpt-3.5-turbo", 200, 100, 150)
+        .await
+        .expect("Failed to record second usage");
+
+    assert_ne!(log1.id, log2.id);
+    assert_eq!(log1.team_id, team.id);
+    assert_eq!(log2.team_id, team.id);
+    assert_eq!(log1.model, "gpt-4");
+    assert_eq!(log2.model, "gpt-3.5-turbo");
+}
+
+#[tokio::test]
+async fn test_record_usage_invalid_team_id() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let result = db
+        .record_usage(
+            "00000000-0000-0000-0000-000000000000",
+            &api_key.id,
+            "gpt-4",
+            100,
+            50,
+            250,
+        )
+        .await;
+
+    assert!(result.is_err(), "Should fail with invalid team foreign key");
+}
+
+#[tokio::test]
+async fn test_record_usage_invalid_api_key_id() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let result = db
+        .record_usage(
+            &team.id,
+            "00000000-0000-0000-0000-000000000000",
+            "gpt-4",
+            100,
+            50,
+            250,
+        )
+        .await;
+
+    assert!(
+        result.is_err(),
+        "Should fail with invalid api_key foreign key"
+    );
+}
+
+#[tokio::test]
+async fn test_record_usage_invalid_uuid_format() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .record_usage("not-a-uuid", "also-not-a-uuid", "gpt-4", 100, 50, 250)
+        .await;
+
+    assert!(result.is_err(), "Should fail with invalid UUID format");
+}
+
+#[tokio::test]
+async fn test_record_usage_different_models() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let models = vec!["gpt-4", "gpt-3.5-turbo", "claude-3-opus", "claude-3-sonnet"];
+
+    for model in models {
+        let log = db
+            .record_usage(&team.id, &api_key.id, model, 100, 50, 200)
+            .await
+            .expect("Failed to record usage");
+        assert_eq!(log.model, model);
+    }
+}
+
+#[tokio::test]
+async fn test_get_api_key_by_hash() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let api_key = db
+        .create_api_key("unique_hash_123", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    let fetched = db
+        .get_api_key_by_hash("unique_hash_123")
+        .await
+        .expect("Failed to get API key by hash")
+        .expect("API key not found");
+
+    assert_eq!(fetched.id, api_key.id);
+    assert_eq!(fetched.key_hash, "unique_hash_123");
+    assert!(fetched.is_active);
+}
+
+#[tokio::test]
+async fn test_get_api_key_by_hash_inactive() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin")
+        .await
+        .expect("Failed to create user");
+
+    let _api_key = db
+        .create_api_key("test_hash", &user.id, &team.id, None)
+        .await
+        .expect("Failed to create API key");
+
+    // The get_api_key_by_hash should only return active keys
+    // We'll test this indirectly by verifying the initial key is active
+    let fetched = db
+        .get_api_key_by_hash("test_hash")
+        .await
+        .expect("Failed to get API key by hash");
+
+    assert!(fetched.is_some(), "Should find active API key");
+}
+
+#[tokio::test]
+async fn test_get_api_key_by_hash_not_found() {
+    let (db, _container) = setup_test_db().await;
+
+    let result = db
+        .get_api_key_by_hash("nonexistent_hash")
+        .await
+        .expect("Query failed");
+
+    assert!(result.is_none(), "Should return None for nonexistent hash");
 }

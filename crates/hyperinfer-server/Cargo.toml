@@ -17,6 +17,7 @@ hyperinfer-core = { path = "../hyperinfer-core" }
 async-trait = "0.1"
 axum = "0.8"
 tokio = { version = "1.0", features = ["full"] }
+tokio-util = { version = "0.7", features = ["rt"] }
 serde = { version = "1.0", features = ["derive"] }
 sqlx = { version = "0.8", features = [
   "runtime-tokio",
@@ -37,6 +38,7 @@ redis = { version = "1.0", features = [
   "tokio-comp",
   "connection-manager",
 ] }
+sha2 = "0.10"
 
 [dev-dependencies]
 hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }
