@@ -1,0 +1,20 @@
+[project]
+name = "hyperinfer-llamaindex"
+version = "0.1.0"
+description = "LlamaIndex integration for HyperInfer LLM Gateway"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "hyperinfer",
+    "llama-index-core>=0.10",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hyperinfer_llamaindex"]
+
+[tool.uv.sources]
+hyperinfer = { path = "../../crates/hyperinfer-python", editable = true }
