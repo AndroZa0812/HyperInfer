@@ -45,7 +45,9 @@ impl Telemetry {
     }
 
     pub fn with_stream_key(mut self, stream_key: &str) -> Self {
-        self.stream_key = stream_key.to_string();
+        if !stream_key.trim().is_empty() {
+            self.stream_key = stream_key.to_string();
+        }
         self
     }
 
@@ -196,7 +198,16 @@ mod tests {
             .await
             .unwrap()
             .with_stream_key("");
-        assert_eq!(telemetry.stream_key, "");
+        assert_eq!(telemetry.stream_key, DEFAULT_STREAM_KEY);
+    }
+
+    #[tokio::test]
+    async fn test_telemetry_with_whitespace_stream_key() {
+        let telemetry = Telemetry::new("redis://localhost:6379")
+            .await
+            .unwrap()
+            .with_stream_key("   ");
+        assert_eq!(telemetry.stream_key, DEFAULT_STREAM_KEY);
     }
 
     #[tokio::test]

@@ -13,6 +13,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 use tracing::info;
 
@@ -250,15 +251,15 @@ fn key_id(key: &str) -> String {
     }
 }
 
-async fn resolve_api_key<D: Database>(db: &D, key: &str) -> Option<(String, String)> {
+async fn resolve_api_key<D: Database>(
+    db: &D,
+    key: &str,
+) -> Result<Option<(String, String)>, DbError> {
     let key_hash = hash_key(key);
     match db.get_api_key_by_hash(&key_hash).await {
-        Ok(Some(api_key)) => Some((api_key.team_id, api_key.id)),
-        Ok(None) => None,
-        Err(e) => {
-            tracing::warn!("Failed to resolve API key: {:?}", e);
-            None
-        }
+        Ok(Some(api_key)) => Ok(Some((api_key.team_id, api_key.id))),
+        Ok(None) => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
@@ -302,50 +303,79 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let db_clone = db.clone();
     let telemetry_consumer = TelemetryConsumer::new(&redis_url).await?;
+    let cancellation_token = CancellationToken::new();
     let _telemetry_handle = telemetry_consumer
-        .start_consuming(move |record: UsageRecord| {
-            let db = db_clone.clone();
-            async move {
-                if let Some((team_id, api_key_id)) = resolve_api_key(&db, &record.key).await {
-                    match db
-                        .record_usage(
-                            &team_id,
-                            &api_key_id,
-                            &record.model,
-                            i32::try_from(record.input_tokens).unwrap_or_else(|_| {
-                                tracing::warn!("input_tokens overflow: {}", record.input_tokens);
-                                i32::MAX
-                            }),
-                            i32::try_from(record.output_tokens).unwrap_or_else(|_| {
-                                tracing::warn!("output_tokens overflow: {}", record.output_tokens);
-                                i32::MAX
-                            }),
-                            i64::try_from(record.response_time_ms).unwrap_or_else(|_| {
-                                tracing::warn!(
-                                    "response_time_ms overflow: {}",
-                                    record.response_time_ms
-                                );
-                                i64::MAX
-                            }),
-                        )
-                        .await
-                    {
-                        Ok(_) => {
-                            tracing::debug!("Recorded usage for key_id: {}", key_id(&record.key))
+        .start_consuming(
+            move |record: UsageRecord| {
+                let db = db_clone.clone();
+                async move {
+                    match resolve_api_key(&db, &record.key).await {
+                        Ok(Some((team_id, api_key_id))) => {
+                            match db
+                                .record_usage(
+                                    &team_id,
+                                    &api_key_id,
+                                    &record.model,
+                                    i32::try_from(record.input_tokens).unwrap_or_else(|_| {
+                                        tracing::warn!(
+                                            "input_tokens overflow: {}",
+                                            record.input_tokens
+                                        );
+                                        i32::MAX
+                                    }),
+                                    i32::try_from(record.output_tokens).unwrap_or_else(|_| {
+                                        tracing::warn!(
+                                            "output_tokens overflow: {}",
+                                            record.output_tokens
+                                        );
+                                        i32::MAX
+                                    }),
+                                    i64::try_from(record.response_time_ms).unwrap_or_else(|_| {
+                                        tracing::warn!(
+                                            "response_time_ms overflow: {}",
+                                            record.response_time_ms
+                                        );
+                                        i64::MAX
+                                    }),
+                                )
+                                .await
+                            {
+                                Ok(_) => {
+                                    tracing::debug!(
+                                        "Recorded usage for key_id: {}",
+                                        key_id(&record.key)
+                                    )
+                                }
+                                Err(e) => {
+                                    tracing::error!(
+                                        "Failed to record usage for key_id {}: {:?}",
+                                        key_id(&record.key),
+                                        e
+                                    );
+                                    return Err(e.into());
+                                }
+                            }
+                        }
+                        Ok(None) => {
+                            tracing::debug!(
+                                "API key not found for key_id: {}, skipping usage record",
+                                key_id(&record.key)
+                            );
                         }
                         Err(e) => {
                             tracing::error!(
-                                "Failed to record usage for key_id {}: {:?}",
+                                "Failed to resolve API key for key_id {}: {:?}",
                                 key_id(&record.key),
                                 e
                             );
                             return Err(e.into());
                         }
                     }
+                    Ok(())
                 }
-                Ok(())
-            }
-        })
+            },
+            cancellation_token,
+        )
         .await?;
 
     let state: ProdState = AppState {
@@ -780,8 +810,10 @@ mod tests {
             .returning(move |_| Ok(Some(api_key_clone.clone())));
 
         let result = resolve_api_key(&db, "test-key").await;
-        assert!(result.is_some());
-        let (team_id, key_id) = result.unwrap();
+        assert!(result.is_ok());
+        let resolved = result.unwrap();
+        assert!(resolved.is_some());
+        let (team_id, key_id) = resolved.unwrap();
         assert_eq!(team_id, "team-id");
         assert_eq!(key_id, "key-id");
     }
@@ -795,7 +827,8 @@ mod tests {
             .returning(|_| Ok(None));
 
         let result = resolve_api_key(&db, "nonexistent-key").await;
-        assert!(result.is_none());
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -807,7 +840,7 @@ mod tests {
             .returning(|_| Err(DbError::Sqlx(sqlx::Error::Protocol("test error".into()))));
 
         let result = resolve_api_key(&db, "test-key").await;
-        assert!(result.is_none());
+        assert!(result.is_err());
     }
 
     #[tokio::test]

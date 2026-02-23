@@ -6,6 +6,7 @@
 use redis::aio::MultiplexedConnection;
 use redis::Client;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
 
 use crate::types::UsageRecord;
@@ -55,7 +56,7 @@ impl TelemetryConsumer {
         stream_key: &str,
         consumer_group: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let _: Result<(), redis::RedisError> = redis::cmd("XGROUP")
+        let result: Result<(), redis::RedisError> = redis::cmd("XGROUP")
             .arg("CREATE")
             .arg(stream_key)
             .arg(consumer_group)
@@ -63,7 +64,17 @@ impl TelemetryConsumer {
             .arg("MKSTREAM")
             .query_async(conn)
             .await;
-        Ok(())
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                if e.to_string().contains("BUSYGROUP") {
+                    Ok(())
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
     }
 
     async fn ack_message(
@@ -205,6 +216,7 @@ impl TelemetryConsumer {
     pub async fn start_consuming<F, Fut>(
         &self,
         handler: F,
+        cancellation_token: CancellationToken,
     ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>>
     where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
@@ -220,14 +232,26 @@ impl TelemetryConsumer {
             let mut backoff = 1u64;
 
             loop {
+                if cancellation_token.is_cancelled() {
+                    info!("Telemetry consumer shutting down");
+                    return;
+                }
+
                 let conn_result = client.get_multiplexed_async_connection().await;
                 if let Err(e) = &conn_result {
                     error!(
                         "Failed to connect to Redis: {}. Reconnecting in {}s",
                         e, backoff
                     );
-                    tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                    tokio::select! {
+                        _ = cancellation_token.cancelled() => {
+                            info!("Telemetry consumer shutting down");
+                            return;
+                        }
+                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff)) => {
+                            backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                        }
+                    }
                     continue;
                 }
 
@@ -253,26 +277,36 @@ impl TelemetryConsumer {
                 .await;
 
                 loop {
-                    match Self::read_and_process_batch(
-                        &mut conn,
-                        &stream_key,
-                        &consumer_group,
-                        &consumer_name,
-                        &handler,
-                    )
-                    .await
-                    {
-                        Ok(_) => {
-                            backoff = 1;
+                    if cancellation_token.is_cancelled() {
+                        info!("Telemetry consumer shutting down");
+                        return;
+                    }
+
+                    tokio::select! {
+                        result = Self::read_and_process_batch(
+                            &mut conn,
+                            &stream_key,
+                            &consumer_group,
+                            &consumer_name,
+                            &handler,
+                        ) => {
+                            match result {
+                                Ok(_) => {
+                                    backoff = 1;
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Telemetry consumer error: {}. Reconnecting in {}s",
+                                        e, backoff
+                                    );
+                                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                    break;
+                                }
+                            }
                         }
-                        Err(e) => {
-                            error!(
-                                "Telemetry consumer error: {}. Reconnecting in {}s",
-                                e, backoff
-                            );
-                            tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
-                            backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
-                            break;
+                        _ = cancellation_token.cancelled() => {
+                            info!("Telemetry consumer shutting down");
+                            return;
                         }
                     }
                 }
@@ -290,6 +324,11 @@ impl TelemetryConsumer {
 
         let key = map.get("key")?.clone();
         let model = map.get("model")?.clone();
+
+        if key.trim().is_empty() || model.trim().is_empty() {
+            return None;
+        }
+
         let input_tokens: u32 = map.get("input_tokens")?.parse().ok()?;
         let output_tokens: u32 = map.get("output_tokens")?.parse().ok()?;
         let response_time_ms: u64 = map.get("response_time_ms")?.parse().ok()?;
@@ -548,10 +587,22 @@ mod tests {
         ];
 
         let record = TelemetryConsumer::parse_entry(&fields);
-        assert!(record.is_some());
-        let record = record.unwrap();
-        assert_eq!(record.key, "");
-        assert_eq!(record.model, "");
+        assert!(record.is_none());
+    }
+
+    #[test]
+    fn test_parse_entry_whitespace_strings() {
+        let fields = vec![
+            ("key".to_string(), "   ".to_string()),
+            ("model".to_string(), "   ".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(&fields);
+        assert!(record.is_none());
     }
 
     #[test]

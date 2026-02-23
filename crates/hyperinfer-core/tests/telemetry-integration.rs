@@ -177,6 +177,7 @@ async fn test_telemetry_consumer_with_custom_stream() {
 async fn test_telemetry_consumer_start_consuming() {
     use std::sync::Arc;
     use tokio::sync::Mutex;
+    use tokio_util::sync::CancellationToken;
 
     let (redis_url, _container) = setup_redis().await;
 
@@ -186,7 +187,6 @@ async fn test_telemetry_consumer_start_consuming() {
         .await
         .expect("Failed to connect");
 
-    // Track received records
     let received = Arc::new(Mutex::new(Vec::new()));
     let received_clone = Arc::clone(&received);
 
@@ -194,22 +194,23 @@ async fn test_telemetry_consumer_start_consuming() {
         .await
         .expect("Failed to create consumer");
 
-    // Start consuming in the background
+    let cancellation_token = CancellationToken::new();
     let _handle = consumer
-        .start_consuming(move |record: UsageRecord| {
-            let received = Arc::clone(&received_clone);
-            async move {
-                received.lock().await.push(record);
-                Ok(())
-            }
-        })
+        .start_consuming(
+            move |record: UsageRecord| {
+                let received = Arc::clone(&received_clone);
+                async move {
+                    received.lock().await.push(record);
+                    Ok(())
+                }
+            },
+            cancellation_token.clone(),
+        )
         .await
         .expect("Failed to start consuming");
 
-    // Give consumer time to start
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-    // Add records to stream
     let _: String = redis::cmd("XADD")
         .arg("hyperinfer:telemetry")
         .arg("*")
@@ -229,8 +230,18 @@ async fn test_telemetry_consumer_start_consuming() {
         .await
         .expect("Failed to add to stream");
 
-    // Wait for consumer to process
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    let timeout = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+        loop {
+            let len = received.lock().await.len();
+            if len >= 1 {
+                return;
+            }
+            tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await;
+
+    assert!(timeout.is_ok(), "Timeout waiting for consumer to process");
 
     let records = received.lock().await;
     assert_eq!(records.len(), 1, "Should have consumed 1 record");
