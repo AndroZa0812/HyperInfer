@@ -11,6 +11,7 @@ pub trait Database: Clone + Send + Sync + 'static {
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
     async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError>;
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
+    async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
     async fn create_api_key(
         &self,
         key_hash: &str,
@@ -33,6 +34,15 @@ pub trait Database: Clone + Send + Sync + 'static {
         rpm_limit: i32,
         tpm_limit: i32,
     ) -> Result<Quota, DbError>;
+    async fn record_usage(
+        &self,
+        team_id: &str,
+        api_key_id: &str,
+        model: &str,
+        input_tokens: i32,
+        output_tokens: i32,
+        response_time_ms: i64,
+    ) -> Result<UsageLog, DbError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,4 +92,16 @@ pub struct Quota {
     pub rpm_limit: i32,
     pub tpm_limit: i32,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageLog {
+    pub id: String,
+    pub team_id: String,
+    pub api_key_id: String,
+    pub model: String,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub response_time_ms: i64,
+    pub recorded_at: DateTime<Utc>,
 }

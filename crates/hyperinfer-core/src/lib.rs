@@ -6,14 +6,16 @@
 pub mod error;
 pub mod rate_limiting;
 pub mod redis;
+pub mod telemetry_consumer;
 pub mod traits;
 pub mod types;
 
 pub use error::{ConfigError, DbError, HyperInferError};
 pub use rate_limiting::RateLimiter;
 pub use redis::PolicyUpdate;
-pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, User};
+pub use telemetry_consumer::TelemetryConsumer;
+pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, UsageLog, User};
 pub use types::{
     ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider, RoutingRule,
-    Usage,
+    Usage, UsageRecord,
 };

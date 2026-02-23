@@ -117,6 +117,19 @@ pub struct Usage {
     pub output_tokens: u32,
 }
 
+/// A usage record for telemetry (stored in Redis Stream and PostgreSQL)
+///
+/// All timestamps are in milliseconds since Unix epoch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UsageRecord {
+    pub key: String,
+    pub model: String,
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub response_time_ms: u64,
+    pub timestamp: u64,
+}
+
 /// A choice in a chat response
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Choice {
@@ -306,5 +319,173 @@ mod tests {
         assert_eq!(choice.index, 0);
         assert_eq!(choice.message.role, MessageRole::Assistant);
         assert_eq!(choice.finish_reason, Some("stop".to_string()));
+    }
+
+    #[test]
+    fn test_usage_record_creation() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        assert_eq!(record.key, "test-key");
+        assert_eq!(record.model, "gpt-4");
+        assert_eq!(record.input_tokens, 100);
+        assert_eq!(record.output_tokens, 50);
+        assert_eq!(record.response_time_ms, 250);
+        assert_eq!(record.timestamp, 1700000000000);
+    }
+
+    #[test]
+    fn test_usage_record_serialization() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        let json = serde_json::to_string(&record).unwrap();
+        let deserialized: UsageRecord = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(record, deserialized);
+    }
+
+    #[test]
+    fn test_usage_record_zero_values() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            response_time_ms: 0,
+            timestamp: 0,
+        };
+
+        assert_eq!(record.input_tokens, 0);
+        assert_eq!(record.output_tokens, 0);
+        assert_eq!(record.response_time_ms, 0);
+        assert_eq!(record.timestamp, 0);
+    }
+
+    #[test]
+    fn test_usage_record_max_values() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: u32::MAX,
+            output_tokens: u32::MAX,
+            response_time_ms: u64::MAX,
+            timestamp: u64::MAX,
+        };
+
+        assert_eq!(record.input_tokens, u32::MAX);
+        assert_eq!(record.output_tokens, u32::MAX);
+        assert_eq!(record.response_time_ms, u64::MAX);
+        assert_eq!(record.timestamp, u64::MAX);
+    }
+
+    #[test]
+    fn test_usage_record_empty_strings() {
+        let record = UsageRecord {
+            key: "".to_string(),
+            model: "".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        assert_eq!(record.key, "");
+        assert_eq!(record.model, "");
+    }
+
+    #[test]
+    fn test_usage_record_special_characters() {
+        let record = UsageRecord {
+            key: "test-key-!@#$%".to_string(),
+            model: "gpt-4-turbo-preview".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        assert_eq!(record.key, "test-key-!@#$%");
+        assert_eq!(record.model, "gpt-4-turbo-preview");
+    }
+
+    #[test]
+    fn test_usage_record_unicode() {
+        let record = UsageRecord {
+            key: "test-key-🔑".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        assert_eq!(record.key, "test-key-🔑");
+
+        let json = serde_json::to_string(&record).unwrap();
+        let deserialized: UsageRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(record, deserialized);
+    }
+
+    #[test]
+    fn test_usage_record_long_strings() {
+        let long_key = "a".repeat(10000);
+        let long_model = "b".repeat(10000);
+        let record = UsageRecord {
+            key: long_key.clone(),
+            model: long_model.clone(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        assert_eq!(record.key.len(), 10000);
+        assert_eq!(record.model.len(), 10000);
+    }
+
+    #[test]
+    fn test_usage_record_clone() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        let cloned = record.clone();
+        assert_eq!(record, cloned);
+    }
+
+    #[test]
+    fn test_usage_record_debug() {
+        let record = UsageRecord {
+            key: "test-key".to_string(),
+            model: "gpt-4".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            response_time_ms: 250,
+            timestamp: 1700000000000,
+        };
+
+        let debug_str = format!("{:?}", record);
+        assert!(debug_str.contains("test-key"));
+        assert!(debug_str.contains("gpt-4"));
+        assert!(debug_str.contains("100"));
+        assert!(debug_str.contains("50"));
     }
 }

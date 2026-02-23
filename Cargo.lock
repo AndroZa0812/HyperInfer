@@ -1099,10 +1099,13 @@ dependencies = [
 name = "hyperinfer-client"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "hyperinfer-core",
+ "redis",
  "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "tokio",
  "tracing",
 ]
@@ -1120,9 +1123,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "testcontainers",
+ "testcontainers-modules",
  "thiserror",
  "tokio",
+ "tokio-util",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -1145,10 +1152,12 @@ dependencies = [
  "mockall",
  "redis",
  "serde",
+ "sha2",
  "sqlx",
  "testcontainers",
  "testcontainers-modules",
  "tokio",
+ "tokio-util",
  "tower",
  "tower-http",
  "tracing",
@@ -3105,6 +3114,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]
