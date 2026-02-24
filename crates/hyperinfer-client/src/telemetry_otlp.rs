@@ -22,7 +22,7 @@ pub fn init_telemetry(endpoint: &str) -> Result<(), Box<dyn std::error::Error + 
 }
 
 pub fn set_gen_ai_attributes(span: &Span, system: &str, model: &str, operation: &str) {
-    span.set_attribute("gen_ai.system", system);
+    span.set_attribute("gen_ai.provider.name", system);
     span.set_attribute("gen_ai.request.model", model);
     span.set_attribute("gen_ai.operation.name", operation);
 }
