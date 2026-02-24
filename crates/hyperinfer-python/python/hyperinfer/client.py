@@ -67,6 +67,12 @@ class Client:
         await self.init()
         return self
 
+    async def close(self) -> None:
+        """Close the client connection and cleanup resources."""
+        if hasattr(self._inner, "close"):
+            await self._inner.close()
+        self._initialized = False
+
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
-        pass
+        await self.close()
