@@ -57,21 +57,31 @@ class HyperInferChatModel(BaseChatModel):
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
-        response = await self.client.chat(
-            key=self.virtual_key,
-            model=self.model,
-            messages=formatted_messages,
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
+        try:
+            response = await self.client.chat(
+                key=self.virtual_key,
+                model=self.model,
+                messages=formatted_messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+        except Exception as e:
+            raise RuntimeError(f"Chat request failed: {e}") from e
 
-        ai_message = AIMessage(content=response["choices"][0]["message"]["content"])
+        try:
+            content = (
+                response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            )
+        except (KeyError, IndexError, TypeError) as e:
+            raise RuntimeError(f"Invalid response structure: {e}") from e
+
+        ai_message = AIMessage(content=content)
         generation = ChatGeneration(message=ai_message)
 
         return ChatResult(generations=[generation])
 
     @classmethod
-    def from_config(
+    async def from_config(
         cls,
         config: Config,
         model: str = "gpt-4",
@@ -81,6 +91,7 @@ class HyperInferChatModel(BaseChatModel):
     ) -> "HyperInferChatModel":
         """Create instance with configuration."""
         client = Client(redis_url)
+        await client.init()
 
         instance = cls(
             client=client,
@@ -88,10 +99,6 @@ class HyperInferChatModel(BaseChatModel):
             virtual_key=virtual_key,
             **kwargs,
         )
-
-        import asyncio
-
-        asyncio.run(client.init())
 
         return instance
 
