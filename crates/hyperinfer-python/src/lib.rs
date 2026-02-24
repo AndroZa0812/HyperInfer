@@ -3,6 +3,8 @@
 //! This crate provides PyO3 bindings to expose the Rust Data Plane functionality
 //! to Python environments.
 
+mod types;
+
 use pyo3::prelude::*;
 
 /// A wrapper around the HyperInfer client for Python use
