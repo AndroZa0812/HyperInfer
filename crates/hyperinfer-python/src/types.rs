@@ -69,48 +69,38 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
     })
 }
 
-fn message_role_to_py(py: Python<'_>, role: &MessageRole) -> Py<PyAny> {
+fn message_role_to_py(py: Python<'_>, role: &MessageRole) -> PyResult<Py<PyAny>> {
     match role {
-        MessageRole::System => "system".into_py_any(py).unwrap(),
-        MessageRole::User => "user".into_py_any(py).unwrap(),
-        MessageRole::Assistant => "assistant".into_py_any(py).unwrap(),
+        MessageRole::System => Ok("system".into_py_any(py)?),
+        MessageRole::User => Ok("user".into_py_any(py)?),
+        MessageRole::Assistant => Ok("assistant".into_py_any(py)?),
     }
 }
 
-pub fn response_to_py(py: Python<'_>, response: ChatResponse) -> Py<PyAny> {
+pub fn response_to_py(py: Python<'_>, response: ChatResponse) -> PyResult<Py<PyAny>> {
     let dict = pyo3::types::PyDict::new(py);
-    dict.set_item("id", &response.id).unwrap();
-    dict.set_item("model", &response.model).unwrap();
+    dict.set_item("id", &response.id)?;
+    dict.set_item("model", &response.model)?;
 
     let choices_list = pyo3::types::PyList::empty(py);
     for choice in &response.choices {
         let choice_dict = pyo3::types::PyDict::new(py);
-        choice_dict.set_item("index", choice.index).unwrap();
+        choice_dict.set_item("index", choice.index)?;
 
         let msg_dict = pyo3::types::PyDict::new(py);
-        msg_dict
-            .set_item("role", message_role_to_py(py, &choice.message.role))
-            .unwrap();
-        msg_dict
-            .set_item("content", &choice.message.content)
-            .unwrap();
-        choice_dict.set_item("message", msg_dict).unwrap();
+        msg_dict.set_item("role", message_role_to_py(py, &choice.message.role)?)?;
+        msg_dict.set_item("content", &choice.message.content)?;
+        choice_dict.set_item("message", msg_dict)?;
 
-        choice_dict
-            .set_item("finish_reason", &choice.finish_reason)
-            .unwrap();
-        choices_list.append(choice_dict).unwrap();
+        choice_dict.set_item("finish_reason", &choice.finish_reason)?;
+        choices_list.append(choice_dict)?;
     }
-    dict.set_item("choices", choices_list).unwrap();
+    dict.set_item("choices", choices_list)?;
 
     let usage_dict = pyo3::types::PyDict::new(py);
-    usage_dict
-        .set_item("input_tokens", response.usage.input_tokens)
-        .unwrap();
-    usage_dict
-        .set_item("output_tokens", response.usage.output_tokens)
-        .unwrap();
-    dict.set_item("usage", usage_dict).unwrap();
+    usage_dict.set_item("input_tokens", response.usage.input_tokens)?;
+    usage_dict.set_item("output_tokens", response.usage.output_tokens)?;
+    dict.set_item("usage", usage_dict)?;
 
-    dict.into()
+    Ok(dict.into())
 }
