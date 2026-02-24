@@ -3,10 +3,12 @@
 pub mod http_client;
 pub mod router;
 pub mod telemetry;
+pub mod telemetry_otlp;
 
 pub use http_client::HttpCaller;
 pub use router::Router;
 pub use telemetry::Telemetry;
+pub use telemetry_otlp::{init_langfuse_telemetry, init_telemetry};
 
 use hyperinfer_core::{
     rate_limiting::RateLimiter, types::Provider, ChatRequest, ChatResponse, Config, HyperInferError,
