@@ -1,5 +1,5 @@
 use hyperinfer_client::HyperInferClient as RustClient;
-use hyperinfer_core::{ChatRequest, ChatResponse, Config, HyperInferError};
+use hyperinfer_core::{ChatResponse, Config, HyperInferError};
 use pyo3::prelude::*;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -40,7 +40,9 @@ impl HyperInferClient {
             let mut guard = inner.write().await;
             *guard = Some(client);
 
-            Ok(unsafe { pyo3::Python::assume_attached().None() })
+            Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })?
         })
     }
 
@@ -62,10 +64,13 @@ impl HyperInferClient {
                 )
             })?;
 
-            let request: ChatRequest = unsafe {
-                let py = pyo3::Python::assume_attached();
-                super::types::request_from_py(py, request)?
-            };
+            let request = Python::try_attach(|py| {
+                super::types::request_from_py(py, request)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+            })
+            .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })??;
 
             let response: ChatResponse =
                 client
@@ -75,10 +80,9 @@ impl HyperInferClient {
                         pyo3::exceptions::PyRuntimeError::new_err(e.to_string())
                     })?;
 
-            unsafe {
-                let py = pyo3::Python::assume_attached();
-                super::types::response_to_py(py, response)
-            }
+            Python::try_attach(|py| super::types::response_to_py(py, response)).ok_or_else(
+                || pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python"),
+            )?
         })
     }
 }
