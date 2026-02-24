@@ -71,6 +71,8 @@ class Config:
         rpm: Optional[int] = None,
         tpm: Optional[int] = None,
         budget_cents: Optional[int] = None,
+        max_requests_per_minute: Optional[int] = None,
+        max_tokens_per_minute: Optional[int] = None,
     ) -> "Config":
         """Add a quota configuration.
 
@@ -79,13 +81,15 @@ class Config:
             rpm: Requests per minute limit.
             tpm: Tokens per minute limit.
             budget_cents: Monthly budget in cents (USD).
+            max_requests_per_minute: Requests per minute limit (alias for rpm).
+            max_tokens_per_minute: Tokens per minute limit (alias for tpm).
 
         Returns:
             Self for method chaining.
         """
         self._quotas[key] = {
-            "max_requests_per_minute": rpm,
-            "max_tokens_per_minute": tpm,
+            "max_requests_per_minute": max_requests_per_minute or rpm,
+            "max_tokens_per_minute": max_tokens_per_minute or tpm,
             "budget_cents": budget_cents,
         }
         return self
