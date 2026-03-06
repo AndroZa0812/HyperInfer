@@ -12,6 +12,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-opentelemetry = "0.27"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 opentelemetry = "0.27"
 opentelemetry-otlp = { version = "0.27", features = [
   "http-proto",
@@ -25,6 +26,7 @@ redis = { version = "1.0", features = [
 ] }
 sha2 = "0.10"
 hex = "0.4"
+base64 = "0.22"
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }

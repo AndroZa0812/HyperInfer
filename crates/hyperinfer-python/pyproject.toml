@@ -14,3 +14,8 @@ build-backend = "maturin"
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "hyperinfer._hyperinfer"
+# Include py.typed marker and .pyi stub in the wheel.
+include = [
+  { path = "python/hyperinfer/py.typed", format = "wheel" },
+  { path = "python/hyperinfer/_hyperinfer.pyi", format = "wheel" },
+]

@@ -4,6 +4,7 @@ import asyncio
 from typing import Any, Optional
 
 from hyperinfer._hyperinfer import HyperInferClient
+from hyperinfer.config import Config
 
 
 class Client:
@@ -12,13 +13,21 @@ class Client:
     Provides a simplified async interface for interacting with the LLM gateway.
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:6379"):
+    def __init__(
+        self,
+        redis_url: str = "redis://localhost:6379",
+        config: Optional[Config] = None,
+    ):
         """Initialize the client.
 
         Args:
             redis_url: Redis connection URL for the backend.
+            config: Optional :class:`Config` instance.  API keys, routing rules,
+                model aliases, and quotas are read from this object and passed
+                directly to the Rust data plane on initialisation.
         """
-        self._inner = HyperInferClient(redis_url)
+        config_dict = config.to_dict() if config is not None else None
+        self._inner = HyperInferClient(redis_url, config_dict)
         self._initialized = False
 
     async def init(self) -> None:

@@ -8,7 +8,10 @@ pub mod telemetry_otlp;
 pub use http_client::HttpCaller;
 pub use router::Router;
 pub use telemetry::Telemetry;
-pub use telemetry_otlp::{init_langfuse_telemetry, init_telemetry};
+pub use telemetry_otlp::{
+    init_langfuse_telemetry, init_telemetry, init_telemetry_with_headers, set_gen_ai_attributes,
+    set_gen_ai_response, set_gen_ai_usage, shutdown_telemetry,
+};
 
 use hyperinfer_core::{
     rate_limiting::RateLimiter, types::Provider, ChatRequest, ChatResponse, Config, HyperInferError,
@@ -54,6 +57,16 @@ impl HyperInferClient {
     ) -> Result<ChatResponse, HyperInferError> {
         request.validate()?;
 
+        // Create a root OTel span following the GenAI Semantic Conventions.
+        // The span name uses the "chat" operation and will be enriched with
+        // provider / model attributes once routing is resolved.
+        let span = tracing::info_span!(
+            "gen_ai.chat",
+            gen_ai.operation.name = "chat",
+            gen_ai.request.model = %request.model,
+        );
+        let _span_guard = span.enter();
+
         let start = std::time::Instant::now();
 
         // 1. Check rate limit
@@ -96,6 +109,15 @@ impl HyperInferClient {
             (model, provider, api_key)
         };
 
+        // Enrich span with the resolved provider and final model name.
+        let provider_name = provider.to_string();
+        crate::telemetry_otlp::set_gen_ai_attributes(
+            &tracing::Span::current(),
+            &provider_name,
+            &model,
+            "chat",
+        );
+
         // 3. Execute HTTP call
         let response = match provider {
             Provider::OpenAI => {
@@ -116,16 +138,35 @@ impl HyperInferClient {
             }
         };
 
-        // 4. Record telemetry
+        // 4. Record OTel usage and response attributes on the span.
         let elapsed = start.elapsed().as_millis() as u64;
         let input_tokens = response.usage.input_tokens;
         let output_tokens = response.usage.output_tokens;
+
+        crate::telemetry_otlp::set_gen_ai_usage(
+            &tracing::Span::current(),
+            input_tokens,
+            output_tokens,
+        );
+
+        let finish_reason = response
+            .choices
+            .first()
+            .and_then(|c| c.finish_reason.as_deref())
+            .unwrap_or("unknown");
+        crate::telemetry_otlp::set_gen_ai_response(
+            &tracing::Span::current(),
+            &response.id,
+            finish_reason,
+        );
+
+        // Record async Redis telemetry (fire-and-forget).
         let _ = self
             .telemetry
             .record_with_tokens(key, &model, input_tokens, output_tokens, elapsed)
             .await;
 
-        // Record usage
+        // Record usage for rate-limiter token bucket.
         let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
         let _ = self
             .rate_limiter
