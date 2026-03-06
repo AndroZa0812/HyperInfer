@@ -64,9 +64,7 @@ class TestHyperInferChatModel:
         """Test async generation with SystemMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Response with system context"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Response with system context"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -86,9 +84,7 @@ class TestHyperInferChatModel:
         """Test async generation with AIMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Continuing conversation"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Continuing conversation"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -110,9 +106,7 @@ class TestHyperInferChatModel:
 
         mock_response = {"choices": [{"message": {"content": "Sync response"}}]}
 
-        with patch.object(
-            model, "_agenerate", new_callable=AsyncMock
-        ) as mock_agenerate:
+        with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()
 
             messages = [HumanMessage(content="Test")]
@@ -158,7 +152,8 @@ class TestHyperInferChatModel:
             call_kwargs = mock_chat.call_args.kwargs
             assert call_kwargs["max_tokens"] == 50
 
-    def test_from_config(self):
+    @pytest.mark.asyncio
+    async def test_from_config(self):
         """Test creating instance from config."""
         from hyperinfer import Client, Config
 
@@ -167,15 +162,14 @@ class TestHyperInferChatModel:
             mock_client_instance.init = AsyncMock()
             MockClient.return_value = mock_client_instance
 
-            with patch("asyncio.run") as mock_run:
-                config = Config()
-                model = HyperInferChatModel.from_config(
-                    config=config,
-                    model="claude-3",
-                    virtual_key="my-key",
-                )
+            config = Config()
+            model = await HyperInferChatModel.from_config(
+                config=config,
+                model="claude-3",
+                virtual_key="my-key",
+            )
 
-                assert model.model == "claude-3"
-                assert model.virtual_key == "my-key"
-                MockClient.assert_called_once_with("redis://localhost:6379")
-                mock_run.assert_called_once()
+            assert model.model == "claude-3"
+            assert model.virtual_key == "my-key"
+            MockClient.assert_called_once_with("redis://localhost:6379")
+            mock_client_instance.init.assert_called_once()

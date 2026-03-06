@@ -157,14 +157,15 @@ class TestHyperInferLLM:
 
     def test_from_config_custom_redis_url(self):
         """Test creating instance from config with custom redis URL."""
+        import warnings
         from hyperinfer import Client, Config
 
         with patch("hyperinfer_llamaindex.Client") as MockClient:
             mock_client_instance = MagicMock(spec=Client)
-            mock_client_instance.init = AsyncMock()
             MockClient.return_value = mock_client_instance
 
-            with patch("asyncio.run"):
+            with patch("asyncio.run") as mock_run, warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
                 config = Config()
                 HyperInferLLM.from_config(
                     config=config,
@@ -172,6 +173,7 @@ class TestHyperInferLLM:
                 )
 
                 MockClient.assert_called_once_with("redis://custom:6379")
+                mock_run.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_acomplete_empty_response(self):

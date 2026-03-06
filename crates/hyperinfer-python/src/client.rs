@@ -21,7 +21,7 @@ use tokio::sync::RwLock;
 /// }
 /// ```
 fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
-    let dict = obj.downcast::<PyDict>()?;
+    let dict = obj.cast::<PyDict>()?;
 
     // --- api_keys ---
     let api_keys: HashMap<String, String> = if let Some(val) = dict.get_item("api_keys")? {
@@ -33,9 +33,9 @@ fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
     // --- routing_rules ---
     let mut routing_rules: Vec<RoutingRule> = Vec::new();
     if let Some(val) = dict.get_item("routing_rules")? {
-        let list = val.downcast::<PyList>()?;
+        let list = val.cast::<PyList>()?;
         for item in list.iter() {
-            let rule_dict = item.downcast::<PyDict>()?;
+            let rule_dict = item.cast::<PyDict>()?;
             let name: String = rule_dict
                 .get_item("name")?
                 .ok_or_else(|| {
@@ -63,10 +63,10 @@ fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
     // --- quotas ---
     let mut quotas: HashMap<String, Quota> = HashMap::new();
     if let Some(val) = dict.get_item("quotas")? {
-        let q_dict = val.downcast::<PyDict>()?;
+        let q_dict = val.cast::<PyDict>()?;
         for (k, v) in q_dict.iter() {
             let key: String = k.extract()?;
-            let q_inner = v.downcast::<PyDict>()?;
+            let q_inner = v.cast::<PyDict>()?;
             let max_requests_per_minute: Option<u64> = q_inner
                 .get_item("max_requests_per_minute")?
                 .and_then(|v| if v.is_none() { None } else { Some(v) })
