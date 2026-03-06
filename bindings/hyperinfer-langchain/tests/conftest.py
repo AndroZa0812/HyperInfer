@@ -1,7 +1,7 @@
 """Pytest configuration for LangChain tests."""
 
 import sys
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 mock_client = MagicMock()
 mock_client.chat = AsyncMock(

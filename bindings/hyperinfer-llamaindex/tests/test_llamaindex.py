@@ -3,9 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from llama_index.core.llms import CompletionResponse
-
 from hyperinfer_llamaindex import HyperInferLLM
+from llama_index.core.llms import CompletionResponse
 
 
 class TestHyperInferLLM:

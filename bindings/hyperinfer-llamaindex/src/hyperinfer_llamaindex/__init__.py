@@ -1,12 +1,13 @@
 """LlamaIndex integration for HyperInfer."""
 
 from __future__ import annotations
+
 from typing import Any
-from llama_index.core.llms import CustomLLM, CompletionResponse, LLMMetadata
-from llama_index.core.llms.callbacks import llm_completion_callback
-from pydantic import Field
 
 from hyperinfer import Client, Config
+from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
+from llama_index.core.llms.callbacks import llm_completion_callback
+from pydantic import Field
 
 
 class HyperInferLLM(CustomLLM):

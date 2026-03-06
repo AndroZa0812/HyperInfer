@@ -3,9 +3,8 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-
 from hyperinfer_langchain import HyperInferChatModel
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 
 class TestHyperInferChatModel:

@@ -1,7 +1,10 @@
 """LangChain integration for HyperInfer."""
 
 from __future__ import annotations
+
 from typing import Any, AsyncIterator, Iterator
+
+from hyperinfer import Client, Config
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -11,8 +14,6 @@ from langchain_core.messages import (
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
 from pydantic import Field
-
-from hyperinfer import Client, Config
 
 
 class HyperInferChatModel(BaseChatModel):
