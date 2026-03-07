@@ -78,10 +78,6 @@ testpaths = [
   "bindings/hyperinfer-llamaindex/tests",
 ]
 addopts = "--tb=short -q --import-mode=importlib"
-filterwarnings = [
-  # asyncio.run mocking in sync tests leaves unawaited coroutines during GC
-  "ignore:coroutine.*was never awaited:RuntimeWarning",
-]
 
 # ---------------------------------------------------------------------------
 # ruff

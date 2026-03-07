@@ -36,6 +36,7 @@ __pycache__/
 *.so
 *.pyd
 *.dylib
+*.dSYM/
 
 # Python packaging / build artefacts
 *.egg-info/

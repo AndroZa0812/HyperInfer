@@ -137,43 +137,30 @@ class TestHyperInferLLM:
         """Test creating instance from config."""
         from hyperinfer import Client, Config
 
-        with patch("hyperinfer_llamaindex.Client") as MockClient:
-            mock_client_instance = MagicMock(spec=Client)
-            mock_client_instance.init = AsyncMock()
-            MockClient.return_value = mock_client_instance
+        config = Config()
+        with patch("hyperinfer_llamaindex.Client", spec=Client) as MockClient:
+            llm = HyperInferLLM.from_config(
+                config=config,
+                model="claude-3",
+                virtual_key="my-key",
+            )
 
-            with patch("asyncio.run") as mock_run:
-                config = Config()
-                llm = HyperInferLLM.from_config(
-                    config=config,
-                    model="claude-3",
-                    virtual_key="my-key",
-                )
-
-                assert llm.model == "claude-3"
-                assert llm.virtual_key == "my-key"
-                MockClient.assert_called_once_with("redis://localhost:6379")
-                mock_run.assert_called_once()
+            assert llm.model == "claude-3"
+            assert llm.virtual_key == "my-key"
+            MockClient.assert_called_once_with(redis_url="redis://localhost:6379", config=config)
 
     def test_from_config_custom_redis_url(self):
         """Test creating instance from config with custom redis URL."""
-        import warnings
         from hyperinfer import Client, Config
 
-        with patch("hyperinfer_llamaindex.Client") as MockClient:
-            mock_client_instance = MagicMock(spec=Client)
-            MockClient.return_value = mock_client_instance
+        config = Config()
+        with patch("hyperinfer_llamaindex.Client", spec=Client) as MockClient:
+            HyperInferLLM.from_config(
+                config=config,
+                redis_url="redis://custom:6379",
+            )
 
-            with patch("asyncio.run") as mock_run, warnings.catch_warnings():
-                warnings.simplefilter("ignore", RuntimeWarning)
-                config = Config()
-                HyperInferLLM.from_config(
-                    config=config,
-                    redis_url="redis://custom:6379",
-                )
-
-                MockClient.assert_called_once_with("redis://custom:6379")
-                mock_run.assert_called_once()
+            MockClient.assert_called_once_with(redis_url="redis://custom:6379", config=config)
 
     @pytest.mark.asyncio
     async def test_acomplete_empty_response(self):

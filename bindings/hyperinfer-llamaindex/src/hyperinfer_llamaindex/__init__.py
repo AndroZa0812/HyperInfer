@@ -30,9 +30,7 @@ class HyperInferLLM(CustomLLM):
         )
 
     @llm_completion_callback()
-    def complete(
-        self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponse:
+    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
         import asyncio
 
         return asyncio.run(self._acomplete(prompt, **kwargs))
@@ -98,12 +96,14 @@ class HyperInferLLM(CustomLLM):
         redis_url: str = "redis://localhost:6379",
         **kwargs: Any,
     ) -> "HyperInferLLM":
-        client = Client(redis_url)
-        instance = cls(client=client, model=model, virtual_key=virtual_key, **kwargs)
-        import asyncio
+        """Create an instance with configuration.
 
-        asyncio.run(client.init(config))
-        return instance
+        The underlying client is initialised lazily on the first call to
+        :meth:`complete` or :meth:`_acomplete`, so this factory is safe to call
+        from both sync and async contexts without risk of event-loop conflicts.
+        """
+        client = Client(redis_url=redis_url, config=config)
+        return cls(client=client, model=model, virtual_key=virtual_key, **kwargs)
 
 
 __all__ = ["HyperInferLLM"]
