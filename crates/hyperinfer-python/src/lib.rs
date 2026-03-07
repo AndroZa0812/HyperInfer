@@ -6,12 +6,13 @@
 mod client;
 mod types;
 
-pub use client::HyperInferClient;
+pub use client::{ChunkStream, HyperInferClient};
 
 use pyo3::prelude::*;
 
 #[pymodule]
 fn _hyperinfer(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HyperInferClient>()?;
+    m.add_class::<ChunkStream>()?;
     Ok(())
 }

@@ -66,6 +66,7 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         messages,
         temperature,
         max_tokens,
+        stream: None,
     })
 }
 

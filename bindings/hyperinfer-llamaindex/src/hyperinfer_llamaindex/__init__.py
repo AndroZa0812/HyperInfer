@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from hyperinfer import Client, Config
+from llama_index.core.base.llms.types import CompletionResponseAsyncGen, CompletionResponseGen
 from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core.llms.callbacks import llm_completion_callback
 from pydantic import Field
@@ -60,32 +61,58 @@ class HyperInferLLM(CustomLLM):
     @llm_completion_callback()
     def stream_complete(
         self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponse:
+    ) -> CompletionResponseGen:
+        """Synchronous streaming — collects chunks from the async generator.
+
+        Note: raises ``RuntimeError`` if called from within a running event
+        loop.  Use :meth:`astream_complete` in async contexts.
+        """
         import asyncio
 
-        return asyncio.run(self._astream_complete(prompt, **kwargs))
+        async def _collect() -> list[CompletionResponse]:
+            return [r async for r in self.astream_complete(prompt, formatted=formatted, **kwargs)]
+
+        def _gen() -> CompletionResponseGen:
+            yield from asyncio.run(_collect())
+
+        return _gen()
 
     @llm_completion_callback()
-    async def _astream_complete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
-        try:
-            messages = [{"role": "user", "content": prompt}]
+    async def astream_complete(
+        self, prompt: str, formatted: bool = False, **kwargs: Any
+    ) -> CompletionResponseAsyncGen:
+        """Async token-by-token streaming via the HyperInfer data plane.
 
-            response = await self.client.chat(
-                key=self.virtual_key,
-                model=self.model,
-                messages=messages,
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+        Returns an async generator where each :class:`CompletionResponse` has:
 
-            choices = response.get("choices", [])
-            if not choices:
-                content = ""
-            else:
-                content = choices[0].get("message", {}).get("content", "")
-            return CompletionResponse(text=content, raw=response)
-        except Exception as e:
-            raise RuntimeError(f"LLM completion failed: {e}") from e
+        - ``text``: cumulative text assembled so far.
+        - ``delta``: the incremental token(s) for this chunk.
+        - ``raw``: the raw chunk dict from the provider.
+        """
+        messages = [{"role": "user", "content": prompt}]
+        client = self.client
+        virtual_key = self.virtual_key
+        model = self.model
+        temperature = self.temperature
+        max_tokens = self.max_tokens
+
+        async def _gen() -> CompletionResponseAsyncGen:
+            accumulated = ""
+            try:
+                async for chunk in client.stream(
+                    key=virtual_key,
+                    model=model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                ):
+                    delta = chunk.get("delta", "")
+                    accumulated += delta
+                    yield CompletionResponse(text=accumulated, delta=delta, raw=chunk)
+            except Exception as e:
+                raise RuntimeError(f"Streaming completion failed: {e}") from e
+
+        return _gen()
 
     @classmethod
     def from_config(

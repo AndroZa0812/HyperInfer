@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from hyperinfer_langchain import HyperInferChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.outputs import ChatGenerationChunk
 
 
 class TestHyperInferChatModel:
@@ -104,7 +105,6 @@ class TestHyperInferChatModel:
         """Test synchronous generation."""
         model = HyperInferChatModel(model="gpt-4")
 
-
         with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()
 
@@ -172,3 +172,82 @@ class TestHyperInferChatModel:
             assert model.virtual_key == "my-key"
             MockClient.assert_called_once_with("redis://localhost:6379")
             mock_client_instance.init.assert_called_once()
+
+
+class TestHyperInferChatModelStreaming:
+    """Tests for _astream and _stream."""
+
+    @pytest.mark.asyncio
+    async def test_astream_yields_chunks(self):
+        """_astream yields ChatGenerationChunk for each delta."""
+        model = HyperInferChatModel(model="gpt-4", virtual_key="test-key")
+
+        chunks = [
+            {"id": "1", "model": "gpt-4", "delta": "Hello", "finish_reason": None, "usage": None},
+            {"id": "1", "model": "gpt-4", "delta": " world", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "",
+                "finish_reason": "stop",
+                "usage": {"input_tokens": 5, "output_tokens": 2},
+            },
+        ]
+
+        async def mock_stream(**kwargs):
+            for chunk in chunks:
+                yield chunk
+
+        with patch.object(model.client, "stream", side_effect=mock_stream):
+            messages = [HumanMessage(content="Hi")]
+            result = []
+            async for chunk in model._astream(messages):
+                result.append(chunk)
+
+        assert len(result) == 3
+        assert all(isinstance(c, ChatGenerationChunk) for c in result)
+        assert result[0].message.content == "Hello"
+        assert result[1].message.content == " world"
+        assert result[2].generation_info == {"finish_reason": "stop"}
+
+    @pytest.mark.asyncio
+    async def test_astream_concatenates_to_full_response(self):
+        """Concatenating all deltas should produce the full response."""
+        model = HyperInferChatModel(model="gpt-4")
+
+        chunks = [
+            {"id": "1", "model": "gpt-4", "delta": "The ", "finish_reason": None, "usage": None},
+            {"id": "1", "model": "gpt-4", "delta": "answer", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": " is 42",
+                "finish_reason": "stop",
+                "usage": None,
+            },
+        ]
+
+        async def mock_stream(**kwargs):
+            for chunk in chunks:
+                yield chunk
+
+        with patch.object(model.client, "stream", side_effect=mock_stream):
+            result = []
+            async for chunk in model._astream([HumanMessage(content="What?")]):
+                result.append(chunk.message.content)
+
+        assert "".join(result) == "The answer is 42"
+
+    @pytest.mark.asyncio
+    async def test_astream_propagates_errors(self):
+        """_astream wraps provider errors as RuntimeError."""
+        model = HyperInferChatModel(model="gpt-4")
+
+        async def mock_stream(**kwargs):
+            raise ValueError("provider down")
+            yield  # make it a generator
+
+        with patch.object(model.client, "stream", side_effect=mock_stream):
+            with pytest.raises(RuntimeError, match="Streaming request failed"):
+                async for _ in model._astream([HumanMessage(content="Hi")]):
+                    pass

@@ -1,11 +1,12 @@
+use futures::StreamExt;
 use hyperinfer_client::HyperInferClient as RustClient;
 use hyperinfer_core::types::Quota;
-use hyperinfer_core::{ChatResponse, Config, HyperInferError, RoutingRule};
+use hyperinfer_core::{ChatChunk, ChatResponse, Config, HyperInferError, RoutingRule};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{mpsc, RwLock};
 
 /// Convert a Python config `dict` (as returned by `Config.to_dict()`) into
 /// the Rust `hyperinfer_core::Config`.
@@ -136,6 +137,57 @@ fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
     })
 }
 
+/// Python async iterator backed by an `Arc<Mutex<mpsc::Receiver<…>>>`.
+#[pyclass]
+pub struct ChunkStream {
+    rx: Arc<tokio::sync::Mutex<mpsc::Receiver<Result<ChatChunk, String>>>>,
+}
+
+#[pymethods]
+impl ChunkStream {
+    fn __aiter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __anext__<'a>(&self, py: Python<'a>) -> PyResult<Bound<'a, PyAny>> {
+        let rx = self.rx.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let mut guard = rx.lock().await;
+            match guard.recv().await {
+                Some(Ok(chunk)) => {
+                    // Convert the chunk to a Python dict.
+                    Python::try_attach(|py| {
+                        let dict = PyDict::new(py);
+                        dict.set_item("id", &chunk.id)?;
+                        dict.set_item("model", &chunk.model)?;
+                        dict.set_item("delta", &chunk.delta)?;
+                        dict.set_item(
+                            "finish_reason",
+                            chunk.finish_reason.as_deref().map(|s| s.to_string()),
+                        )?;
+                        if let Some(u) = &chunk.usage {
+                            let usage = PyDict::new(py);
+                            usage.set_item("input_tokens", u.input_tokens)?;
+                            usage.set_item("output_tokens", u.output_tokens)?;
+                            dict.set_item("usage", usage)?;
+                        } else {
+                            dict.set_item("usage", py.None())?;
+                        }
+                        Ok(dict.into_any().unbind())
+                    })
+                    .ok_or_else(|| {
+                        pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+                    })?
+                }
+                Some(Err(e)) => Err(pyo3::exceptions::PyRuntimeError::new_err(e)),
+                // Channel closed — signal end of async iteration.
+                None => Err(pyo3::exceptions::PyStopAsyncIteration::new_err(())),
+            }
+        })
+    }
+}
+
 #[pyclass]
 pub struct HyperInferClient {
     inner: Arc<RwLock<Option<RustClient>>>,
@@ -243,6 +295,74 @@ impl HyperInferClient {
             Python::try_attach(|py| super::types::response_to_py(py, response)).ok_or_else(
                 || pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python"),
             )?
+        })
+    }
+
+    /// Return a `ChunkStream` async iterator that yields token-delta dicts.
+    ///
+    /// Usage:
+    /// ```python
+    /// async for chunk in await client.chat_stream(key, request):
+    ///     print(chunk["delta"], end="", flush=True)
+    /// ```
+    #[pyo3(name = "chat_stream")]
+    pub fn chat_stream<'a>(
+        &self,
+        py: Python<'a>,
+        key: String,
+        request: Py<PyAny>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let inner = self.inner.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.read().await;
+            let client = guard.as_ref().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Client not initialized. Call init() first.",
+                )
+            })?;
+
+            let chat_request = Python::try_attach(|py| {
+                super::types::request_from_py(py, request)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+            })
+            .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })??;
+
+            // Obtain the stream from the Rust client.
+            let mut stream = client
+                .chat_stream(&key, chat_request)
+                .await
+                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+            // Bridge the Rust stream to a Python async iterator via a channel.
+            // Buffer size of 32 keeps memory bounded while the consumer iterates.
+            let (tx, rx) = mpsc::channel::<Result<ChatChunk, String>>(32);
+
+            tokio::spawn(async move {
+                while let Some(item) = stream.next().await {
+                    let send_result = match item {
+                        Ok(chunk) => tx.send(Ok(chunk)).await,
+                        Err(e) => tx.send(Err(e.to_string())).await,
+                    };
+                    if send_result.is_err() {
+                        // Receiver dropped — consumer stopped iterating.
+                        break;
+                    }
+                }
+                // tx is dropped here, closing the channel and signalling StopAsyncIteration.
+            });
+
+            Python::try_attach(|py| {
+                let iter = ChunkStream {
+                    rx: Arc::new(tokio::sync::Mutex::new(rx)),
+                };
+                Ok(Py::new(py, iter)?.into_bound(py).into_any().unbind())
+            })
+            .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })?
         })
     }
 }

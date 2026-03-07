@@ -8,6 +8,7 @@ the compiled ``.so`` / ``.pyd`` binary at analysis time.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any
 
 class HyperInferClient:
@@ -83,9 +84,41 @@ class HyperInferClient:
         """
         ...
 
+    async def chat_stream(
+        self,
+        key: str,
+        request: dict[str, Any],
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream token chunks through the data plane.
+
+        Returns an async iterator that yields one chunk dict per SSE event::
+
+            {
+                "id": "chatcmpl-...",
+                "model": "gpt-4",
+                "delta": "Hello",        # incremental text
+                "finish_reason": None,   # "stop" on the last chunk
+                "usage": None,           # dict with token counts on last chunk
+            }
+
+        Args:
+            key: Virtual key used for rate-limiting and telemetry attribution.
+            request: Same shape as :meth:`chat`.
+
+        Raises:
+            RuntimeError: If the client has not been initialised.
+        """
+        ...
+
     async def close(self) -> None:
         """Flush pending telemetry and release resources.
 
         Optional – safe to call multiple times.
         """
         ...
+
+class ChunkStream:
+    """Async iterator over SSE token chunks.  Returned by :meth:`HyperInferClient.chat_stream`."""
+
+    def __aiter__(self) -> ChunkStream: ...
+    async def __anext__(self) -> dict[str, Any]: ...

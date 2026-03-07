@@ -18,3 +18,4 @@ hyperinfer-core = { path = "../hyperinfer-core" }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+futures = "0.3"

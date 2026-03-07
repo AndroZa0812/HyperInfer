@@ -1,7 +1,9 @@
-use hyperinfer_core::types::{ChatMessage, Choice, MessageRole};
-use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
+use futures::Stream;
+use hyperinfer_core::types::{ChatMessage, Choice, MessageRole, StreamUsage};
+use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, HyperInferError};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 
 pub struct HttpCaller {
     client: Client,
@@ -216,6 +218,294 @@ impl HttpCaller {
             },
         })
     }
+
+    /// Stream chat completions from OpenAI via SSE.
+    ///
+    /// Returns a pinned `Stream` of `ChatChunk` items.  The stream ends after
+    /// the provider sends the `[DONE]` sentinel or the connection closes.
+    pub fn stream_openai(
+        &self,
+        model: &str,
+        api_key: &str,
+        request: &ChatRequest,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>> {
+        use futures::StreamExt;
+
+        let url = "https://api.openai.com/v1/chat/completions".to_string();
+        let model = model.to_string();
+        let api_key = api_key.to_string();
+
+        let body = serde_json::json!({
+            "model": model,
+            "messages": request.messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+            "stream": true,
+            "stream_options": { "include_usage": true },
+        });
+
+        let client = self.client.clone();
+
+        let stream = async_stream::try_stream! {
+            let response = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {}", api_key))
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                Err(HyperInferError::ApiError {
+                    status: status.as_u16(),
+                    message: error_text,
+                })?;
+                return;
+            }
+
+            let mut byte_stream = response.bytes_stream();
+
+            // SSE lines can be split across chunks; buffer incomplete lines.
+            let mut buf = String::new();
+
+            while let Some(bytes) = byte_stream.next().await {
+                let bytes = bytes?;
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+
+                // Process all complete lines in the buffer.
+                while let Some(pos) = buf.find('\n') {
+                    let line = buf[..pos].trim_end_matches('\r').to_string();
+                    buf.drain(..=pos);
+
+                    if line.is_empty() || line.starts_with(':') {
+                        continue;
+                    }
+                    let data = if let Some(d) = line.strip_prefix("data: ") { d } else { continue };
+                    if data == "[DONE]" {
+                        return;
+                    }
+
+                    #[derive(Deserialize)]
+                    struct StreamChoice {
+                        delta: DeltaContent,
+                        finish_reason: Option<String>,
+                    }
+                    #[derive(Deserialize)]
+                    struct DeltaContent {
+                        #[serde(default)]
+                        content: String,
+                    }
+                    #[derive(Deserialize)]
+                    struct StreamEvent {
+                        #[serde(default)]
+                        id: String,
+                        #[serde(default)]
+                        model: String,
+                        #[serde(default)]
+                        choices: Vec<StreamChoice>,
+                        usage: Option<OpenAiStreamUsage>,
+                    }
+                    #[derive(Deserialize)]
+                    struct OpenAiStreamUsage {
+                        prompt_tokens: u32,
+                        completion_tokens: u32,
+                    }
+
+                    if let Ok(event) = serde_json::from_str::<StreamEvent>(data) {
+                        let finish_reason = event.choices.first()
+                            .and_then(|c| c.finish_reason.clone());
+                        let delta = event.choices.first()
+                            .map(|c| c.delta.content.clone())
+                            .unwrap_or_default();
+                        let usage = event.usage.map(|u| StreamUsage {
+                            input_tokens: u.prompt_tokens,
+                            output_tokens: u.completion_tokens,
+                        });
+
+                        yield ChatChunk {
+                            id: event.id,
+                            model: event.model,
+                            delta,
+                            finish_reason,
+                            usage,
+                        };
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
+    }
+
+    /// Stream chat completions from Anthropic via SSE.
+    ///
+    /// Anthropic uses a different event schema: `content_block_delta` events
+    /// carry text deltas; `message_delta` carries the final usage.
+    pub fn stream_anthropic(
+        &self,
+        model: &str,
+        api_key: &str,
+        request: &ChatRequest,
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>> {
+        use futures::StreamExt;
+
+        let url = "https://api.anthropic.com/v1/messages";
+        let model = model.to_string();
+        let api_key = api_key.to_string();
+
+        let system = request
+            .messages
+            .iter()
+            .find(|m| m.role == MessageRole::System)
+            .map(|m| m.content.clone());
+
+        let messages: Vec<_> = request
+            .messages
+            .iter()
+            .filter(|m| m.role != MessageRole::System)
+            .map(|m| {
+                serde_json::json!({
+                    "role": match m.role {
+                        MessageRole::User => "user",
+                        MessageRole::Assistant => "assistant",
+                        _ => "user",
+                    },
+                    "content": m.content,
+                })
+            })
+            .collect();
+
+        let mut body = serde_json::json!({
+            "model": model,
+            "messages": messages,
+            "max_tokens": request.max_tokens.unwrap_or(1024),
+            "stream": true,
+        });
+        if let Some(s) = system {
+            body["system"] = serde_json::json!(s);
+        }
+        if let Some(t) = request.temperature {
+            body["temperature"] = serde_json::json!(t);
+        }
+
+        let client = self.client.clone();
+
+        let stream = async_stream::try_stream! {
+            let response = client
+                .post(url)
+                .header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01")
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().await.unwrap_or_default();
+                Err(HyperInferError::ApiError {
+                    status: status.as_u16(),
+                    message: error_text,
+                })?;
+                return;
+            }
+
+            let mut byte_stream = response.bytes_stream();
+            let mut buf = String::new();
+            // Anthropic sends the message id in a `message_start` event.
+            let mut stream_id = String::new();
+
+            while let Some(bytes) = byte_stream.next().await {
+                let bytes = bytes?;
+                buf.push_str(&String::from_utf8_lossy(&bytes));
+
+                while let Some(pos) = buf.find('\n') {
+                    let line = buf[..pos].trim_end_matches('\r').to_string();
+                    buf.drain(..=pos);
+
+                    if line.is_empty() || line.starts_with(':') {
+                        continue;
+                    }
+                    let data = if let Some(d) = line.strip_prefix("data: ") { d } else { continue };
+
+                    #[derive(Deserialize)]
+                    struct AnthropicEvent {
+                        #[serde(rename = "type")]
+                        event_type: String,
+                        // message_start
+                        message: Option<AnthropicMessage>,
+                        // content_block_delta
+                        delta: Option<AnthropicDelta>,
+                        // message_delta
+                        usage: Option<AnthropicStreamUsage>,
+                    }
+                    #[derive(Deserialize)]
+                    struct AnthropicMessage {
+                        id: String,
+                    }
+                    #[derive(Deserialize)]
+                    struct AnthropicDelta {
+                        #[serde(rename = "type")]
+                        delta_type: String,
+                        #[serde(default)]
+                        text: String,
+                        stop_reason: Option<String>,
+                    }
+                    #[derive(Deserialize)]
+                    struct AnthropicStreamUsage {
+                        input_tokens: Option<u32>,
+                        output_tokens: Option<u32>,
+                    }
+
+                    if let Ok(event) = serde_json::from_str::<AnthropicEvent>(data) {
+                        match event.event_type.as_str() {
+                            "message_start" => {
+                                if let Some(msg) = event.message {
+                                    stream_id = msg.id;
+                                }
+                            }
+                            "content_block_delta" => {
+                                if let Some(delta) = event.delta {
+                                    if delta.delta_type == "text_delta" {
+                                        yield ChatChunk {
+                                            id: stream_id.clone(),
+                                            model: model.clone(),
+                                            delta: delta.text,
+                                            finish_reason: None,
+                                            usage: None,
+                                        };
+                                    }
+                                }
+                            }
+                            "message_delta" => {
+                                // Final chunk: carries finish reason and usage.
+                                let finish_reason = event.delta
+                                    .as_ref()
+                                    .and_then(|d| d.stop_reason.clone());
+                                let usage = event.usage.map(|u| StreamUsage {
+                                    input_tokens: u.input_tokens.unwrap_or(0),
+                                    output_tokens: u.output_tokens.unwrap_or(0),
+                                });
+                                yield ChatChunk {
+                                    id: stream_id.clone(),
+                                    model: model.clone(),
+                                    delta: String::new(),
+                                    finish_reason,
+                                    usage,
+                                };
+                            }
+                            "message_stop" => return,
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        };
+
+        Box::pin(stream)
+    }
 }
 
 #[cfg(test)]
@@ -341,6 +631,7 @@ mod tests {
             }],
             temperature: Some(0.7),
             max_tokens: Some(100),
+            stream: None,
         };
 
         // We can't actually call OpenAI without a real API key and network,
@@ -373,6 +664,7 @@ mod tests {
             ],
             temperature: Some(0.5),
             max_tokens: Some(200),
+            stream: None,
         };
 
         // Extract system message

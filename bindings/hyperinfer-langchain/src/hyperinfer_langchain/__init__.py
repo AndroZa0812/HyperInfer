@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from hyperinfer import Client, Config
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
+    AIMessageChunk,
     BaseMessage,
     HumanMessage,
     SystemMessage,
 )
-from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
 
 
@@ -78,6 +80,66 @@ class HyperInferChatModel(BaseChatModel):
         generation = ChatGeneration(message=ai_message)
 
         return ChatResult(generations=[generation])
+
+    def _stream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> Iterator[ChatGenerationChunk]:
+        """Synchronous streaming — drives the async generator via asyncio.run.
+
+        Note: raises ``RuntimeError`` if called from within a running event
+        loop (e.g. inside an async LangGraph node).  Use :meth:`_astream`
+        instead when already inside an async context.
+        """
+        import asyncio
+
+        async def _collect() -> list[ChatGenerationChunk]:
+            return [chunk async for chunk in self._astream(messages, stop, run_manager, **kwargs)]
+
+        yield from asyncio.run(_collect())
+
+    async def _astream(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[ChatGenerationChunk]:
+        """Async token-by-token streaming via the HyperInfer data plane."""
+        formatted_messages = []
+        for msg in messages:
+            if isinstance(msg, HumanMessage):
+                formatted_messages.append({"role": "user", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                formatted_messages.append({"role": "assistant", "content": msg.content})
+            elif isinstance(msg, SystemMessage):
+                formatted_messages.append({"role": "system", "content": msg.content})
+            else:
+                formatted_messages.append({"role": "user", "content": str(msg.content)})
+
+        try:
+            async for chunk in self.client.stream(
+                key=self.virtual_key,
+                model=self.model,
+                messages=formatted_messages,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            ):
+                delta = chunk.get("delta", "")
+                finish_reason = chunk.get("finish_reason")
+                ai_chunk = AIMessageChunk(content=delta)
+                gen_chunk = ChatGenerationChunk(
+                    message=ai_chunk,
+                    generation_info={"finish_reason": finish_reason} if finish_reason else None,
+                )
+                if run_manager:
+                    run_manager.on_llm_new_token(delta, chunk=gen_chunk)
+                yield gen_chunk
+        except Exception as e:
+            raise RuntimeError(f"Streaming request failed: {e}") from e
 
     @classmethod
     async def from_config(

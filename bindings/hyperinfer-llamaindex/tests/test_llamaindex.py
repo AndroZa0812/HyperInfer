@@ -189,3 +189,83 @@ class TestHyperInferLLM:
             result = await llm._acomplete("Test")
 
             assert result.text == ""
+
+
+class TestHyperInferLLMStreaming:
+    """Tests for astream_complete and stream_complete."""
+
+    @pytest.mark.asyncio
+    async def test_astream_complete_yields_cumulative_text(self):
+        """Each chunk should carry cumulative text and the incremental delta."""
+        llm = HyperInferLLM(model="gpt-4", virtual_key="test-key")
+
+        chunks = [
+            {"id": "1", "model": "gpt-4", "delta": "The ", "finish_reason": None, "usage": None},
+            {"id": "1", "model": "gpt-4", "delta": "answer", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": " is 42",
+                "finish_reason": "stop",
+                "usage": None,
+            },
+        ]
+
+        async def mock_stream(**kwargs):
+            for chunk in chunks:
+                yield chunk
+
+        with patch.object(llm.client, "stream", side_effect=mock_stream):
+            gen = await llm.astream_complete("What is the answer?")
+            results = [r async for r in gen]
+
+        assert len(results) == 3
+        assert all(isinstance(r, CompletionResponse) for r in results)
+        assert results[0].delta == "The "
+        assert results[1].delta == "answer"
+        assert results[2].delta == " is 42"
+        assert results[0].text == "The "
+        assert results[1].text == "The answer"
+        assert results[2].text == "The answer is 42"
+
+    @pytest.mark.asyncio
+    async def test_astream_complete_empty_delta_on_final_chunk(self):
+        """Empty delta on the final usage chunk still yields a response."""
+        llm = HyperInferLLM(model="gpt-4")
+
+        chunks = [
+            {"id": "1", "model": "gpt-4", "delta": "Hi", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "",
+                "finish_reason": "stop",
+                "usage": {"input_tokens": 3, "output_tokens": 1},
+            },
+        ]
+
+        async def mock_stream(**kwargs):
+            for chunk in chunks:
+                yield chunk
+
+        with patch.object(llm.client, "stream", side_effect=mock_stream):
+            gen = await llm.astream_complete("Hello")
+            results = [r async for r in gen]
+
+        assert len(results) == 2
+        assert results[-1].text == "Hi"
+
+    @pytest.mark.asyncio
+    async def test_astream_complete_propagates_errors(self):
+        """Provider errors are wrapped as RuntimeError."""
+        llm = HyperInferLLM(model="gpt-4")
+
+        async def mock_stream(**kwargs):
+            raise ConnectionError("network failure")
+            yield  # make it a generator
+
+        with patch.object(llm.client, "stream", side_effect=mock_stream):
+            with pytest.raises(RuntimeError, match="Streaming completion failed"):
+                gen = await llm.astream_complete("Hi")
+                async for _ in gen:
+                    pass

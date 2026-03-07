@@ -13,9 +13,12 @@ pub use telemetry_otlp::{
     set_gen_ai_response, set_gen_ai_usage, shutdown_telemetry,
 };
 
+use futures::Stream;
 use hyperinfer_core::{
-    rate_limiting::RateLimiter, types::Provider, ChatRequest, ChatResponse, Config, HyperInferError,
+    rate_limiting::RateLimiter, types::Provider, ChatChunk, ChatRequest, ChatResponse, Config,
+    HyperInferError,
 };
+use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -175,5 +178,78 @@ impl HyperInferClient {
 
         // 5. Return response
         Ok(response)
+    }
+
+    /// Stream token chunks for a chat request.
+    ///
+    /// Returns a `Stream` of `ChatChunk` items.  The caller is responsible for
+    /// collecting `delta` fields and assembling the final text.  The last chunk
+    /// in the stream has a non-`None` `finish_reason` and may carry `usage`.
+    ///
+    /// Rate-limiting and routing follow the same logic as `chat()`.
+    pub async fn chat_stream(
+        &self,
+        key: &str,
+        request: ChatRequest,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>, HyperInferError>
+    {
+        request.validate()?;
+
+        // 1. Rate limit check (same as non-streaming path).
+        let allowed = self.rate_limiter.is_allowed(key, 1).await;
+        if let Err(e) = allowed {
+            return Err(HyperInferError::RateLimit(e.to_string()));
+        }
+        if !allowed.unwrap() {
+            return Err(HyperInferError::RateLimit(
+                "Rate limit exceeded".to_string(),
+            ));
+        }
+
+        // 2. Resolve model / provider / api key.
+        let (model, provider, api_key) = {
+            let config = self.config.read().await;
+            let resolved = self.router.resolve(&request.model, &config);
+
+            let (model, provider) = resolved.ok_or_else(|| {
+                HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!(
+                        "Unknown model: '{}'. No routing rule or alias found.",
+                        request.model
+                    ),
+                ))
+            })?;
+
+            let api_key = config
+                .api_keys
+                .get(&provider.to_string())
+                .cloned()
+                .ok_or_else(|| {
+                    HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("API key not found for provider: {:?}", provider),
+                    ))
+                })?;
+
+            (model, provider, api_key)
+        };
+
+        // 3. Dispatch to the correct SSE stream.
+        let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
+            match provider {
+                Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
+                Provider::Anthropic => {
+                    self.http_caller.stream_anthropic(&model, &api_key, &request)
+                }
+                _ => {
+                    return Err(HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "Unsupported provider for streaming",
+                    )));
+                }
+            };
+
+        Ok(stream)
     }
 }
