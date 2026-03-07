@@ -8,6 +8,34 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGenerationChunk
 
 
+class TestRunSyncBridge:
+    """Verify _generate / _stream are safe when called from an async context."""
+
+    @pytest.mark.asyncio
+    async def test_generate_safe_inside_running_loop(self):
+        """_generate must not raise 'This event loop is already running'."""
+        model = HyperInferChatModel(model="gpt-4")
+
+        with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock:
+            mock.return_value = MagicMock()
+            # Calling the *sync* method from inside a running async test should
+            # not raise RuntimeError even though there is already a loop.
+            model._generate([HumanMessage(content="hi")])
+            mock.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stream_safe_inside_running_loop(self):
+        """_stream must not raise 'This event loop is already running'."""
+        model = HyperInferChatModel(model="gpt-4")
+
+        async def _fake_astream(*_args, **_kwargs):
+            yield MagicMock(spec=ChatGenerationChunk, message=MagicMock(content="x"))
+
+        with patch.object(model, "_astream", side_effect=_fake_astream):
+            chunks = list(model._stream([HumanMessage(content="hi")]))
+        assert len(chunks) == 1
+
+
 class TestHyperInferChatModel:
     """Test suite for HyperInferChatModel."""
 
@@ -65,9 +93,7 @@ class TestHyperInferChatModel:
         """Test async generation with SystemMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Response with system context"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Response with system context"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -87,9 +113,7 @@ class TestHyperInferChatModel:
         """Test async generation with AIMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Continuing conversation"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Continuing conversation"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -109,9 +133,7 @@ class TestHyperInferChatModel:
         """Test synchronous generation."""
         model = HyperInferChatModel(model="gpt-4")
 
-        with patch.object(
-            model, "_agenerate", new_callable=AsyncMock
-        ) as mock_agenerate:
+        with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()
 
             messages = [HumanMessage(content="Test")]

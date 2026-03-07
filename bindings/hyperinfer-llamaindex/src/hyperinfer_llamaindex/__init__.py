@@ -2,9 +2,29 @@
 
 from __future__ import annotations
 
-from typing import Any
+import asyncio
+import concurrent.futures
+from typing import Any, cast
 
 from hyperinfer import Client, Config
+
+
+def _run_sync(coro: Any) -> Any:
+    """Run *coro* safely from any context — sync or already-async.
+
+    ``asyncio.run()`` raises ``RuntimeError: This event loop is already
+    running`` when called from inside an async context (FastAPI, Jupyter,
+    LangGraph, etc.).  This helper avoids that by delegating to a
+    *dedicated background thread* that owns its own event loop, then blocks
+    the current thread until the result is ready.
+
+    Because we use a fresh thread, there is never a loop conflict regardless
+    of what the caller's thread is doing.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 from llama_index.core.base.llms.types import (
     CompletionResponseAsyncGen,
     CompletionResponseGen,
@@ -34,12 +54,8 @@ class HyperInferLLM(CustomLLM):
         )
 
     @llm_completion_callback()
-    def complete(
-        self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponse:
-        import asyncio
-
-        return asyncio.run(self._acomplete(prompt, **kwargs))
+    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
+        return cast(CompletionResponse, _run_sync(self._acomplete(prompt, **kwargs)))
 
     @llm_completion_callback()
     async def _acomplete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
@@ -69,21 +85,18 @@ class HyperInferLLM(CustomLLM):
     ) -> CompletionResponseGen:
         """Synchronous streaming — collects chunks from the async generator.
 
-        Note: raises ``RuntimeError`` if called from within a running event
-        loop.  Use :meth:`astream_complete` in async contexts.
+        Safe to call from both plain-sync and already-running-async contexts
+        (FastAPI, Jupyter, LangGraph nodes).  Prefer :meth:`astream_complete`
+        when already inside an async context to avoid the thread-pool overhead.
         """
-        import asyncio
 
         async def _collect() -> list[CompletionResponse]:
             return [
-                r
-                async for r in self.astream_complete(
-                    prompt, formatted=formatted, **kwargs
-                )
+                r async for r in await self.astream_complete(prompt, formatted=formatted, **kwargs)
             ]
 
         def _gen() -> CompletionResponseGen:
-            yield from asyncio.run(_collect())
+            yield from _run_sync(_collect())
 
         return _gen()
 

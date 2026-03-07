@@ -2,10 +2,30 @@
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 from collections.abc import AsyncIterator, Iterator
-from typing import Any
+from typing import Any, cast
 
 from hyperinfer import Client, Config
+
+
+def _run_sync(coro: Any) -> Any:
+    """Run *coro* safely from any context — sync or already-async.
+
+    ``asyncio.run()`` raises ``RuntimeError: This event loop is already
+    running`` when called from inside an async context (FastAPI, Jupyter,
+    LangGraph, etc.).  This helper avoids that by delegating to a
+    *dedicated background thread* that owns its own event loop, then blocks
+    the current thread until the result is ready.
+
+    Because we use a fresh thread, there is never a loop conflict regardless
+    of what the caller's thread is doing.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
+
+
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import (
     AIMessage,
@@ -38,9 +58,7 @@ class HyperInferChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        import asyncio
-
-        return asyncio.run(self._agenerate(messages, stop, run_manager, **kwargs))
+        return cast(ChatResult, _run_sync(self._agenerate(messages, stop, run_manager, **kwargs)))
 
     async def _agenerate(
         self,
@@ -49,14 +67,14 @@ class HyperInferChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        formatted_messages = []
+        formatted_messages: list[dict[str, str]] = []
         for msg in messages:
             if isinstance(msg, HumanMessage):
-                formatted_messages.append({"role": "user", "content": msg.content})
+                formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append({"role": "assistant", "content": msg.content})
+                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append({"role": "system", "content": msg.content})
+                formatted_messages.append({"role": "system", "content": str(msg.content)})
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -72,9 +90,7 @@ class HyperInferChatModel(BaseChatModel):
             raise RuntimeError(f"Chat request failed: {e}") from e
 
         try:
-            content = (
-                response.get("choices", [{}])[0].get("message", {}).get("content", "")
-            )
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Invalid response structure: {e}") from e
 
@@ -90,21 +106,17 @@ class HyperInferChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        """Synchronous streaming — drives the async generator via asyncio.run.
+        """Synchronous streaming — drives the async generator on a background thread.
 
-        Note: raises ``RuntimeError`` if called from within a running event
-        loop (e.g. inside an async LangGraph node).  Use :meth:`_astream`
-        instead when already inside an async context.
+        Safe to call from both plain-sync and already-running-async contexts
+        (FastAPI, Jupyter, LangGraph nodes).  Prefer :meth:`_astream` when
+        already inside an async context to avoid the thread-pool overhead.
         """
-        import asyncio
 
         async def _collect() -> list[ChatGenerationChunk]:
-            return [
-                chunk
-                async for chunk in self._astream(messages, stop, run_manager, **kwargs)
-            ]
+            return [chunk async for chunk in self._astream(messages, stop, run_manager, **kwargs)]
 
-        yield from asyncio.run(_collect())
+        yield from _run_sync(_collect())
 
     async def _astream(
         self,
@@ -114,14 +126,14 @@ class HyperInferChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> AsyncIterator[ChatGenerationChunk]:
         """Async token-by-token streaming via the HyperInfer data plane."""
-        formatted_messages = []
+        formatted_messages: list[dict[str, str]] = []
         for msg in messages:
             if isinstance(msg, HumanMessage):
-                formatted_messages.append({"role": "user", "content": msg.content})
+                formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append({"role": "assistant", "content": msg.content})
+                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append({"role": "system", "content": msg.content})
+                formatted_messages.append({"role": "system", "content": str(msg.content)})
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -138,9 +150,7 @@ class HyperInferChatModel(BaseChatModel):
                 ai_chunk = AIMessageChunk(content=delta)
                 gen_chunk = ChatGenerationChunk(
                     message=ai_chunk,
-                    generation_info=(
-                        {"finish_reason": finish_reason} if finish_reason else None
-                    ),
+                    generation_info=({"finish_reason": finish_reason} if finish_reason else None),
                 )
                 if run_manager:
                     run_manager.on_llm_new_token(delta, chunk=gen_chunk)

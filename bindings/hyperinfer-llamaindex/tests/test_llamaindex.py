@@ -7,6 +7,50 @@ from hyperinfer_llamaindex import HyperInferLLM
 from llama_index.core.llms import CompletionResponse
 
 
+class TestRunSyncBridge:
+    """Verify complete / stream_complete are safe when called from an async context."""
+
+    @pytest.mark.asyncio
+    async def test_complete_safe_inside_running_loop(self):
+        """complete() must not raise 'This event loop is already running'."""
+        llm = HyperInferLLM(model="gpt-4")
+
+        with patch.object(llm, "_acomplete", new_callable=AsyncMock) as mock:
+            mock.return_value = CompletionResponse(text="ok")
+            # Calling the *sync* method from inside a running async test should
+            # not raise RuntimeError even though there is already a loop.
+            result = llm.complete("hello")
+            assert result.text == "ok"
+            mock.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_stream_complete_safe_inside_running_loop(self):
+        """stream_complete() must not raise 'This event loop is already running'."""
+        llm = HyperInferLLM(model="gpt-4")
+
+        async def mock_stream(**kwargs):
+            yield {
+                "delta": "hello",
+                "finish_reason": None,
+                "usage": None,
+                "id": "1",
+                "model": "gpt-4",
+            }
+            yield {
+                "delta": "!",
+                "finish_reason": "stop",
+                "usage": None,
+                "id": "1",
+                "model": "gpt-4",
+            }
+
+        with patch.object(llm.client, "stream", side_effect=mock_stream):
+            chunks = list(llm.stream_complete("hi"))
+
+        assert len(chunks) == 2
+        assert chunks[-1].text == "hello!"
+
+
 class TestHyperInferLLM:
     """Test suite for HyperInferLLM."""
 
@@ -147,9 +191,7 @@ class TestHyperInferLLM:
 
             assert llm.model == "claude-3"
             assert llm.virtual_key == "my-key"
-            MockClient.assert_called_once_with(
-                redis_url="redis://localhost:6379", config=config
-            )
+            MockClient.assert_called_once_with(redis_url="redis://localhost:6379", config=config)
 
     def test_from_config_custom_redis_url(self):
         """Test creating instance from config with custom redis URL."""
@@ -162,9 +204,7 @@ class TestHyperInferLLM:
                 redis_url="redis://custom:6379",
             )
 
-            MockClient.assert_called_once_with(
-                redis_url="redis://custom:6379", config=config
-            )
+            MockClient.assert_called_once_with(redis_url="redis://custom:6379", config=config)
 
     @pytest.mark.asyncio
     async def test_acomplete_empty_response(self):
