@@ -8,7 +8,7 @@ the compiled ``.so`` / ``.pyd`` binary at analysis time.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 class HyperInferClient:
     """Low-level PyO3-exported Rust client.
@@ -27,7 +27,7 @@ class HyperInferClient:
     def __init__(
         self,
         redis_url: str,
-        config: Optional[dict[str, Any]] = None,
+        config: dict[str, Any] | None = None,
     ) -> None: ...
     async def init(self) -> None:
         """Initialise the underlying Rust client.

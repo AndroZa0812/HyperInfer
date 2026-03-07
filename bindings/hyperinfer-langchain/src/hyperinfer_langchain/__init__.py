@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, AsyncIterator, Iterator
+from typing import Any
 
 from hyperinfer import Client, Config
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -70,9 +70,7 @@ class HyperInferChatModel(BaseChatModel):
             raise RuntimeError(f"Chat request failed: {e}") from e
 
         try:
-            content = (
-                response.get("choices", [{}])[0].get("message", {}).get("content", "")
-            )
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Invalid response structure: {e}") from e
 
@@ -89,7 +87,7 @@ class HyperInferChatModel(BaseChatModel):
         virtual_key: str = "default",
         redis_url: str = "redis://localhost:6379",
         **kwargs: Any,
-    ) -> "HyperInferChatModel":
+    ) -> HyperInferChatModel:
         """Create instance with configuration."""
         client = Client(redis_url)
         await client.init()

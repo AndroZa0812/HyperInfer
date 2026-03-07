@@ -1,6 +1,6 @@
 """Configuration classes for HyperInfer."""
 
-from typing import Any, Optional
+from typing import Any
 
 
 class Config:
@@ -13,9 +13,9 @@ class Config:
     def __init__(self):
         self._api_keys: dict[str, str] = {}
         self._routing_rules: list[dict[str, Any]] = []
-        self._quotas: dict[str, dict[str, Optional[int]]] = {}
+        self._quotas: dict[str, dict[str, int | None]] = {}
         self._model_aliases: dict[str, str] = {}
-        self._default_provider: Optional[str] = None
+        self._default_provider: str | None = None
 
     def with_api_key(self, provider: str, key: str) -> "Config":
         """Add an API key for a provider.
@@ -68,11 +68,11 @@ class Config:
     def with_quota(
         self,
         key: str,
-        rpm: Optional[int] = None,
-        tpm: Optional[int] = None,
-        budget_cents: Optional[int] = None,
-        max_requests_per_minute: Optional[int] = None,
-        max_tokens_per_minute: Optional[int] = None,
+        rpm: int | None = None,
+        tpm: int | None = None,
+        budget_cents: int | None = None,
+        max_requests_per_minute: int | None = None,
+        max_tokens_per_minute: int | None = None,
     ) -> "Config":
         """Add a quota configuration.
 

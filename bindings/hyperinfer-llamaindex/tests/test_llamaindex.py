@@ -1,6 +1,6 @@
 """Tests for LlamaIndex integration."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from hyperinfer_llamaindex import HyperInferLLM

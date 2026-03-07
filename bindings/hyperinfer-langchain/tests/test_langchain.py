@@ -104,7 +104,6 @@ class TestHyperInferChatModel:
         """Test synchronous generation."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {"choices": [{"message": {"content": "Sync response"}}]}
 
         with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()

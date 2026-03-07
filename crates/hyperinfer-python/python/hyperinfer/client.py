@@ -1,7 +1,6 @@
 """High-level async client for HyperInfer."""
 
-import asyncio
-from typing import Any, Optional
+from typing import Any
 
 from hyperinfer._hyperinfer import HyperInferClient
 from hyperinfer.config import Config
@@ -16,7 +15,7 @@ class Client:
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
-        config: Optional[Config] = None,
+        config: Config | None = None,
     ):
         """Initialize the client.
 
@@ -42,8 +41,8 @@ class Client:
         key: str,
         model: str,
         messages: list[dict[str, str]],
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> dict[str, Any]:
         """Send a chat request to the LLM gateway.
 

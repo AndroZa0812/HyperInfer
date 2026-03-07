@@ -1,6 +1,5 @@
 """Tests for Config class."""
 
-import pytest
 from hyperinfer.config import Config
 
 

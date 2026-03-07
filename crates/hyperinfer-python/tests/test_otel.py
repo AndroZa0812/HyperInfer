@@ -15,11 +15,8 @@ from __future__ import annotations
 
 import base64
 import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 from typing import Any
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers

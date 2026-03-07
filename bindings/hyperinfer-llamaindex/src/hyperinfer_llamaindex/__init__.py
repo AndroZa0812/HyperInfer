@@ -95,7 +95,7 @@ class HyperInferLLM(CustomLLM):
         virtual_key: str = "default",
         redis_url: str = "redis://localhost:6379",
         **kwargs: Any,
-    ) -> "HyperInferLLM":
+    ) -> HyperInferLLM:
         """Create an instance with configuration.
 
         The underlying client is initialised lazily on the first call to
