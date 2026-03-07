@@ -147,7 +147,9 @@ class TestHyperInferLLM:
 
             assert llm.model == "claude-3"
             assert llm.virtual_key == "my-key"
-            MockClient.assert_called_once_with(redis_url="redis://localhost:6379", config=config)
+            MockClient.assert_called_once_with(
+                redis_url="redis://localhost:6379", config=config
+            )
 
     def test_from_config_custom_redis_url(self):
         """Test creating instance from config with custom redis URL."""
@@ -160,7 +162,9 @@ class TestHyperInferLLM:
                 redis_url="redis://custom:6379",
             )
 
-            MockClient.assert_called_once_with(redis_url="redis://custom:6379", config=config)
+            MockClient.assert_called_once_with(
+                redis_url="redis://custom:6379", config=config
+            )
 
     @pytest.mark.asyncio
     async def test_acomplete_empty_response(self):
@@ -200,8 +204,20 @@ class TestHyperInferLLMStreaming:
         llm = HyperInferLLM(model="gpt-4", virtual_key="test-key")
 
         chunks = [
-            {"id": "1", "model": "gpt-4", "delta": "The ", "finish_reason": None, "usage": None},
-            {"id": "1", "model": "gpt-4", "delta": "answer", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "The ",
+                "finish_reason": None,
+                "usage": None,
+            },
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "answer",
+                "finish_reason": None,
+                "usage": None,
+            },
             {
                 "id": "1",
                 "model": "gpt-4",
@@ -234,7 +250,13 @@ class TestHyperInferLLMStreaming:
         llm = HyperInferLLM(model="gpt-4")
 
         chunks = [
-            {"id": "1", "model": "gpt-4", "delta": "Hi", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "Hi",
+                "finish_reason": None,
+                "usage": None,
+            },
             {
                 "id": "1",
                 "model": "gpt-4",

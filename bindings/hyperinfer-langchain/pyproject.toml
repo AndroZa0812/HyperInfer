@@ -15,3 +15,6 @@ packages = ["src/hyperinfer_langchain"]
 
 [tool.uv.sources]
 hyperinfer = { workspace = true }
+
+[tool.bandit]
+exclude_dirs = ["tests", "venv"]

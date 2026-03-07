@@ -72,7 +72,9 @@ class HyperInferChatModel(BaseChatModel):
             raise RuntimeError(f"Chat request failed: {e}") from e
 
         try:
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = (
+                response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            )
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Invalid response structure: {e}") from e
 
@@ -97,7 +99,10 @@ class HyperInferChatModel(BaseChatModel):
         import asyncio
 
         async def _collect() -> list[ChatGenerationChunk]:
-            return [chunk async for chunk in self._astream(messages, stop, run_manager, **kwargs)]
+            return [
+                chunk
+                async for chunk in self._astream(messages, stop, run_manager, **kwargs)
+            ]
 
         yield from asyncio.run(_collect())
 
@@ -133,7 +138,9 @@ class HyperInferChatModel(BaseChatModel):
                 ai_chunk = AIMessageChunk(content=delta)
                 gen_chunk = ChatGenerationChunk(
                     message=ai_chunk,
-                    generation_info={"finish_reason": finish_reason} if finish_reason else None,
+                    generation_info=(
+                        {"finish_reason": finish_reason} if finish_reason else None
+                    ),
                 )
                 if run_manager:
                     run_manager.on_llm_new_token(delta, chunk=gen_chunk)

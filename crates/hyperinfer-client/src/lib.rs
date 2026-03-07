@@ -1,11 +1,15 @@
 //! HyperInfer Client Library - Data Plane
 
+pub mod cache;
 pub mod http_client;
+pub mod mirroring;
 pub mod router;
 pub mod telemetry;
 pub mod telemetry_otlp;
 
+pub use cache::ExactMatchCache;
 pub use http_client::HttpCaller;
+pub use mirroring::{MirrorConfig, MirrorHandle};
 pub use router::Router;
 pub use telemetry::Telemetry;
 pub use telemetry_otlp::{
@@ -24,24 +28,30 @@ use tokio::sync::RwLock;
 
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
-    http_caller: HttpCaller,
-    router: Router,
+    http_caller: Arc<HttpCaller>,
+    router: Arc<Router>,
     rate_limiter: RateLimiter,
     telemetry: Telemetry,
+    cache: ExactMatchCache,
+    mirror: MirrorHandle,
 }
 
 impl HyperInferClient {
     pub async fn new(redis_url: &str, config: Config) -> Result<Self, HyperInferError> {
-        let http_caller = HttpCaller::new().map_err(HyperInferError::Http)?;
-        let router = Router::new(config.routing_rules.clone())
-            .with_aliases(config.model_aliases.clone())
-            .with_default_provider(config.default_provider.clone());
+        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
+        let router = Arc::new(
+            Router::new(config.routing_rules.clone())
+                .with_aliases(config.model_aliases.clone())
+                .with_default_provider(config.default_provider.clone()),
+        );
         let rate_limiter = RateLimiter::new(Some(redis_url))
             .await
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
         let telemetry = Telemetry::new(redis_url)
             .await
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+        let cache = ExactMatchCache::new(redis_url).await;
+        let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
         Ok(Self {
@@ -50,7 +60,15 @@ impl HyperInferClient {
             router,
             rate_limiter,
             telemetry,
+            cache,
+            mirror,
         })
+    }
+
+    /// Configure traffic mirroring.  Pass `None` to disable.
+    pub async fn set_mirror(&self, cfg: Option<MirrorConfig>) {
+        let mut guard = self.mirror.write().await;
+        *guard = cfg;
     }
 
     pub async fn chat(
@@ -60,9 +78,12 @@ impl HyperInferClient {
     ) -> Result<ChatResponse, HyperInferError> {
         request.validate()?;
 
+        // 0. Exact-match cache lookup (before rate-limiting to avoid wasting quota).
+        if let Some(cached) = self.cache.get(&request).await {
+            return Ok(cached);
+        }
+
         // Create a root OTel span following the GenAI Semantic Conventions.
-        // The span name uses the "chat" operation and will be enriched with
-        // provider / model attributes once routing is resolved.
         let span = tracing::info_span!(
             "gen_ai.chat",
             gen_ai.operation.name = "chat",
@@ -84,7 +105,7 @@ impl HyperInferClient {
         }
 
         // 2. Resolve model alias
-        let (model, provider, api_key) = {
+        let (model, provider, api_key, config_snapshot) = {
             let config = self.config.read().await;
             let resolved = self.router.resolve(&request.model, &config);
 
@@ -109,7 +130,7 @@ impl HyperInferClient {
                     ))
                 })?;
 
-            (model, provider, api_key)
+            (model, provider, api_key, Arc::new(config.clone()))
         };
 
         // Enrich span with the resolved provider and final model name.
@@ -163,6 +184,9 @@ impl HyperInferClient {
             finish_reason,
         );
 
+        // Store successful response in exact-match cache.
+        self.cache.set(&request, &response).await;
+
         // Record async Redis telemetry (fire-and-forget).
         let _ = self
             .telemetry
@@ -176,7 +200,17 @@ impl HyperInferClient {
             .record_usage(key, total_tokens as u64)
             .await;
 
-        // 5. Return response
+        // 5. Fire-and-forget traffic mirror (if configured).
+        mirroring::maybe_mirror(
+            self.mirror.clone(),
+            self.http_caller.clone(),
+            self.router.clone(),
+            config_snapshot,
+            key.to_string(),
+            request,
+        );
+
+        // 6. Return response
         Ok(response)
     }
 
@@ -191,8 +225,10 @@ impl HyperInferClient {
         &self,
         key: &str,
         request: ChatRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>, HyperInferError>
-    {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>,
+        HyperInferError,
+    > {
         request.validate()?;
 
         // 1. Rate limit check (same as non-streaming path).
@@ -239,9 +275,9 @@ impl HyperInferClient {
         let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
             match provider {
                 Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
-                Provider::Anthropic => {
-                    self.http_caller.stream_anthropic(&model, &api_key, &request)
-                }
+                Provider::Anthropic => self
+                    .http_caller
+                    .stream_anthropic(&model, &api_key, &request),
                 _ => {
                     return Err(HyperInferError::Config(std::io::Error::new(
                         std::io::ErrorKind::Unsupported,
@@ -249,6 +285,8 @@ impl HyperInferClient {
                     )));
                 }
             };
+        // Note: streaming responses are not cached — the stream is consumed
+        // incrementally by the caller so we cannot inspect it here.
 
         Ok(stream)
     }

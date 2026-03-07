@@ -39,6 +39,12 @@ redis = { version = "1.0", features = [
   "connection-manager",
 ] }
 sha2 = "0.10"
+jsonwebtoken = "9"
+serde_json = "1.0"
+futures = "0.3"
+async-stream = "0.3"
+axum-extra = { version = "0.10", features = ["typed-header"] }
+headers = "0.4"
 
 [dev-dependencies]
 hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }
@@ -47,3 +53,4 @@ testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres", "redis"] }
 http-body-util = "0.1"
 mockall = "0.14"
+axum-test = "17"

@@ -65,7 +65,9 @@ class TestHyperInferChatModel:
         """Test async generation with SystemMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {"choices": [{"message": {"content": "Response with system context"}}]}
+        mock_response = {
+            "choices": [{"message": {"content": "Response with system context"}}]
+        }
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -85,7 +87,9 @@ class TestHyperInferChatModel:
         """Test async generation with AIMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {"choices": [{"message": {"content": "Continuing conversation"}}]}
+        mock_response = {
+            "choices": [{"message": {"content": "Continuing conversation"}}]
+        }
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -105,7 +109,9 @@ class TestHyperInferChatModel:
         """Test synchronous generation."""
         model = HyperInferChatModel(model="gpt-4")
 
-        with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
+        with patch.object(
+            model, "_agenerate", new_callable=AsyncMock
+        ) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()
 
             messages = [HumanMessage(content="Test")]
@@ -183,8 +189,20 @@ class TestHyperInferChatModelStreaming:
         model = HyperInferChatModel(model="gpt-4", virtual_key="test-key")
 
         chunks = [
-            {"id": "1", "model": "gpt-4", "delta": "Hello", "finish_reason": None, "usage": None},
-            {"id": "1", "model": "gpt-4", "delta": " world", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "Hello",
+                "finish_reason": None,
+                "usage": None,
+            },
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": " world",
+                "finish_reason": None,
+                "usage": None,
+            },
             {
                 "id": "1",
                 "model": "gpt-4",
@@ -216,8 +234,20 @@ class TestHyperInferChatModelStreaming:
         model = HyperInferChatModel(model="gpt-4")
 
         chunks = [
-            {"id": "1", "model": "gpt-4", "delta": "The ", "finish_reason": None, "usage": None},
-            {"id": "1", "model": "gpt-4", "delta": "answer", "finish_reason": None, "usage": None},
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "The ",
+                "finish_reason": None,
+                "usage": None,
+            },
+            {
+                "id": "1",
+                "model": "gpt-4",
+                "delta": "answer",
+                "finish_reason": None,
+                "usage": None,
+            },
             {
                 "id": "1",
                 "model": "gpt-4",

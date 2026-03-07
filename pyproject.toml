@@ -41,8 +41,8 @@ members = [
 # `hyperinfer`, `hyperinfer-langchain`, and `hyperinfer-llamaindex` via
 # `{ workspace = true }` without repeating path entries everywhere.
 [tool.uv.sources]
-hyperinfer            = { workspace = true }
-hyperinfer-langchain  = { workspace = true }
+hyperinfer = { workspace = true }
+hyperinfer-langchain = { workspace = true }
 hyperinfer-llamaindex = { workspace = true }
 
 # ---------------------------------------------------------------------------
@@ -116,11 +116,7 @@ strict = true
 exclude = ["target/", "\\.venv/", "build/"]
 
 [[tool.mypy.overrides]]
-module = [
-  "langchain_core.*",
-  "llama_index.*",
-  "redis.*",
-]
+module = ["langchain_core.*", "llama_index.*", "redis.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------

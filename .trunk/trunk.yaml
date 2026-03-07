@@ -17,8 +17,9 @@ runtimes:
 # This is the section where you manage your linters. (https://docs.trunk.io/check/configuration)
 lint:
   enabled:
+    - mypy@1.19.1
     - bandit@1.9.4
-    - black@26.1.0
+    - black@26.3.0
     - isort@8.0.1
     - ruff@0.15.5
     - ruff@0.15.5
@@ -38,6 +39,10 @@ lint:
     - linters: [ALL]
       paths:
         - .opencode/**
+        - tests/**
+    - linters: [bandit]
+      paths:
+        - '**/tests/**'
 actions:
   disabled:
     - trunk-announce

@@ -3,12 +3,16 @@
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
-use hyperinfer_server::{RedisConfigStore, SqlxDb};
+use hyperinfer_server::{
+    mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
+    RedisConfigStore, SqlxDb,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -384,6 +388,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config_manager,
     };
 
+    // MCP state: load JWT secret from environment (fallback to an insecure
+    // default only in development; production must set MCP_JWT_SECRET).
+    let jwt_secret = std::env::var("MCP_JWT_SECRET").unwrap_or_else(|_| {
+        tracing::warn!("MCP_JWT_SECRET not set — using insecure default. Set it in production!");
+        "hyperinfer-dev-secret".to_string()
+    });
+    let mcp_state = McpState::new(jwt_secret);
+
     let cors = {
         let allowed_origins = std::env::var("ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -405,6 +417,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .allow_headers([axum::http::header::CONTENT_TYPE])
     };
 
+    // MCP routes protected by JWT auth middleware.
+    let mcp_router = Router::new()
+        .route("/mcp/sse", get(mcp_sse_handler))
+        .route("/mcp/message", post(mcp_message_handler))
+        .layer(middleware::from_fn_with_state(
+            mcp_state.clone(),
+            jwt_auth_middleware,
+        ))
+        .with_state(mcp_state);
+
     let app = Router::new()
         .route("/v1/config/sync", get(config_sync))
         .route("/v1/teams/:id", get(get_team))
@@ -417,6 +439,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .merge(mcp_router)
         .layer(cors)
         .with_state(state);
 

@@ -5,7 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from hyperinfer import Client, Config
-from llama_index.core.base.llms.types import CompletionResponseAsyncGen, CompletionResponseGen
+from llama_index.core.base.llms.types import (
+    CompletionResponseAsyncGen,
+    CompletionResponseGen,
+)
 from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core.llms.callbacks import llm_completion_callback
 from pydantic import Field
@@ -31,7 +34,9 @@ class HyperInferLLM(CustomLLM):
         )
 
     @llm_completion_callback()
-    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
+    def complete(
+        self, prompt: str, formatted: bool = False, **kwargs: Any
+    ) -> CompletionResponse:
         import asyncio
 
         return asyncio.run(self._acomplete(prompt, **kwargs))
@@ -70,7 +75,12 @@ class HyperInferLLM(CustomLLM):
         import asyncio
 
         async def _collect() -> list[CompletionResponse]:
-            return [r async for r in self.astream_complete(prompt, formatted=formatted, **kwargs)]
+            return [
+                r
+                async for r in self.astream_complete(
+                    prompt, formatted=formatted, **kwargs
+                )
+            ]
 
         def _gen() -> CompletionResponseGen:
             yield from asyncio.run(_collect())
