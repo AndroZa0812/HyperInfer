@@ -1,0 +1,130 @@
+# Root pyproject.toml — uv workspace for all HyperInfer Python packages.
+#
+# Usage:
+#   uv sync                  # install all workspace members + dev deps into .venv
+#   uv run pytest            # run the full test suite
+#   uv run ruff check .      # lint
+#   uv run ruff format .     # format
+#   uv run mypy              # type-check
+
+[project]
+name = "hyperinfer-dev"
+version = "0.0.0"
+description = "Development workspace root for HyperInfer Python packages"
+requires-python = ">=3.11"
+# The root carries no runtime deps of its own — members declare their own.
+dependencies = []
+
+# uv_build is purpose-built for workspace roots: it never tries to find
+# a source package directory, so it won't fail with "unable to determine
+# which files to ship".
+[build-system]
+requires = ["uv_build>=0.10.8,<0.11.0"]
+build-backend = "uv_build"
+
+# ---------------------------------------------------------------------------
+# Workspace members
+# ---------------------------------------------------------------------------
+# Mark the root as a virtual package — it is never installed or published,
+# it exists purely to anchor the workspace and hold shared dev tooling config.
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "crates/hyperinfer-python",
+  "bindings/hyperinfer-langchain",
+  "bindings/hyperinfer-llamaindex",
+]
+
+# Declare workspace-member sources here so every member can reference
+# `hyperinfer`, `hyperinfer-langchain`, and `hyperinfer-llamaindex` via
+# `{ workspace = true }` without repeating path entries everywhere.
+[tool.uv.sources]
+hyperinfer            = { workspace = true }
+hyperinfer-langchain  = { workspace = true }
+hyperinfer-llamaindex = { workspace = true }
+
+# ---------------------------------------------------------------------------
+# Development dependencies (PEP 735 dependency groups)
+# Installed automatically by `uv sync` (the `dev` group is the default).
+# ---------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+  # Testing
+  "pytest>=8.0",
+  "pytest-asyncio>=0.24",
+  "pytest-cov>=5.0",
+
+  # Linting & formatting
+  "ruff>=0.9",
+
+  # Type checking
+  "mypy>=1.10",
+  "types-redis>=4.6",
+
+  # Build tool for the maturin crate (needed for `maturin develop` in CI)
+  "maturin>=1.0,<2.0",
+]
+
+# ---------------------------------------------------------------------------
+# pytest — single config for the whole repo
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = [
+  "crates/hyperinfer-python/tests",
+  "bindings/hyperinfer-langchain/tests",
+  "bindings/hyperinfer-llamaindex/tests",
+]
+addopts = "--tb=short -q --import-mode=importlib"
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",   # pycodestyle errors
+  "F",   # pyflakes
+  "B",   # flake8-bugbear
+  "I",   # isort
+  "UP",  # pyupgrade
+  "D3",  # pydocstring (blank lines only — keeps noise low)
+  "TID", # flake8-tidy-imports
+]
+ignore = [
+  "E501", # line-length — enforced by the formatter, not the linter
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["D"] # no docstring requirements in test files
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+strict = true
+exclude = ["target/", "\\.venv/", "build/"]
+
+[[tool.mypy.overrides]]
+module = [
+  "langchain_core.*",
+  "llama_index.*",
+  "redis.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Bandit
+# ---------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests", "venv"]

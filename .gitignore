@@ -21,3 +21,40 @@ target
 #.idea/
 .plan
 .scannerwork
+.opencode
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Python compiled extension modules (built by maturin / setuptools)
+*.so
+*.pyd
+*.dylib
+*.dSYM/
+
+# Python packaging / build artefacts
+*.egg-info/
+*.eggs/
+dist/
+build/
+wheels/
+sdist/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# uv lock files (generated, not meant to be committed for libraries)
+uv.lock
+
+# Coverage reports
+.coverage
+.coverage.*
+htmlcov/
