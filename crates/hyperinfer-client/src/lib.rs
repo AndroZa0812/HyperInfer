@@ -191,8 +191,10 @@ impl HyperInferClient {
         &self,
         key: &str,
         request: ChatRequest,
-    ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>, HyperInferError>
-    {
+    ) -> Result<
+        Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>,
+        HyperInferError,
+    > {
         request.validate()?;
 
         // 1. Rate limit check (same as non-streaming path).
@@ -239,9 +241,9 @@ impl HyperInferClient {
         let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
             match provider {
                 Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
-                Provider::Anthropic => {
-                    self.http_caller.stream_anthropic(&model, &api_key, &request)
-                }
+                Provider::Anthropic => self
+                    .http_caller
+                    .stream_anthropic(&model, &api_key, &request),
                 _ => {
                     return Err(HyperInferError::Config(std::io::Error::new(
                         std::io::ErrorKind::Unsupported,
