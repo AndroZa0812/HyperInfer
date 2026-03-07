@@ -7,6 +7,13 @@ import concurrent.futures
 from typing import Any, cast
 
 from hyperinfer import Client, Config
+from llama_index.core.base.llms.types import (
+    CompletionResponseAsyncGen,
+    CompletionResponseGen,
+)
+from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
+from llama_index.core.llms.callbacks import llm_completion_callback
+from pydantic import Field
 
 
 def _run_sync(coro: Any) -> Any:
@@ -23,15 +30,6 @@ def _run_sync(coro: Any) -> Any:
     """
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(asyncio.run, coro).result()
-
-
-from llama_index.core.base.llms.types import (
-    CompletionResponseAsyncGen,
-    CompletionResponseGen,
-)
-from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
-from llama_index.core.llms.callbacks import llm_completion_callback
-from pydantic import Field
 
 
 class HyperInferLLM(CustomLLM):
@@ -54,7 +52,9 @@ class HyperInferLLM(CustomLLM):
         )
 
     @llm_completion_callback()
-    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
+    def complete(
+        self, prompt: str, formatted: bool = False, **kwargs: Any
+    ) -> CompletionResponse:
         return cast(CompletionResponse, _run_sync(self._acomplete(prompt, **kwargs)))
 
     @llm_completion_callback()
@@ -92,7 +92,10 @@ class HyperInferLLM(CustomLLM):
 
         async def _collect() -> list[CompletionResponse]:
             return [
-                r async for r in await self.astream_complete(prompt, formatted=formatted, **kwargs)
+                r
+                async for r in await self.astream_complete(
+                    prompt, formatted=formatted, **kwargs
+                )
             ]
 
         def _gen() -> CompletionResponseGen:

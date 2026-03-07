@@ -8,6 +8,16 @@ from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
 from hyperinfer import Client, Config
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import (
+    AIMessage,
+    AIMessageChunk,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
+from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
+from pydantic import Field
 
 
 def _run_sync(coro: Any) -> Any:
@@ -24,18 +34,6 @@ def _run_sync(coro: Any) -> Any:
     """
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         return pool.submit(asyncio.run, coro).result()
-
-
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import (
-    AIMessage,
-    AIMessageChunk,
-    BaseMessage,
-    HumanMessage,
-    SystemMessage,
-)
-from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import Field
 
 
 class HyperInferChatModel(BaseChatModel):
@@ -58,7 +56,10 @@ class HyperInferChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
-        return cast(ChatResult, _run_sync(self._agenerate(messages, stop, run_manager, **kwargs)))
+        return cast(
+            ChatResult,
+            _run_sync(self._agenerate(messages, stop, run_manager, **kwargs)),
+        )
 
     async def _agenerate(
         self,
@@ -72,9 +73,13 @@ class HyperInferChatModel(BaseChatModel):
             if isinstance(msg, HumanMessage):
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
+                formatted_messages.append(
+                    {"role": "assistant", "content": str(msg.content)}
+                )
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append({"role": "system", "content": str(msg.content)})
+                formatted_messages.append(
+                    {"role": "system", "content": str(msg.content)}
+                )
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -90,7 +95,9 @@ class HyperInferChatModel(BaseChatModel):
             raise RuntimeError(f"Chat request failed: {e}") from e
 
         try:
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            content = (
+                response.get("choices", [{}])[0].get("message", {}).get("content", "")
+            )
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Invalid response structure: {e}") from e
 
@@ -114,7 +121,10 @@ class HyperInferChatModel(BaseChatModel):
         """
 
         async def _collect() -> list[ChatGenerationChunk]:
-            return [chunk async for chunk in self._astream(messages, stop, run_manager, **kwargs)]
+            return [
+                chunk
+                async for chunk in self._astream(messages, stop, run_manager, **kwargs)
+            ]
 
         yield from _run_sync(_collect())
 
@@ -131,9 +141,13 @@ class HyperInferChatModel(BaseChatModel):
             if isinstance(msg, HumanMessage):
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
+                formatted_messages.append(
+                    {"role": "assistant", "content": str(msg.content)}
+                )
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append({"role": "system", "content": str(msg.content)})
+                formatted_messages.append(
+                    {"role": "system", "content": str(msg.content)}
+                )
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -150,7 +164,9 @@ class HyperInferChatModel(BaseChatModel):
                 ai_chunk = AIMessageChunk(content=delta)
                 gen_chunk = ChatGenerationChunk(
                     message=ai_chunk,
-                    generation_info=({"finish_reason": finish_reason} if finish_reason else None),
+                    generation_info=(
+                        {"finish_reason": finish_reason} if finish_reason else None
+                    ),
                 )
                 if run_manager:
                     run_manager.on_llm_new_token(delta, chunk=gen_chunk)

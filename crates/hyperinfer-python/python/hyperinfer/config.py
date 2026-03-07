@@ -10,7 +10,7 @@ class Config:
     quotas, and model aliases.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._api_keys: dict[str, str] = {}
         self._routing_rules: list[dict[str, Any]] = []
         self._quotas: dict[str, dict[str, int | None]] = {}

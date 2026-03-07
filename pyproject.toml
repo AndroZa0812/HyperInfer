@@ -113,11 +113,12 @@ indent-style = "space"
 [tool.mypy]
 python_version = "3.11"
 strict = true
-exclude = ["target/", "\\.venv/", "build/"]
+exclude = ["target/", "\\.venv/", "build/", ".*/tests/"]
 
 [[tool.mypy.overrides]]
 module = ["langchain_core.*", "llama_index.*", "redis.*"]
 ignore_missing_imports = true
+
 
 # ---------------------------------------------------------------------------
 # Bandit

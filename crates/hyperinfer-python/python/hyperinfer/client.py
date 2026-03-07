@@ -60,7 +60,7 @@ class Client:
         if not self._initialized:
             await self.init()
 
-        request = {
+        request: dict[str, Any] = {
             "model": model,
             "messages": messages,
         }
