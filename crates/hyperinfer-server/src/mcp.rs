@@ -27,12 +27,17 @@ use axum::{
     http::{HeaderMap, Request, StatusCode},
     middleware::Next,
     response::{sse::Event, IntoResponse, Response, Sse},
-    Json,
+    Json, Extension,
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    sync::Arc,
+    time::Duration,
+};
 use tokio::sync::{mpsc, RwLock};
 use tracing::warn;
 use uuid::Uuid;
@@ -42,7 +47,7 @@ use uuid::Uuid;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 /// Claims expected inside an MCP Bearer JWT.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct McpClaims {
     /// Subject (agent / virtual key identifier).
     pub sub: String,
@@ -55,10 +60,11 @@ pub struct McpClaims {
 /// Axum middleware that validates `Authorization: Bearer <jwt>`.
 ///
 /// Requires the JWT secret to be present in `McpState`.
-/// On failure returns 401; on success the request is forwarded unchanged.
+/// On failure returns 401; on success the claims are added to request extensions
+/// and the request is forwarded.
 pub async fn jwt_auth_middleware(
     State(state): State<McpState>,
-    req: Request<Body>,
+    mut req: Request<Body>,
     next: Next,
 ) -> Response {
     let token = match extract_bearer(req.headers()) {
@@ -68,10 +74,14 @@ pub async fn jwt_auth_middleware(
         }
     };
 
-    if validate_jwt(&token, &state.jwt_secret).is_err() {
-        return (StatusCode::UNAUTHORIZED, "Invalid or expired JWT").into_response();
-    }
+    let claims = match validate_jwt(&token, &state.jwt_secret, state.allow_insecure_exp) {
+        Ok(c) => c,
+        Err(_) => {
+            return (StatusCode::UNAUTHORIZED, "Invalid or expired JWT").into_response();
+        }
+    };
 
+    req.extensions_mut().insert(claims);
     next.run(req).await
 }
 
@@ -81,12 +91,16 @@ fn extract_bearer(headers: &HeaderMap) -> Option<String> {
     s.strip_prefix("Bearer ").map(str::to_owned)
 }
 
-pub fn validate_jwt(token: &str, secret: &str) -> Result<McpClaims, jsonwebtoken::errors::Error> {
+pub fn validate_jwt(
+    token: &str,
+    secret: &str,
+    allow_insecure_exp: bool,
+) -> Result<McpClaims, jsonwebtoken::errors::Error> {
     let key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::new(Algorithm::HS256);
-    // In production, exp should always be required. Only remove for dev mode.
-    #[cfg(debug_assertions)]
-    validation.required_spec_claims.remove("exp");
+    if allow_insecure_exp {
+        validation.required_spec_claims.remove("exp");
+    }
     let data = decode::<McpClaims>(token, &key, &validation)?;
     Ok(data.claims)
 }
@@ -128,6 +142,8 @@ pub struct SseFrame {
 #[derive(Clone)]
 pub struct McpSession {
     pub id: String,
+    /// Owner/subject from the JWT that created this session.
+    pub owner: String,
     /// Sender side of the event channel.  Cloned into the SSE stream and into
     /// the message handler so both can push frames to the client.
     pub tx: mpsc::Sender<SseFrame>,
@@ -142,6 +158,8 @@ pub type SessionRegistry = Arc<RwLock<HashMap<String, McpSession>>>;
 pub struct McpState {
     pub sessions: SessionRegistry,
     pub jwt_secret: Arc<String>,
+    /// If true, JWTs without the "exp" claim are accepted (insecure, for dev only).
+    pub allow_insecure_exp: bool,
 }
 
 impl McpState {
@@ -149,6 +167,15 @@ impl McpState {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             jwt_secret: Arc::new(jwt_secret.into()),
+            allow_insecure_exp: false,
+        }
+    }
+
+    pub fn new_with_insecure_exp(jwt_secret: impl Into<String>, allow_insecure: bool) -> Self {
+        Self {
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            jwt_secret: Arc::new(jwt_secret.into()),
+            allow_insecure_exp: allow_insecure,
         }
     }
 }
@@ -236,17 +263,22 @@ pub fn dispatch_method(req: &JsonRpcRequest) -> JsonRpcResponse {
 /// Opens a long-lived SSE connection for the calling agent.  The first event
 /// sent to the client is `endpoint` containing the POST URL the client should
 /// use for all subsequent JSON-RPC messages.
-pub async fn mcp_sse_handler(State(state): State<McpState>) -> impl IntoResponse {
+pub async fn mcp_sse_handler(
+    State(state): State<McpState>,
+    Extension(claims): Extension<McpClaims>,
+) -> impl IntoResponse {
     let session_id = Uuid::new_v4().to_string();
+    let owner = claims.sub.clone();
     let (tx, mut rx) = mpsc::channel::<SseFrame>(64);
 
-    // Register session.
+    // Register session with owner.
     {
         let mut sessions = state.sessions.write().await;
         sessions.insert(
             session_id.clone(),
             McpSession {
                 id: session_id.clone(),
+                owner,
                 tx: tx.clone(),
             },
         );
@@ -302,9 +334,11 @@ pub struct MessageQuery {
 /// Accepts a JSON-RPC 2.0 message body, dispatches it, and sends the response
 /// back through the SSE channel of the identified session.
 ///
-/// Returns 202 Accepted on success, 404 if the session does not exist.
+/// Returns 202 Accepted on success, 404 if the session does not exist,
+/// 403 if the caller does not own the session.
 pub async fn mcp_message_handler(
     State(state): State<McpState>,
+    Extension(claims): Extension<McpClaims>,
     Query(query): Query<MessageQuery>,
     Json(rpc_req): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
@@ -316,13 +350,24 @@ pub async fn mcp_message_handler(
             return (StatusCode::NOT_FOUND, "Session not found").into_response();
         }
     };
+
+    if session.owner != claims.sub {
+        warn!(
+            "POST /mcp/message: unauthorized access attempt by {} to session owned by {}",
+            claims.sub, session.owner
+        );
+        return (StatusCode::FORBIDDEN, "Not the session owner").into_response();
+    }
     drop(sessions);
 
     let rpc_response = dispatch_method(&rpc_req);
 
     let data = serde_json::to_string(&rpc_response).unwrap_or_else(|e| {
         warn!("Failed to serialize JSON-RPC response: {}", e);
-        r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"}}"#.to_string()
+        let id_str = rpc_req.id.as_ref()
+            .and_then(|v| serde_json::to_string(v).ok())
+            .unwrap_or_else(|| "null".to_string());
+        format!(r#"{{"jsonrpc":"2.0","id":{},"error":{{"code":-32603,"message":"Internal error"}}}}"#, id_str)
     });
     let frame = SseFrame {
         event: "message".to_string(),
@@ -477,19 +522,19 @@ mod tests {
     fn test_validate_jwt_valid() {
         let secret = "my-secret";
         let token = create_jwt("alice", secret);
-        let claims = validate_jwt(&token, secret).unwrap();
+        let claims = validate_jwt(&token, secret, false).unwrap();
         assert_eq!(claims.sub, "alice");
     }
 
     #[test]
     fn test_validate_jwt_wrong_secret() {
         let token = create_jwt("alice", "correct");
-        assert!(validate_jwt(&token, "wrong").is_err());
+        assert!(validate_jwt(&token, "wrong", false).is_err());
     }
 
     #[test]
     fn test_validate_jwt_malformed() {
-        assert!(validate_jwt("not.a.jwt", "secret").is_err());
+        assert!(validate_jwt("not.a.jwt", "secret", false).is_err());
     }
 
     // ── dispatch_method ─────────────────────────────────────────────────────
@@ -590,6 +635,7 @@ mod tests {
                 session_id.clone(),
                 McpSession {
                     id: session_id.clone(),
+                    owner: "test-agent".to_string(),
                     tx,
                 },
             );

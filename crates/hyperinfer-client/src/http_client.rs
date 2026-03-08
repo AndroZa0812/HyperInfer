@@ -5,6 +5,26 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
+/// Drain all complete newline-terminated lines from `raw_buf`.
+///
+/// Each call appends the next network chunk's bytes to `raw_buf`, then this
+/// helper repeatedly locates `b'\n'`, decodes the bytes *before* it as UTF-8
+/// (stripping an optional `b'\r'`), removes those bytes (plus the `\n`) from
+/// the front of `raw_buf`, and pushes the decoded string into `lines`.
+///
+/// Keeping the scan on raw bytes means a multibyte UTF-8 scalar that is split
+/// across two network chunks is never decoded until its final byte arrives,
+/// preventing the corruption that `String::from_utf8_lossy` would introduce
+/// when called on incomplete byte sequences.
+pub(crate) fn drain_lines(raw_buf: &mut Vec<u8>, lines: &mut Vec<String>) {
+    while let Some(pos) = raw_buf.iter().position(|&b| b == b'\n') {
+        let line_bytes = &raw_buf[..pos];
+        let line_bytes = line_bytes.strip_suffix(b"\r").unwrap_or(line_bytes);
+        lines.push(String::from_utf8_lossy(line_bytes).into_owned());
+        raw_buf.drain(..=pos);
+    }
+}
+
 pub struct HttpCaller {
     client: Client,
 }
@@ -276,22 +296,23 @@ impl HttpCaller {
 
             let mut byte_stream = response.bytes_stream();
 
-            // SSE lines can be split across chunks; buffer incomplete lines.
-            let mut buf = String::new();
+            // Buffer raw bytes so that multibyte UTF-8 sequences split across
+            // network chunks are never decoded mid-character.  Complete lines
+            // are drained and decoded by `drain_lines`.
+            let mut raw_buf: Vec<u8> = Vec::new();
 
             while let Some(bytes) = byte_stream.next().await {
                 let bytes = bytes?;
-                buf.push_str(&String::from_utf8_lossy(&bytes));
+                raw_buf.extend_from_slice(&bytes);
 
-                // Process all complete lines in the buffer.
-                while let Some(pos) = buf.find('\n') {
-                    let line = buf[..pos].trim_end_matches('\r').to_string();
-                    buf.drain(..=pos);
+                let mut lines = Vec::new();
+                drain_lines(&mut raw_buf, &mut lines);
 
+                for line in lines {
                     if line.is_empty() || line.starts_with(':') {
                         continue;
                     }
-                    let data = if let Some(d) = line.strip_prefix("data: ") { d } else { continue };
+                    let data = if let Some(d) = line.strip_prefix("data: ") { d.to_owned() } else { continue };
                     if data == "[DONE]" {
                         return;
                     }
@@ -321,25 +342,54 @@ impl HttpCaller {
                         prompt_tokens: u32,
                         completion_tokens: u32,
                     }
+                    // OpenAI streams provider errors as
+                    // {"error":{"message":"...","type":"...","code":"..."}}
+                    #[derive(Deserialize)]
+                    struct OpenAiStreamError {
+                        error: OpenAiErrorDetail,
+                    }
+                    #[derive(Deserialize)]
+                    struct OpenAiErrorDetail {
+                        message: String,
+                    }
 
-                    if let Ok(event) = serde_json::from_str::<StreamEvent>(data) {
-                        let finish_reason = event.choices.first()
-                            .and_then(|c| c.finish_reason.clone());
-                        let delta = event.choices.first()
-                            .map(|c| c.delta.content.clone())
-                            .unwrap_or_default();
-                        let usage = event.usage.map(|u| StreamUsage {
-                            input_tokens: u.prompt_tokens,
-                            output_tokens: u.completion_tokens,
-                        });
+                    // Surface provider-reported stream errors before attempting
+                    // normal event parsing.
+                    if let Ok(err_event) = serde_json::from_str::<OpenAiStreamError>(&data) {
+                        Err(HyperInferError::StreamParse {
+                            message: err_event.error.message,
+                            raw: data.clone(),
+                        })?;
+                        return;
+                    }
 
-                        yield ChatChunk {
-                            id: event.id,
-                            model: event.model,
-                            delta,
-                            finish_reason,
-                            usage,
-                        };
+                    match serde_json::from_str::<StreamEvent>(&data) {
+                        Ok(event) => {
+                            let finish_reason = event.choices.first()
+                                .and_then(|c| c.finish_reason.clone());
+                            let delta = event.choices.first()
+                                .map(|c| c.delta.content.clone())
+                                .unwrap_or_default();
+                            let usage = event.usage.map(|u| StreamUsage {
+                                input_tokens: u.prompt_tokens,
+                                output_tokens: u.completion_tokens,
+                            });
+
+                            yield ChatChunk {
+                                id: event.id,
+                                model: event.model,
+                                delta,
+                                finish_reason,
+                                usage,
+                            };
+                        }
+                        Err(parse_err) => {
+                            Err(HyperInferError::StreamParse {
+                                message: parse_err.to_string(),
+                                raw: data.clone(),
+                            })?;
+                            return;
+                        }
                     }
                 }
             }
@@ -425,7 +475,10 @@ impl HttpCaller {
             }
 
             let mut byte_stream = response.bytes_stream();
-            let mut buf = String::new();
+            // Buffer raw bytes so that multibyte UTF-8 sequences split across
+            // network chunks are never decoded mid-character.  Complete lines
+            // are drained and decoded by `drain_lines`.
+            let mut raw_buf: Vec<u8> = Vec::new();
             // Anthropic sends the message id in a `message_start` event.
             let mut stream_id = String::new();
             // `input_tokens` is reported in `message_start`; cache it here so
@@ -434,16 +487,16 @@ impl HttpCaller {
 
             while let Some(bytes) = byte_stream.next().await {
                 let bytes = bytes?;
-                buf.push_str(&String::from_utf8_lossy(&bytes));
+                raw_buf.extend_from_slice(&bytes);
 
-                while let Some(pos) = buf.find('\n') {
-                    let line = buf[..pos].trim_end_matches('\r').to_string();
-                    buf.drain(..=pos);
+                let mut lines = Vec::new();
+                drain_lines(&mut raw_buf, &mut lines);
 
+                for line in lines {
                     if line.is_empty() || line.starts_with(':') {
                         continue;
                     }
-                    let data = if let Some(d) = line.strip_prefix("data: ") { d } else { continue };
+                    let data = if let Some(d) = line.strip_prefix("data: ") { d.to_owned() } else { continue };
 
                     #[derive(Deserialize)]
                     struct AnthropicEvent {
@@ -474,8 +527,31 @@ impl HttpCaller {
                         output_tokens: Option<u32>,
                     }
 
-                    if let Ok(event) = serde_json::from_str::<AnthropicEvent>(data) {
-                        match event.event_type.as_str() {
+                    // Anthropic surfaces stream errors as
+                    // {"type":"error","error":{"type":"...","message":"..."}}
+                    #[derive(Deserialize)]
+                    struct AnthropicStreamError {
+                        error: AnthropicErrorDetail,
+                    }
+                    #[derive(Deserialize)]
+                    struct AnthropicErrorDetail {
+                        message: String,
+                    }
+
+                    match serde_json::from_str::<AnthropicEvent>(&data) {
+                        Ok(event) => match event.event_type.as_str() {
+                            "error" => {
+                                // Provider-level error event: parse the nested
+                                // error payload and surface it.
+                                let msg = serde_json::from_str::<AnthropicStreamError>(&data)
+                                    .map(|e| e.error.message)
+                                    .unwrap_or_else(|_| data.clone());
+                                Err(HyperInferError::StreamParse {
+                                    message: msg,
+                                    raw: data.clone(),
+                                })?;
+                                return;
+                            }
                             "message_start" => {
                                 if let Some(msg) = event.message {
                                     stream_id = msg.id;
@@ -517,6 +593,13 @@ impl HttpCaller {
                             }
                             "message_stop" => return,
                             _ => {}
+                        },
+                        Err(parse_err) => {
+                            Err(HyperInferError::StreamParse {
+                                message: parse_err.to_string(),
+                                raw: data.clone(),
+                            })?;
+                            return;
                         }
                     }
                 }
@@ -706,5 +789,84 @@ mod tests {
 
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].content, "Hello");
+    }
+
+    // --- drain_lines: UTF-8 split-chunk safety tests ---
+
+    /// Helper: feed byte slices one at a time, simulating network chunks, and
+    /// collect all lines drained across all calls.
+    fn feed_chunks(chunks: &[&[u8]]) -> (Vec<String>, Vec<u8>) {
+        let mut raw_buf: Vec<u8> = Vec::new();
+        let mut all_lines: Vec<String> = Vec::new();
+        for chunk in chunks {
+            raw_buf.extend_from_slice(chunk);
+            drain_lines(&mut raw_buf, &mut all_lines);
+        }
+        (all_lines, raw_buf)
+    }
+
+    #[test]
+    fn test_drain_lines_single_chunk() {
+        let (lines, remainder) = feed_chunks(&[b"data: hello\ndata: world\n"]);
+        assert_eq!(lines, vec!["data: hello", "data: world"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_crlf_endings() {
+        let (lines, remainder) = feed_chunks(&[b"data: hello\r\ndata: world\r\n"]);
+        assert_eq!(lines, vec!["data: hello", "data: world"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_incomplete_line_buffered() {
+        // The second chunk does not end with '\n', so it stays in the buffer.
+        let (lines, remainder) = feed_chunks(&[b"data: hello\n", b"data: partial"]);
+        assert_eq!(lines, vec!["data: hello"]);
+        assert_eq!(remainder, b"data: partial");
+    }
+
+    #[test]
+    fn test_drain_lines_multibyte_split_across_chunks() {
+        // U+00E9 LATIN SMALL LETTER É encodes as [0xC3, 0xA9] in UTF-8.
+        // Split: first chunk ends with the first byte (0xC3), second chunk
+        // carries the second byte (0xA9) plus the newline.
+        // The old String::from_utf8_lossy-per-chunk approach would replace
+        // 0xC3 with U+FFFD in the first chunk and produce garbage; the new
+        // approach buffers raw bytes and only decodes after the '\n' arrives.
+        let chunk1: &[u8] = b"data: caf\xc3"; // incomplete É
+        let chunk2: &[u8] = b"\xa9\ndata: done\n"; // complete É + newline
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2]);
+        assert_eq!(lines[0], "data: café");
+        assert_eq!(lines[1], "data: done");
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_three_byte_split_across_three_chunks() {
+        // U+4E2D CJK UNIFIED IDEOGRAPH 中 encodes as [0xE4, 0xB8, 0xAD].
+        // Split across three separate network chunks.
+        let chunk1: &[u8] = b"data: \xe4";
+        let chunk2: &[u8] = b"\xb8";
+        let chunk3: &[u8] = b"\xad\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2, chunk3]);
+        assert_eq!(lines, vec!["data: 中"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_empty_lines_preserved() {
+        // SSE uses blank lines as event separators; they must survive as empty
+        // strings so the caller's `line.is_empty()` check can skip them.
+        let (lines, _) = feed_chunks(&[b"data: hello\n\ndata: world\n"]);
+        assert_eq!(lines, vec!["data: hello", "", "data: world"]);
+    }
+
+    #[test]
+    fn test_drain_lines_no_newline_nothing_emitted() {
+        let (lines, remainder) = feed_chunks(&[b"data: no newline yet"]);
+        assert!(lines.is_empty());
+        assert_eq!(remainder, b"data: no newline yet");
     }
 }

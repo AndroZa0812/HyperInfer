@@ -9,7 +9,7 @@ name: Release
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+*"
 
 permissions: {}
 
@@ -43,9 +43,9 @@ jobs:
         run: |
           uvx git-cliff --latest --strip header 2>/dev/null > RELEASE_NOTES.md || echo "No changelog entries found." > RELEASE_NOTES.md
           {
-            echo "content<<EOF"
+            echo "content<<RELEASE_NOTES_EOF"
             cat RELEASE_NOTES.md
-            echo "EOF"
+            echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------

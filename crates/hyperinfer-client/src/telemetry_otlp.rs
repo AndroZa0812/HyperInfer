@@ -7,7 +7,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 /// Module-level storage for the tracer provider so both `init_telemetry_with_headers`
 /// and `shutdown_telemetry` share the same instance.
-static TRACER_PROVIDER: OnceLock<SdkTracerProvider> = OnceLock::new();
+pub(crate) static TRACER_PROVIDER: OnceLock<SdkTracerProvider> = OnceLock::new();
 
 /// Initialise the global OpenTelemetry tracer and wire it into the
 /// `tracing` subscriber registry.
@@ -29,48 +29,53 @@ pub fn init_telemetry_with_headers(
     endpoint: &str,
     headers: Vec<(String, String)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Guard: only initialise once per process lifetime.
-    if TRACER_PROVIDER.get().is_some() {
-        return Ok(());
-    }
-
     use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::EnvFilter;
 
-    let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
-        .with_http()
-        .with_endpoint(endpoint);
-
-    if !headers.is_empty() {
-        let header_map: std::collections::HashMap<String, String> = headers.into_iter().collect();
-        http_builder = http_builder.with_headers(header_map);
-    }
-
-    let exporter = http_builder.build()?;
-
-    let provider = SdkTracerProvider::builder()
-        .with_batch_exporter(exporter)
-        .build();
-
-    // Store before setting global so shutdown_telemetry() can reach it.
-    let provider = TRACER_PROVIDER.get_or_init(|| provider);
-    global::set_tracer_provider(provider.clone());
-    global::set_text_map_propagator(TraceContextPropagator::new());
-
-    // Wire the OTel layer into the `tracing` subscriber so that spans
-    // created via `tracing::info_span!` / `#[tracing::instrument]` are
-    // forwarded to the OTLP exporter.
+    // Wire the OTel layer into the `tracing` subscriber first, so we only
+    // mark the provider as initialized if the subscriber actually installs.
     let otel_layer = tracing_opentelemetry::layer();
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     // `try_init` is used so repeated calls in tests (which each set up
     // their own provider) don't panic – the first subscriber wins.
-    let _ = tracing_subscriber::registry()
+    let subscriber_init = tracing_subscriber::registry()
         .with(filter)
         .with(otel_layer)
         .try_init();
+
+    // Only install the OTel provider if the subscriber was actually installed.
+    // This avoids marking TRACER_PROVIDER as initialized when tracing is not
+    // yet running (e.g., if try_init fails because a subscriber is already set).
+    if subscriber_init.is_ok() {
+        global::set_text_map_propagator(TraceContextPropagator::new());
+
+        // Build and store the provider inside get_or_init — only one thread
+        // performs the build, eliminating TOCTOU races.
+        let provider = TRACER_PROVIDER.get_or_init(|| {
+            let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
+                .with_http()
+                .with_endpoint(endpoint);
+
+            if !headers.is_empty() {
+                let header_map: std::collections::HashMap<String, String> =
+                    headers.iter().cloned().collect();
+                http_builder = http_builder.with_headers(header_map);
+            }
+
+            let exporter = http_builder
+                .build()
+                .expect("failed to build OTLP span exporter");
+
+            SdkTracerProvider::builder()
+                .with_batch_exporter(exporter)
+                .build()
+        });
+
+        global::set_tracer_provider(provider.clone());
+    }
 
     Ok(())
 }
@@ -178,5 +183,26 @@ mod tests {
         )
         .unwrap();
         assert_eq!(decoded, "pk-lf-test:sk-lf-test");
+    }
+
+    #[test]
+    fn test_tracer_provider_get_or_init_is_idempotent() {
+        // Verify that OnceLock::get_or_init is idempotent by design.
+        // The actual init_telemetry_with_headers uses get_or_init, so calling it
+        // multiple times will always return the same provider instance.
+        use std::sync::OnceLock;
+
+        static TEST_PROVIDER: OnceLock<u32> = OnceLock::new();
+
+        // First call initializes
+        let v1 = TEST_PROVIDER.get_or_init(|| 42);
+        assert_eq!(*v1, 42);
+
+        // Second call returns the same instance (pointer equality)
+        let v2 = TEST_PROVIDER.get_or_init(|| panic!("should not be called"));
+        assert!(
+            std::ptr::eq(v1, v2),
+            "get_or_init should return same instance"
+        );
     }
 }

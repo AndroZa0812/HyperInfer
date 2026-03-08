@@ -6,6 +6,7 @@ pub mod mirroring;
 pub mod router;
 pub mod telemetry;
 pub mod telemetry_otlp;
+mod util;
 
 pub use cache::ExactMatchCache;
 pub use http_client::HttpCaller;
@@ -24,8 +25,111 @@ use hyperinfer_core::{
 };
 use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
+
+/// Wraps a provider `ChatChunk` stream and performs the same accounting as
+/// `chat()` once the stream terminates (naturally or via an error):
+///
+/// - Fires Redis telemetry off the critical path via `tokio::spawn`.
+/// - Records output-token usage in the rate-limiter bucket.
+/// - Sets OTel span usage / response attributes.
+///
+/// The accounting is triggered exactly once, either when a `[DONE]`-equivalent
+/// chunk with a `finish_reason` is seen **or** when the stream signals
+/// `Poll::Ready(None)`.
+struct AccountedStream {
+    inner: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>,
+    telemetry: Telemetry,
+    rate_limiter: RateLimiter,
+    key: String,
+    model: String,
+    start: std::time::Instant,
+    /// Accumulated token counts from the stream's usage chunk (if any).
+    input_tokens: u32,
+    output_tokens: u32,
+    /// Guards against running the accounting block more than once.
+    accounted: bool,
+    /// OTel span that lives for the full stream lifetime.
+    span: tracing::Span,
+}
+
+impl AccountedStream {
+    /// Run the accounting side-effects exactly once.
+    fn account(&mut self) {
+        if self.accounted {
+            return;
+        }
+        self.accounted = true;
+
+        let elapsed = self.start.elapsed().as_millis() as u64;
+        let input_tokens = self.input_tokens;
+        let output_tokens = self.output_tokens;
+
+        crate::telemetry_otlp::set_gen_ai_usage(
+            &tracing::Span::current(),
+            input_tokens,
+            output_tokens,
+        );
+
+        // Telemetry write is off the critical path.
+        let telemetry = self.telemetry.clone();
+        let key = self.key.clone();
+        let model = self.model.clone();
+        tokio::spawn(async move {
+            if let Err(e) = telemetry
+                .record_with_tokens(&key, &model, input_tokens, output_tokens, elapsed)
+                .await
+            {
+                tracing::warn!(error = %e, "stream telemetry record failed");
+            }
+        });
+
+        // Rate-limiter token-bucket update is lightweight and synchronous-ish;
+        // run it in a spawn to avoid blocking the poll path.
+        let rate_limiter = self.rate_limiter.clone();
+        let key2 = self.key.clone();
+        let total = (input_tokens + output_tokens) as u64;
+        tokio::spawn(async move {
+            let _ = rate_limiter.record_usage(&key2, total).await;
+        });
+    }
+}
+
+impl Stream for AccountedStream {
+    type Item = Result<ChatChunk, HyperInferError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        // Clone the span so the Entered guard holds no borrow into `self`,
+        // allowing subsequent mutable borrows of other fields.
+        let _enter = self.span.clone().entered();
+        match self.inner.as_mut().poll_next(cx) {
+            Poll::Ready(Some(Ok(chunk))) => {
+                // Capture usage from whatever chunk carries it (typically the last).
+                if let Some(ref u) = chunk.usage {
+                    self.input_tokens = u.input_tokens;
+                    self.output_tokens = u.output_tokens;
+                }
+                // If this chunk has a finish_reason the stream is done; account now
+                // so the span attributes are set while the span is still open.
+                if chunk.finish_reason.is_some() {
+                    self.account();
+                }
+                Poll::Ready(Some(Ok(chunk)))
+            }
+            Poll::Ready(Some(Err(e))) => {
+                self.account();
+                Poll::Ready(Some(Err(e)))
+            }
+            Poll::Ready(None) => {
+                self.account();
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
 
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
@@ -191,11 +295,18 @@ impl HyperInferClient {
             // Store successful response in exact-match cache.
             self.cache.set(&request, &response).await;
 
-            // Record async Redis telemetry (fire-and-forget).
-            let _ = self
-                .telemetry
-                .record_with_tokens(key, &model, input_tokens, output_tokens, elapsed)
-                .await;
+            // Record async Redis telemetry off the critical path.
+            let telemetry = self.telemetry.clone();
+            let key_owned = key.to_string();
+            let model_owned = model.clone();
+            tokio::spawn(async move {
+                if let Err(e) = telemetry
+                    .record_with_tokens(&key_owned, &model_owned, input_tokens, output_tokens, elapsed)
+                    .await
+                {
+                    tracing::warn!(error = %e, "telemetry record failed");
+                }
+            });
 
             // Record usage for rate-limiter token bucket.
             let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
@@ -278,11 +389,8 @@ impl HyperInferClient {
             (model, provider, api_key)
         };
 
-        // TODO(phase4): Add OTel span (using .instrument()) and record rate-limiter
-        // token usage once the stream is exhausted (requires wrapping the stream).
-
         // 3. Dispatch to the correct SSE stream.
-        let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
+        let provider_stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
             match provider {
                 Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
                 Provider::Anthropic => self
@@ -298,6 +406,34 @@ impl HyperInferClient {
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 
-        Ok(stream)
+        // 4. Create an OTel span for the stream lifetime and enrich it with
+        //    resolved provider / model information (mirrors chat()).
+        let span = tracing::info_span!(
+            "gen_ai.chat_stream",
+            gen_ai.operation.name = "chat_stream",
+            gen_ai.request.model = %request.model,
+        );
+        let provider_name = provider.to_string();
+        crate::telemetry_otlp::set_gen_ai_attributes(&span, &provider_name, &model, "chat_stream");
+
+        // 5. Wrap the provider stream so usage/telemetry are recorded on
+        //    termination — the same accounting chat() performs, but deferred
+        //    to when the last chunk (or an error) is polled.
+        //    The span is stored inside the wrapper; poll_next enters it on
+        //    every poll so it covers the full stream lifetime.
+        let stream = AccountedStream {
+            inner: provider_stream,
+            telemetry: self.telemetry.clone(),
+            rate_limiter: self.rate_limiter.clone(),
+            key: key.to_string(),
+            model,
+            start: std::time::Instant::now(),
+            input_tokens: 0,
+            output_tokens: 0,
+            accounted: false,
+            span,
+        };
+
+        Ok(Box::pin(stream))
     }
 }

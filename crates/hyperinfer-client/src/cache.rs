@@ -70,7 +70,7 @@ impl ExactMatchCache {
 
     /// Compute the cache key for `request`.
     pub fn cache_key(request: &ChatRequest) -> String {
-        let json = serde_json::to_string(request).unwrap_or_default();
+        let json = serde_json::to_string(request).expect("ChatRequest always serializes");
         let mut hasher = Sha256::new();
         hasher.update(json.as_bytes());
         let hash = format!("{:x}", hasher.finalize());

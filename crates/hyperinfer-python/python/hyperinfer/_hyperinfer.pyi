@@ -33,7 +33,7 @@ class HyperInferClient:
     async def init(self) -> None:
         """Initialise the underlying Rust client.
 
-        Must be awaited before calling :meth:`chat`.  Idempotent – subsequent
+        Must be awaited before calling :meth:`chat`.  Idempotent - subsequent
         calls are no-ops.
         """
         ...
@@ -113,7 +113,7 @@ class HyperInferClient:
     async def close(self) -> None:
         """Flush pending telemetry and release resources.
 
-        Optional – safe to call multiple times.
+        Optional - safe to call multiple times.
         """
         ...
 

@@ -193,9 +193,8 @@ pub struct HyperInferClient {
     inner: Arc<RwLock<Option<RustClient>>>,
     redis_url: String,
     /// Python config dict stored until `init()` is awaited.
-    /// Wrapped in Arc so it can be sent into an async future without requiring
-    /// `Py<PyAny>` to implement Clone (which it does not in PyO3 0.28).
-    config_dict: Arc<Option<Py<PyAny>>>,
+    /// Wrapped in Arc<RwLock> so we can take() and drop the Py object after init.
+    config_dict: Arc<RwLock<Option<Py<PyAny>>>>,
 }
 
 #[pymethods]
@@ -211,7 +210,7 @@ impl HyperInferClient {
         Self {
             inner: Arc::new(RwLock::new(None)),
             redis_url,
-            config_dict: Arc::new(config),
+            config_dict: Arc::new(RwLock::new(config)),
         }
     }
 
@@ -224,10 +223,13 @@ impl HyperInferClient {
         let config_dict = self.config_dict.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Deserialise the Python config dict (if provided) on the Python
-            // thread, then release the GIL for the async Rust initialisation.
-            let config = Python::try_attach(|py| {
-                if let Some(dict) = config_dict.as_ref() {
+            // Take the Python config dict (if provided) and release it after extraction.
+            let mut config_guard = config_dict.write().await;
+            let taken = config_guard.take();
+            drop(config_guard);
+
+            let config = match Python::try_attach(|py| {
+                if let Some(dict) = taken {
                     let bound: Bound<'_, PyAny> = dict.bind(py).clone();
                     config_from_py(py, &bound)
                         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
@@ -240,10 +242,15 @@ impl HyperInferClient {
                         default_provider: None,
                     })
                 }
-            })
-            .ok_or_else(|| {
-                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
-            })??;
+            }) {
+                Some(Ok(config)) => config,
+                Some(Err(e)) => return Err(e),
+                None => {
+                    return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                        "Failed to attach to Python",
+                    ))
+                }
+            };
 
             let client = RustClient::new(&redis_url, config)
                 .await

@@ -19,6 +19,9 @@ pub enum HyperInferError {
     #[error("API error ({status}): {message}")]
     ApiError { status: u16, message: String },
 
+    #[error("SSE parse error: {message} (raw: {raw})")]
+    StreamParse { message: String, raw: String },
+
     #[error("Database error")]
     Database(#[from] sqlx::Error),
 

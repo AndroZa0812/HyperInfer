@@ -2,10 +2,22 @@
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from hyperinfer._hyperinfer import HyperInferClient
 from hyperinfer.config import Config
+
+# This block is seen by IDEs/Linters but ignored at runtime
+if TYPE_CHECKING:
+    from hyperinfer._hyperinfer import HyperInferClient
+
+
+def __getattr__(name: str) -> type["HyperInferClient"]:
+    """Lazy-load HyperInferClient from the native Rust extension."""
+    if name == "HyperInferClient":
+        from hyperinfer._hyperinfer import HyperInferClient as _HyperInferClient
+
+        return _HyperInferClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 class Client:

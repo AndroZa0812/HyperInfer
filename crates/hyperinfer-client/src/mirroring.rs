@@ -19,6 +19,7 @@
 //! Thread-safety: the config is stored behind an `Arc<RwLock<…>>` so it can
 //! be hot-swapped at runtime without restarting the client.
 
+use crate::util::rand_f64;
 use crate::HttpCaller;
 use crate::Router;
 use hyperinfer_core::{types::Provider, ChatRequest, Config};
@@ -132,17 +133,17 @@ pub fn maybe_mirror(
 
         match result {
             Ok(resp) => {
-                let content = resp
+                let content_len = resp
                     .choices
                     .first()
-                    .map(|c| c.message.content.as_str())
-                    .unwrap_or("<empty>");
+                    .map(|c| c.message.content.len())
+                    .unwrap_or(0);
                 tracing::debug!(
                     mirror_model = %model,
                     input_tokens = resp.usage.input_tokens,
                     output_tokens = resp.usage.output_tokens,
-                    "Mirror response (first 120 chars): {}",
-                    &content.chars().take(120).collect::<String>()
+                    content_len,
+                    "Mirror response received",
                 );
             }
             Err(e) => {
@@ -150,20 +151,6 @@ pub fn maybe_mirror(
             }
         }
     });
-}
-
-/// Cheap pseudo-random float in `[0.0, 1.0)` without an external RNG dep.
-/// Uses the low bits of the current system time (not monotonic — may repeat
-/// on rapid successive calls, but is sufficient for probabilistic sampling).
-fn rand_f64() -> f64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.subsec_nanos())
-        .unwrap_or(0);
-    // Mix the bits a little.
-    let mixed = nanos.wrapping_mul(2654435761);
-    (mixed as f64) / (u32::MAX as f64 + 1.0)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -193,14 +180,6 @@ mod tests {
         let cloned = cfg.clone();
         assert_eq!(cloned.model, "gpt-4o");
         assert!((cloned.sample_rate - 0.5).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_rand_f64_in_range() {
-        for _ in 0..100 {
-            let v = rand_f64();
-            assert!((0.0..1.0).contains(&v));
-        }
     }
 
     #[tokio::test]

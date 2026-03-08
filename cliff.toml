@@ -20,12 +20,16 @@ body = """
 ### {{ group | upper_first }}
 {% for commit in commits %}
 - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
-{{ commit.message | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`]({{ commit.id }}))\
+{{ commit.message | upper_first }} ([`{{ commit.id | truncate(length=7, end="") }}`]({{ remote.link }}/commit/{{ commit.id }}))\
 {% endfor %}
 {% endfor %}\n
 """
 trim = true
 footer = ""
+
+[remote.github]
+owner = "AndroZa0812"
+repo = "HyperInfer"
 
 [git]
 conventional_commits = true
@@ -45,7 +49,7 @@ commit_parsers = [
 ]
 
 # Only include commits since the last tag
-filter_commits = false
+filter_commits = true
 tag_pattern = "v[0-9].*"
 skip_tags = ""
 ignore_tags = ""

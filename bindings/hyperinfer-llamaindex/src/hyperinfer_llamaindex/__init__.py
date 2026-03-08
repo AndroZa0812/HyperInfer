@@ -91,11 +91,18 @@ class HyperInferLLM(CustomLLM):
         Jupyter, LangGraph nodes).
         """
         _sentinel = object()
-        chunk_queue: queue.Queue[CompletionResponse | BaseException | object] = queue.Queue()
+        # Bounded to 1: producer blocks until the consumer takes each chunk,
+        # providing natural backpressure and bounding peak memory to one chunk.
+        chunk_queue: queue.Queue[CompletionResponse | BaseException | object] = queue.Queue(
+            maxsize=1
+        )
+        cancel_event = threading.Event()
 
         async def _producer() -> None:
             try:
                 async for r in await self.astream_complete(prompt, formatted=formatted, **kwargs):
+                    if cancel_event.is_set():
+                        break
                     chunk_queue.put(r)
             except Exception as exc:  # noqa: BLE001
                 chunk_queue.put(exc)
@@ -108,14 +115,28 @@ class HyperInferLLM(CustomLLM):
         def _gen() -> CompletionResponseGen:
             t = threading.Thread(target=_run_producer, daemon=True)
             t.start()
-            while True:
-                item = chunk_queue.get()
-                if item is _sentinel:
-                    break
-                if isinstance(item, BaseException):
-                    raise item
-                yield cast(CompletionResponse, item)
-            t.join()
+            try:
+                while True:
+                    item = chunk_queue.get()
+                    if item is _sentinel:
+                        break
+                    if isinstance(item, BaseException):
+                        raise item
+                    yield cast(CompletionResponse, item)
+            except GeneratorExit:
+                cancel_event.set()
+            except BaseException:
+                cancel_event.set()
+                raise
+            finally:
+                # Drain the queue so the producer is never blocked on put()
+                # and can observe cancel_event / reach the sentinel.
+                while not chunk_queue.empty():
+                    try:
+                        chunk_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                t.join()
 
         return _gen()
 
