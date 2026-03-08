@@ -93,9 +93,7 @@ class TestHyperInferChatModel:
         """Test async generation with SystemMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Response with system context"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Response with system context"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -115,9 +113,7 @@ class TestHyperInferChatModel:
         """Test async generation with AIMessage."""
         model = HyperInferChatModel(model="gpt-4")
 
-        mock_response = {
-            "choices": [{"message": {"content": "Continuing conversation"}}]
-        }
+        mock_response = {"choices": [{"message": {"content": "Continuing conversation"}}]}
 
         with patch.object(model.client, "chat", new_callable=AsyncMock) as mock_chat:
             mock_chat.return_value = mock_response
@@ -137,9 +133,7 @@ class TestHyperInferChatModel:
         """Test synchronous generation."""
         model = HyperInferChatModel(model="gpt-4")
 
-        with patch.object(
-            model, "_agenerate", new_callable=AsyncMock
-        ) as mock_agenerate:
+        with patch.object(model, "_agenerate", new_callable=AsyncMock) as mock_agenerate:
             mock_agenerate.return_value = MagicMock()
 
             messages = [HumanMessage(content="Test")]
@@ -204,7 +198,7 @@ class TestHyperInferChatModel:
 
             assert model.model == "claude-3"
             assert model.virtual_key == "my-key"
-            MockClient.assert_called_once_with("redis://localhost:6379")
+            MockClient.assert_called_once_with("redis://localhost:6379", config)
             mock_client_instance.init.assert_called_once()
 
 

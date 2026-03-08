@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import queue
+import threading
 from typing import Any, cast
 
 from hyperinfer import Client, Config
@@ -52,9 +54,7 @@ class HyperInferLLM(CustomLLM):
         )
 
     @llm_completion_callback()
-    def complete(
-        self, prompt: str, formatted: bool = False, **kwargs: Any
-    ) -> CompletionResponse:
+    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
         return cast(CompletionResponse, _run_sync(self._acomplete(prompt, **kwargs)))
 
     @llm_completion_callback()
@@ -83,23 +83,39 @@ class HyperInferLLM(CustomLLM):
     def stream_complete(
         self, prompt: str, formatted: bool = False, **kwargs: Any
     ) -> CompletionResponseGen:
-        """Synchronous streaming — collects chunks from the async generator.
+        """Synchronous streaming — yields chunks as they arrive from the async generator.
 
-        Safe to call from both plain-sync and already-running-async contexts
-        (FastAPI, Jupyter, LangGraph nodes).  Prefer :meth:`astream_complete`
-        when already inside an async context to avoid the thread-pool overhead.
+        Uses a background thread + ``queue.Queue`` so chunks are forwarded
+        incrementally rather than collected into a list first.  Safe to call
+        from both plain-sync and already-running-async contexts (FastAPI,
+        Jupyter, LangGraph nodes).
         """
+        _sentinel = object()
+        chunk_queue: queue.Queue[CompletionResponse | BaseException | object] = queue.Queue()
 
-        async def _collect() -> list[CompletionResponse]:
-            return [
-                r
-                async for r in await self.astream_complete(
-                    prompt, formatted=formatted, **kwargs
-                )
-            ]
+        async def _producer() -> None:
+            try:
+                async for r in await self.astream_complete(prompt, formatted=formatted, **kwargs):
+                    chunk_queue.put(r)
+            except Exception as exc:  # noqa: BLE001
+                chunk_queue.put(exc)
+            finally:
+                chunk_queue.put(_sentinel)
+
+        def _run_producer() -> None:
+            asyncio.run(_producer())
 
         def _gen() -> CompletionResponseGen:
-            yield from _run_sync(_collect())
+            t = threading.Thread(target=_run_producer, daemon=True)
+            t.start()
+            while True:
+                item = chunk_queue.get()
+                if item is _sentinel:
+                    break
+                if isinstance(item, BaseException):
+                    raise item
+                yield cast(CompletionResponse, item)
+            t.join()
 
         return _gen()
 
@@ -151,9 +167,10 @@ class HyperInferLLM(CustomLLM):
     ) -> HyperInferLLM:
         """Create an instance with configuration.
 
-        The underlying client is initialised lazily on the first call to
-        :meth:`complete` or :meth:`_acomplete`, so this factory is safe to call
-        from both sync and async contexts without risk of event-loop conflicts.
+        The underlying :class:`~hyperinfer.Client` is constructed eagerly here.
+        Call :meth:`~hyperinfer.Client.init` (or use an ``async with`` block)
+        before invoking :meth:`complete` or :meth:`_acomplete` if you need the
+        connection to be established before the first request.
         """
         client = Client(redis_url=redis_url, config=config)
         return cls(client=client, model=model, virtual_key=virtual_key, **kwargs)

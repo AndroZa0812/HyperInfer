@@ -84,8 +84,8 @@ fn extract_bearer(headers: &HeaderMap) -> Option<String> {
 pub fn validate_jwt(token: &str, secret: &str) -> Result<McpClaims, jsonwebtoken::errors::Error> {
     let key = DecodingKey::from_secret(secret.as_bytes());
     let mut validation = Validation::new(Algorithm::HS256);
-    // Allow tokens that omit `exp` (for dev convenience); production callers
-    // should always include it.
+    // In production, exp should always be required. Only remove for dev mode.
+    #[cfg(debug_assertions)]
     validation.required_spec_claims.remove("exp");
     let data = decode::<McpClaims>(token, &key, &validation)?;
     Ok(data.claims)
@@ -253,12 +253,19 @@ pub async fn mcp_sse_handler(State(state): State<McpState>) -> impl IntoResponse
     }
 
     // Send the `endpoint` event immediately so the client knows where to POST.
-    let _ = tx
+    if tx
         .send(SseFrame {
             event: "endpoint".to_string(),
             data: format!("/mcp/message?session_id={}", session_id),
         })
-        .await;
+        .await
+        .is_err()
+    {
+        warn!(
+            "MCP SSE: failed to send endpoint event for session {}; client disconnected immediately",
+            session_id
+        );
+    }
 
     // Build the SSE stream from the channel: convert SseFrame → axum Event.
     let sessions_cleanup = state.sessions.clone();
@@ -313,7 +320,10 @@ pub async fn mcp_message_handler(
 
     let rpc_response = dispatch_method(&rpc_req);
 
-    let data = serde_json::to_string(&rpc_response).unwrap_or_else(|_| "{}".to_string());
+    let data = serde_json::to_string(&rpc_response).unwrap_or_else(|e| {
+        warn!("Failed to serialize JSON-RPC response: {}", e);
+        r#"{"jsonrpc":"2.0","error":{"code":-32603,"message":"Internal error"}}"#.to_string()
+    });
     let frame = SseFrame {
         event: "message".to_string(),
         data,
@@ -401,9 +411,9 @@ mod tests {
     async fn test_jwt_missing_header_returns_401() {
         let state = McpState::new("secret");
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
-        let resp = server.get("/mcp/health").await;
+        let resp: axum_test::TestResponse = server.get("/mcp/health").await;
         assert_eq!(resp.status_code(), StatusCode::UNAUTHORIZED);
     }
 
@@ -411,9 +421,9 @@ mod tests {
     async fn test_jwt_invalid_token_returns_401() {
         let state = McpState::new("secret");
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
-        let resp = server
+        let resp: axum_test::TestResponse = server
             .get("/mcp/health")
             .add_header(
                 axum::http::header::AUTHORIZATION,
@@ -427,11 +437,11 @@ mod tests {
     async fn test_jwt_wrong_secret_returns_401() {
         let state = McpState::new("correct-secret");
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         let bad_token = create_jwt("agent", "wrong-secret");
         let auth_value = format!("Bearer {}", bad_token);
-        let resp = server
+        let resp: axum_test::TestResponse = server
             .get("/mcp/health")
             .add_header(
                 axum::http::header::AUTHORIZATION,
@@ -446,12 +456,12 @@ mod tests {
         let secret = "test-secret";
         let state = McpState::new(secret);
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
 
         // A valid token should allow access to the protected health endpoint.
         let token = make_jwt(secret);
         let auth_value = format!("Bearer {}", token);
-        let resp = server
+        let resp: axum_test::TestResponse = server
             .get("/mcp/health")
             .add_header(
                 axum::http::header::AUTHORIZATION,
@@ -547,11 +557,11 @@ mod tests {
         let secret = "s";
         let state = McpState::new(secret);
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
         let token = make_jwt(secret);
         let auth_value = format!("Bearer {}", token);
 
-        let resp = server
+        let resp: axum_test::TestResponse = server
             .post("/mcp/message?session_id=does-not-exist")
             .add_header(
                 axum::http::header::AUTHORIZATION,
@@ -586,11 +596,11 @@ mod tests {
         }
 
         let app = build_app(state);
-        let server = TestServer::new(app).unwrap();
+        let server = TestServer::new(app);
         let token = make_jwt(secret);
         let auth_value = format!("Bearer {}", token);
 
-        let resp = server
+        let resp: axum_test::TestResponse = server
             .post(&format!("/mcp/message?session_id={}", session_id))
             .add_header(
                 axum::http::header::AUTHORIZATION,

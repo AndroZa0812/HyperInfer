@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import queue
+import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
@@ -73,13 +75,9 @@ class HyperInferChatModel(BaseChatModel):
             if isinstance(msg, HumanMessage):
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append(
-                    {"role": "assistant", "content": str(msg.content)}
-                )
+                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append(
-                    {"role": "system", "content": str(msg.content)}
-                )
+                formatted_messages.append({"role": "system", "content": str(msg.content)})
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -90,14 +88,13 @@ class HyperInferChatModel(BaseChatModel):
                 messages=formatted_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
+                **({"stop": stop} if stop else {}),
             )
         except Exception as e:
             raise RuntimeError(f"Chat request failed: {e}") from e
 
         try:
-            content = (
-                response.get("choices", [{}])[0].get("message", {}).get("content", "")
-            )
+            content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
         except (KeyError, IndexError, TypeError) as e:
             raise RuntimeError(f"Invalid response structure: {e}") from e
 
@@ -113,20 +110,40 @@ class HyperInferChatModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> Iterator[ChatGenerationChunk]:
-        """Synchronous streaming — drives the async generator on a background thread.
+        """Synchronous streaming — yields chunks as they arrive from the async generator.
 
-        Safe to call from both plain-sync and already-running-async contexts
-        (FastAPI, Jupyter, LangGraph nodes).  Prefer :meth:`_astream` when
-        already inside an async context to avoid the thread-pool overhead.
+        Uses a background thread + ``queue.Queue`` so chunks are forwarded
+        incrementally rather than collected into a list first.  Safe to call
+        from both plain-sync and already-running-async contexts (FastAPI,
+        Jupyter, LangGraph nodes).
         """
+        _sentinel = object()
+        chunk_queue: queue.Queue[ChatGenerationChunk | BaseException | object] = queue.Queue()
 
-        async def _collect() -> list[ChatGenerationChunk]:
-            return [
-                chunk
-                async for chunk in self._astream(messages, stop, run_manager, **kwargs)
-            ]
+        async def _producer() -> None:
+            try:
+                async for chunk in self._astream(messages, stop, run_manager, **kwargs):
+                    chunk_queue.put(chunk)
+            except Exception as exc:  # noqa: BLE001
+                chunk_queue.put(exc)
+            finally:
+                chunk_queue.put(_sentinel)
 
-        yield from _run_sync(_collect())
+        def _run_producer() -> None:
+            asyncio.run(_producer())
+
+        t = threading.Thread(target=_run_producer, daemon=True)
+        t.start()
+
+        while True:
+            item = chunk_queue.get()
+            if item is _sentinel:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            yield cast(ChatGenerationChunk, item)
+
+        t.join()
 
     async def _astream(
         self,
@@ -141,13 +158,9 @@ class HyperInferChatModel(BaseChatModel):
             if isinstance(msg, HumanMessage):
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
             elif isinstance(msg, AIMessage):
-                formatted_messages.append(
-                    {"role": "assistant", "content": str(msg.content)}
-                )
+                formatted_messages.append({"role": "assistant", "content": str(msg.content)})
             elif isinstance(msg, SystemMessage):
-                formatted_messages.append(
-                    {"role": "system", "content": str(msg.content)}
-                )
+                formatted_messages.append({"role": "system", "content": str(msg.content)})
             else:
                 formatted_messages.append({"role": "user", "content": str(msg.content)})
 
@@ -164,9 +177,7 @@ class HyperInferChatModel(BaseChatModel):
                 ai_chunk = AIMessageChunk(content=delta)
                 gen_chunk = ChatGenerationChunk(
                     message=ai_chunk,
-                    generation_info=(
-                        {"finish_reason": finish_reason} if finish_reason else None
-                    ),
+                    generation_info=({"finish_reason": finish_reason} if finish_reason else None),
                 )
                 if run_manager:
                     run_manager.on_llm_new_token(delta, chunk=gen_chunk)
@@ -184,7 +195,7 @@ class HyperInferChatModel(BaseChatModel):
         **kwargs: Any,
     ) -> HyperInferChatModel:
         """Create instance with configuration."""
-        client = Client(redis_url)
+        client = Client(redis_url, config)
         await client.init()
 
         instance = cls(

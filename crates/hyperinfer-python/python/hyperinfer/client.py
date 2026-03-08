@@ -1,5 +1,6 @@
 """High-level async client for HyperInfer."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -29,13 +30,21 @@ class Client:
         config_dict = config.to_dict() if config is not None else None
         self._inner = HyperInferClient(redis_url, config_dict)
         self._initialized = False
+        self._init_lock = asyncio.Lock()
 
     async def init(self) -> None:
-        """Initialize the client connection."""
+        """Initialize the client connection.
+
+        Uses double-checked locking so concurrent coroutines do not race to
+        initialise the underlying Rust client more than once.
+        """
         if self._initialized:
             return
-        await self._inner.init()
-        self._initialized = True
+        async with self._init_lock:
+            if self._initialized:
+                return
+            await self._inner.init()
+            self._initialized = True
 
     async def chat(
         self,

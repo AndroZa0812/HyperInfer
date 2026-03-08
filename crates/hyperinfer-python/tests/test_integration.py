@@ -23,7 +23,7 @@ def config():
     )
 
 
-def test_config_fluent_api(config):
+def test_config_fluent_api():
     config = (
         Config()
         .with_api_key("openai", "sk-test")

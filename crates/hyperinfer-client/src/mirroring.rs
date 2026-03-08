@@ -22,9 +22,19 @@
 use crate::HttpCaller;
 use crate::Router;
 use hyperinfer_core::{types::Provider, ChatRequest, Config};
-use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{RwLock, Semaphore};
 use tracing::warn;
+
+/// Maximum number of concurrent background mirror tasks.
+const MIRROR_CONCURRENCY_LIMIT: usize = 100;
+
+/// Module-level semaphore — shared across all `maybe_mirror` calls so we never
+/// have more than `MIRROR_CONCURRENCY_LIMIT` in-flight mirror tasks at once.
+fn mirror_semaphore() -> &'static Arc<Semaphore> {
+    static SEM: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    SEM.get_or_init(|| Arc::new(Semaphore::new(MIRROR_CONCURRENCY_LIMIT)))
+}
 
 /// Configuration for the traffic mirror.
 #[derive(Debug, Clone)]
@@ -51,7 +61,20 @@ pub fn maybe_mirror(
     _key: String,
     mut request: ChatRequest,
 ) {
+    // Acquire a permit before spawning; if already at capacity, skip this mirror
+    // request to avoid unbounded task growth.
+    let permit = match mirror_semaphore().clone().try_acquire_owned() {
+        Ok(p) => p,
+        Err(_) => {
+            tracing::debug!("Mirror skipped: concurrency limit reached");
+            return;
+        }
+    };
+
     tokio::spawn(async move {
+        // Hold the permit for the lifetime of this task.
+        let _permit = permit;
+
         // Sample check — read the mirror config, bail out quickly if disabled.
         let mirror_cfg = {
             let guard = mirror_handle.read().await;
@@ -119,7 +142,7 @@ pub fn maybe_mirror(
                     input_tokens = resp.usage.input_tokens,
                     output_tokens = resp.usage.output_tokens,
                     "Mirror response (first 120 chars): {}",
-                    &content[..content.len().min(120)]
+                    &content.chars().take(120).collect::<String>()
                 );
             }
             Err(e) => {
@@ -130,7 +153,8 @@ pub fn maybe_mirror(
 }
 
 /// Cheap pseudo-random float in `[0.0, 1.0)` without an external RNG dep.
-/// Uses the low bits of the current monotonic instant.
+/// Uses the low bits of the current system time (not monotonic — may repeat
+/// on rapid successive calls, but is sufficient for probabilistic sampling).
 fn rand_f64() -> f64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()

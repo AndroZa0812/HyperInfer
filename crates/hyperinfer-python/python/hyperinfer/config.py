@@ -43,9 +43,7 @@ class Config:
         self._model_aliases[alias] = target
         return self
 
-    def with_routing_rule(
-        self, name: str, priority: int, fallbacks: list[str]
-    ) -> "Config":
+    def with_routing_rule(self, name: str, priority: int, fallbacks: list[str]) -> "Config":
         """Add a routing rule.
 
         Args:
@@ -88,8 +86,12 @@ class Config:
             Self for method chaining.
         """
         self._quotas[key] = {
-            "max_requests_per_minute": max_requests_per_minute or rpm,
-            "max_tokens_per_minute": max_tokens_per_minute or tpm,
+            "max_requests_per_minute": (
+                max_requests_per_minute if max_requests_per_minute is not None else rpm
+            ),
+            "max_tokens_per_minute": (
+                max_tokens_per_minute if max_tokens_per_minute is not None else tpm
+            ),
             "budget_cents": budget_cents,
         }
         return self

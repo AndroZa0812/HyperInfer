@@ -23,7 +23,6 @@ lint:
     - black@26.3.0
     - isort@8.0.1
     - ruff@0.15.5
-    - ruff@0.15.5
     - actionlint@1.7.11
     - yamllint@1.38.0
     - osv-scanner@2.3.3
@@ -40,9 +39,7 @@ lint:
       paths:
         - .opencode/**
         - tests/**
-    - linters: [bandit]
-      paths:
-        - "**/tests/**"
+
 actions:
   disabled:
     - trunk-announce

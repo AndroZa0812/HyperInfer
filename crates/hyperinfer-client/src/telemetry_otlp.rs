@@ -1,5 +1,6 @@
 use opentelemetry::global;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use std::sync::OnceLock;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
@@ -15,10 +16,20 @@ pub fn init_telemetry(endpoint: &str) -> Result<(), Box<dyn std::error::Error + 
 
 /// Like [`init_telemetry`] but injects arbitrary HTTP headers into every
 /// OTLP export request (used for Langfuse Basic-Auth).
+///
+/// This function is idempotent: the tracer provider and subscriber are only
+/// initialised once per process.  Subsequent calls return `Ok(())` immediately
+/// to prevent batch-exporter thread leaks.
 pub fn init_telemetry_with_headers(
     endpoint: &str,
     headers: Vec<(String, String)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Guard: only initialise once per process lifetime.
+    static INITIALIZED: OnceLock<()> = OnceLock::new();
+    if INITIALIZED.set(()).is_err() {
+        return Ok(());
+    }
+
     use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;

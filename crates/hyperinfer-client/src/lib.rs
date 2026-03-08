@@ -25,6 +25,7 @@ use hyperinfer_core::{
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::Instrument as _;
 
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
@@ -84,134 +85,140 @@ impl HyperInferClient {
         }
 
         // Create a root OTel span following the GenAI Semantic Conventions.
+        // We use `.instrument(span)` on the inner async block so the span is
+        // properly propagated across every `.await` point (using `span.enter()`
+        // in an async function is unsafe — the guard can survive suspension).
         let span = tracing::info_span!(
             "gen_ai.chat",
             gen_ai.operation.name = "chat",
             gen_ai.request.model = %request.model,
         );
-        let _span_guard = span.enter();
 
-        let start = std::time::Instant::now();
+        async move {
+            let start = std::time::Instant::now();
 
-        // 1. Check rate limit
-        let allowed = self.rate_limiter.is_allowed(key, 1).await;
-        if let Err(e) = allowed {
-            return Err(HyperInferError::RateLimit(e.to_string()));
-        }
-        if !allowed.unwrap() {
-            return Err(HyperInferError::RateLimit(
-                "Rate limit exceeded".to_string(),
-            ));
-        }
+            // 1. Check rate limit
+            let allowed = self.rate_limiter.is_allowed(key, 1).await;
+            if let Err(e) = allowed {
+                return Err(HyperInferError::RateLimit(e.to_string()));
+            }
+            if !allowed.unwrap() {
+                return Err(HyperInferError::RateLimit(
+                    "Rate limit exceeded".to_string(),
+                ));
+            }
 
-        // 2. Resolve model alias
-        let (model, provider, api_key, config_snapshot) = {
-            let config = self.config.read().await;
-            let resolved = self.router.resolve(&request.model, &config);
+            // 2. Resolve model alias
+            let (model, provider, api_key, config_snapshot) = {
+                let config = self.config.read().await;
+                let resolved = self.router.resolve(&request.model, &config);
 
-            let (model, provider) = resolved.ok_or_else(|| {
-                HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!(
-                        "Unknown model: '{}'. No routing rule or alias found.",
-                        request.model
-                    ),
-                ))
-            })?;
-
-            let api_key = config
-                .api_keys
-                .get(&provider.to_string())
-                .cloned()
-                .ok_or_else(|| {
+                let (model, provider) = resolved.ok_or_else(|| {
                     HyperInferError::Config(std::io::Error::new(
                         std::io::ErrorKind::NotFound,
-                        format!("API key not found for provider: {:?}", provider),
+                        format!(
+                            "Unknown model: '{}'. No routing rule or alias found.",
+                            request.model
+                        ),
                     ))
                 })?;
 
-            (model, provider, api_key, Arc::new(config.clone()))
-        };
+                let api_key = config
+                    .api_keys
+                    .get(&provider.to_string())
+                    .cloned()
+                    .ok_or_else(|| {
+                        HyperInferError::Config(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("API key not found for provider: {:?}", provider),
+                        ))
+                    })?;
 
-        // Enrich span with the resolved provider and final model name.
-        let provider_name = provider.to_string();
-        crate::telemetry_otlp::set_gen_ai_attributes(
-            &tracing::Span::current(),
-            &provider_name,
-            &model,
-            "chat",
-        );
+                (model, provider, api_key, Arc::new(config.clone()))
+            };
 
-        // 3. Execute HTTP call
-        let response = match provider {
-            Provider::OpenAI => {
-                self.http_caller
-                    .call_openai(&model, &api_key, &request)
-                    .await?
-            }
-            Provider::Anthropic => {
-                self.http_caller
-                    .call_anthropic(&model, &api_key, &request)
-                    .await?
-            }
-            _ => {
-                return Err(HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "Unsupported provider",
-                )));
-            }
-        };
+            // Enrich span with the resolved provider and final model name.
+            let provider_name = provider.to_string();
+            crate::telemetry_otlp::set_gen_ai_attributes(
+                &tracing::Span::current(),
+                &provider_name,
+                &model,
+                "chat",
+            );
 
-        // 4. Record OTel usage and response attributes on the span.
-        let elapsed = start.elapsed().as_millis() as u64;
-        let input_tokens = response.usage.input_tokens;
-        let output_tokens = response.usage.output_tokens;
+            // 3. Execute HTTP call
+            let response = match provider {
+                Provider::OpenAI => {
+                    self.http_caller
+                        .call_openai(&model, &api_key, &request)
+                        .await?
+                }
+                Provider::Anthropic => {
+                    self.http_caller
+                        .call_anthropic(&model, &api_key, &request)
+                        .await?
+                }
+                _ => {
+                    return Err(HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "Unsupported provider",
+                    )));
+                }
+            };
 
-        crate::telemetry_otlp::set_gen_ai_usage(
-            &tracing::Span::current(),
-            input_tokens,
-            output_tokens,
-        );
+            // 4. Record OTel usage and response attributes on the span.
+            let elapsed = start.elapsed().as_millis() as u64;
+            let input_tokens = response.usage.input_tokens;
+            let output_tokens = response.usage.output_tokens;
 
-        let finish_reason = response
-            .choices
-            .first()
-            .and_then(|c| c.finish_reason.as_deref())
-            .unwrap_or("unknown");
-        crate::telemetry_otlp::set_gen_ai_response(
-            &tracing::Span::current(),
-            &response.id,
-            finish_reason,
-        );
+            crate::telemetry_otlp::set_gen_ai_usage(
+                &tracing::Span::current(),
+                input_tokens,
+                output_tokens,
+            );
 
-        // Store successful response in exact-match cache.
-        self.cache.set(&request, &response).await;
+            let finish_reason = response
+                .choices
+                .first()
+                .and_then(|c| c.finish_reason.as_deref())
+                .unwrap_or("unknown");
+            crate::telemetry_otlp::set_gen_ai_response(
+                &tracing::Span::current(),
+                &response.id,
+                finish_reason,
+            );
 
-        // Record async Redis telemetry (fire-and-forget).
-        let _ = self
-            .telemetry
-            .record_with_tokens(key, &model, input_tokens, output_tokens, elapsed)
-            .await;
+            // Store successful response in exact-match cache.
+            self.cache.set(&request, &response).await;
 
-        // Record usage for rate-limiter token bucket.
-        let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
-        let _ = self
-            .rate_limiter
-            .record_usage(key, total_tokens as u64)
-            .await;
+            // Record async Redis telemetry (fire-and-forget).
+            let _ = self
+                .telemetry
+                .record_with_tokens(key, &model, input_tokens, output_tokens, elapsed)
+                .await;
 
-        // 5. Fire-and-forget traffic mirror (if configured).
-        mirroring::maybe_mirror(
-            self.mirror.clone(),
-            self.http_caller.clone(),
-            self.router.clone(),
-            config_snapshot,
-            key.to_string(),
-            request,
-        );
+            // Record usage for rate-limiter token bucket.
+            let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
+            let _ = self
+                .rate_limiter
+                .record_usage(key, total_tokens as u64)
+                .await;
 
-        // 6. Return response
-        Ok(response)
+            // 5. Fire-and-forget traffic mirror (if configured).
+            mirroring::maybe_mirror(
+                self.mirror.clone(),
+                self.http_caller.clone(),
+                self.router.clone(),
+                config_snapshot,
+                key.to_string(),
+                request,
+            );
+
+            // 6. Return response
+            Ok(response)
+        }
+        .instrument(span)
+        .await
     }
 
     /// Stream token chunks for a chat request.
@@ -270,6 +277,9 @@ impl HyperInferClient {
 
             (model, provider, api_key)
         };
+
+        // TODO(phase4): Add OTel span (using .instrument()) and record rate-limiter
+        // token usage once the stream is exhausted (requires wrapping the stream).
 
         // 3. Dispatch to the correct SSE stream.
         let stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =

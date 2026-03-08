@@ -416,6 +416,9 @@ impl HttpCaller {
             let mut buf = String::new();
             // Anthropic sends the message id in a `message_start` event.
             let mut stream_id = String::new();
+            // `input_tokens` is reported in `message_start`; cache it here so
+            // the final `message_delta` chunk can include the correct value.
+            let mut cached_input_tokens: u32 = 0;
 
             while let Some(bytes) = byte_stream.next().await {
                 let bytes = bytes?;
@@ -465,6 +468,9 @@ impl HttpCaller {
                                 if let Some(msg) = event.message {
                                     stream_id = msg.id;
                                 }
+                                if let Some(u) = event.usage {
+                                    cached_input_tokens = u.input_tokens.unwrap_or(0);
+                                }
                             }
                             "content_block_delta" => {
                                 if let Some(delta) = event.delta {
@@ -481,11 +487,12 @@ impl HttpCaller {
                             }
                             "message_delta" => {
                                 // Final chunk: carries finish reason and usage.
+                                // input_tokens comes from message_start, not here.
                                 let finish_reason = event.delta
                                     .as_ref()
                                     .and_then(|d| d.stop_reason.clone());
                                 let usage = event.usage.map(|u| StreamUsage {
-                                    input_tokens: u.input_tokens.unwrap_or(0),
+                                    input_tokens: cached_input_tokens,
                                     output_tokens: u.output_tokens.unwrap_or(0),
                                 });
                                 yield ChatChunk {

@@ -35,7 +35,7 @@ impl ExactMatchCache {
         match redis::Client::open(redis_url) {
             Ok(client) => match ConnectionManager::new(client).await {
                 Ok(mgr) => {
-                    debug!("ExactMatchCache: connected to Redis at {}", redis_url);
+                    debug!("ExactMatchCache: connected to Redis");
                     Self {
                         conn: Some(Arc::new(Mutex::new(mgr))),
                         ttl_secs: DEFAULT_TTL_SECS,
