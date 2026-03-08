@@ -223,6 +223,7 @@ mod tests {
             max_tokens: Some(10),
             temperature: None,
             stream: None,
+            stop: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
@@ -247,6 +248,7 @@ mod tests {
             max_tokens: Some(10),
             temperature: None,
             stream: None,
+            stop: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
@@ -273,6 +275,7 @@ mod tests {
             max_tokens: Some(10),
             temperature: None,
             stream: None,
+            stop: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);

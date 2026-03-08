@@ -52,12 +52,15 @@ impl HttpCaller {
     ) -> Result<ChatResponse, HyperInferError> {
         let url = "https://api.openai.com/v1/chat/completions".to_string();
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "messages": request.messages,
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         });
+        if let Some(stop) = &request.stop {
+            body["stop"] = serde_json::json!(stop);
+        }
 
         let response = self
             .client
@@ -154,6 +157,9 @@ impl HttpCaller {
         if let Some(t) = request.temperature {
             body["temperature"] = serde_json::json!(t);
         }
+        if let Some(stop) = &request.stop {
+            body["stop_sequences"] = serde_json::json!(stop);
+        }
 
         let response = self
             .client
@@ -235,7 +241,7 @@ impl HttpCaller {
         let model = model.to_string();
         let api_key = api_key.to_string();
 
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "model": model,
             "messages": request.messages,
             "temperature": request.temperature,
@@ -243,6 +249,9 @@ impl HttpCaller {
             "stream": true,
             "stream_options": { "include_usage": true },
         });
+        if let Some(ref stop) = request.stop {
+            body["stop"] = serde_json::json!(stop);
+        }
 
         let client = self.client.clone();
 
@@ -388,6 +397,9 @@ impl HttpCaller {
         }
         if let Some(t) = request.temperature {
             body["temperature"] = serde_json::json!(t);
+        }
+        if let Some(ref stop) = request.stop {
+            body["stop_sequences"] = serde_json::json!(stop);
         }
 
         let client = self.client.clone();
@@ -639,6 +651,7 @@ mod tests {
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: None,
+            stop: None,
         };
 
         // We can't actually call OpenAI without a real API key and network,
@@ -672,6 +685,7 @@ mod tests {
             temperature: Some(0.5),
             max_tokens: Some(200),
             stream: None,
+            stop: None,
         };
 
         // Extract system message

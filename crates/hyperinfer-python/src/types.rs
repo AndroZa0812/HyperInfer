@@ -60,6 +60,10 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         .get_item("max_tokens")?
         .map(|v: Bound<'_, PyAny>| v.extract())
         .transpose()?;
+    let stop: Option<Vec<String>> = dict
+        .get_item("stop")?
+        .map(|v: Bound<'_, PyAny>| v.extract())
+        .transpose()?;
 
     Ok(ChatRequest {
         model,
@@ -67,6 +71,7 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         temperature,
         max_tokens,
         stream: None,
+        stop,
     })
 }
 

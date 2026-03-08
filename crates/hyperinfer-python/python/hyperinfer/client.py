@@ -53,6 +53,7 @@ class Client:
         messages: list[dict[str, str]],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        stop: list[str] | None = None,
     ) -> dict[str, Any]:
         """Send a chat request to the LLM gateway.
 
@@ -62,6 +63,7 @@ class Client:
             messages: List of message dicts with "role" and "content" keys.
             temperature: Sampling temperature (0.0-2.0).
             max_tokens: Maximum tokens to generate.
+            stop: Stop sequences; generation halts when any is produced.
 
         Returns:
             Response dictionary containing model output and usage info.
@@ -77,6 +79,8 @@ class Client:
             request["temperature"] = temperature
         if max_tokens is not None:
             request["max_tokens"] = max_tokens
+        if stop is not None:
+            request["stop"] = stop
 
         return await self._inner.chat(key, request)
 
@@ -87,6 +91,7 @@ class Client:
         messages: list[dict[str, str]],
         temperature: float | None = None,
         max_tokens: int | None = None,
+        stop: list[str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """Stream token chunks from the LLM gateway.
 
@@ -104,6 +109,7 @@ class Client:
             messages: Conversation history as role/content dicts.
             temperature: Sampling temperature (0.0–2.0).
             max_tokens: Maximum tokens to generate.
+            stop: Stop sequences; generation halts when any is produced.
 
         Example::
 
@@ -118,6 +124,8 @@ class Client:
             request["temperature"] = temperature
         if max_tokens is not None:
             request["max_tokens"] = max_tokens
+        if stop is not None:
+            request["stop"] = stop
 
         chunk_iter = await self._inner.chat_stream(key, request)
         async for chunk in chunk_iter:

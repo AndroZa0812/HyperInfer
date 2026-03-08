@@ -155,6 +155,7 @@ mod tests {
             max_tokens: Some(100),
             temperature: None,
             stream: None,
+            stop: None,
         }
     }
 

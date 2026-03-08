@@ -18,6 +18,9 @@ pub struct ChatRequest {
     /// When `true` the provider is asked to stream token chunks via SSE.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stream: Option<bool>,
+    /// Stop sequences: generation halts when any of these strings is produced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
 }
 
 /// A single streamed token delta from a provider SSE event.
@@ -195,6 +198,7 @@ mod tests {
             temperature: None,
             max_tokens: None,
             stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_err());
@@ -208,6 +212,7 @@ mod tests {
             temperature: None,
             max_tokens: None,
             stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_err());
@@ -224,6 +229,7 @@ mod tests {
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_ok());
