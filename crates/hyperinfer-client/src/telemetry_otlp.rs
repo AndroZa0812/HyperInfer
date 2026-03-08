@@ -1,8 +1,13 @@
 use opentelemetry::global;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::sync::OnceLock;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+/// Module-level storage for the tracer provider so both `init_telemetry_with_headers`
+/// and `shutdown_telemetry` share the same instance.
+static TRACER_PROVIDER: OnceLock<SdkTracerProvider> = OnceLock::new();
 
 /// Initialise the global OpenTelemetry tracer and wire it into the
 /// `tracing` subscriber registry.
@@ -25,8 +30,7 @@ pub fn init_telemetry_with_headers(
     headers: Vec<(String, String)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Guard: only initialise once per process lifetime.
-    static INITIALIZED: OnceLock<()> = OnceLock::new();
-    if INITIALIZED.set(()).is_err() {
+    if TRACER_PROVIDER.get().is_some() {
         return Ok(());
     }
 
@@ -46,11 +50,13 @@ pub fn init_telemetry_with_headers(
 
     let exporter = http_builder.build()?;
 
-    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .build();
 
-    global::set_tracer_provider(provider);
+    // Store before setting global so shutdown_telemetry() can reach it.
+    let provider = TRACER_PROVIDER.get_or_init(|| provider);
+    global::set_tracer_provider(provider.clone());
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     // Wire the OTel layer into the `tracing` subscriber so that spans
@@ -93,9 +99,12 @@ pub fn init_langfuse_telemetry(
 /// Flush and shut down the global tracer provider.
 ///
 /// Should be called before process exit to ensure all buffered spans are
-/// exported.
+/// exported.  opentelemetry_sdk 0.31 removed `global::shutdown_tracer_provider()`
+/// so we retain the provider in the OnceLock and shut it down directly.
 pub fn shutdown_telemetry() {
-    global::shutdown_tracer_provider();
+    if let Some(provider) = TRACER_PROVIDER.get() {
+        let _ = provider.shutdown();
+    }
 }
 
 // ---------------------------------------------------------------------------

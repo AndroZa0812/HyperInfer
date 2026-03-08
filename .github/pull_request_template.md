@@ -1,6 +1,7 @@
 ## Summary
 
 <!-- Brief description of changes and link to related issue -->
+
 Fixes #
 
 ## Type of Change
@@ -19,6 +20,7 @@ Fixes #
 - [ ] Manual testing performed
 
 **Test details:**
+
 <!-- Describe what was tested and how -->
 
 ## Code Quality

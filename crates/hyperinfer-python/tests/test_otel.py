@@ -203,9 +203,7 @@ class TestConfigOtelIntegration:
     def test_config_routing_rule(self):
         from hyperinfer.config import Config
 
-        cfg = Config().with_routing_rule(
-            "primary", priority=1, fallbacks=["gpt-4", "claude-3"]
-        )
+        cfg = Config().with_routing_rule("primary", priority=1, fallbacks=["gpt-4", "claude-3"])
         d = cfg.to_dict()
         assert len(d["routing_rules"]) == 1
         rule = d["routing_rules"][0]

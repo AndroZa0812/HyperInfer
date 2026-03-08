@@ -19,8 +19,49 @@ repos:
 
       - id: cargo-test
         name: cargo test
-        description: Run unit tests
-        entry: cargo test
+        description: Run Rust unit tests (excludes integration tests that require Docker)
+        entry: cargo test --workspace --lib --no-default-features
         language: system
         types: [rust]
+        pass_filenames: false
+
+      - id: ruff-lint
+        name: ruff lint
+        description: Lint Python files with ruff
+        entry: uv run ruff check --fix
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: ruff-format
+        name: ruff format
+        description: Format Python files with ruff
+        entry: uv run ruff format
+        language: system
+        types: [python]
+        pass_filenames: true
+
+      - id: mypy
+        name: mypy
+        description: Type-check Python files with mypy
+        entry: uv run mypy crates/hyperinfer-python/python bindings/hyperinfer-langchain/src bindings/hyperinfer-llamaindex/src
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: bandit
+        name: bandit
+        description: Security-check Python files with bandit
+        entry: uv run bandit
+        language: system
+        types: [python]
+        exclude: tests/
+        pass_filenames: true
+
+      - id: pytest-unit
+        name: pytest unit tests
+        description: Run Python unit tests (syncs workspace first to ensure all packages are installed)
+        entry: bash -c 'uv sync --all-packages --quiet && uv run pytest -m "not integration" --tb=short -q'
+        language: system
+        types: [python]
         pass_filenames: false

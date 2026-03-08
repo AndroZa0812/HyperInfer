@@ -402,11 +402,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 );
                 "hyperinfer-dev-secret".to_string()
             } else {
-                return Err(
-                    "MCP_JWT_SECRET must be set to a non-empty value. \
+                return Err("MCP_JWT_SECRET must be set to a non-empty value. \
                      For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
-                        .into(),
-                );
+                    .into());
             }
         }
     };
