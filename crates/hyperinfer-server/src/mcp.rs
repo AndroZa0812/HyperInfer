@@ -126,6 +126,23 @@ pub fn create_jwt(sub: &str, secret: &str) -> String {
 
 // ── Session registry ─────────────────────────────────────────────────────────
 
+struct SessionRemovalGuard {
+    sessions: SessionRegistry,
+    sid: String,
+}
+
+impl Drop for SessionRemovalGuard {
+    fn drop(&mut self) {
+        let sessions = self.sessions.clone();
+        let sid = self.sid.clone();
+        tokio::spawn(async move {
+            let mut sessions = sessions.write().await;
+            sessions.remove(&sid);
+            tracing::debug!("MCP SSE session {} removed by Drop guard", sid);
+        });
+    }
+}
+
 /// A single SSE event frame sent through the session channel.
 #[derive(Debug, Clone)]
 pub struct SseFrame {
@@ -279,6 +296,12 @@ pub async fn mcp_sse_handler(
         );
     }
 
+    // RAII guard for cleanup on stream drop.
+    let _guard = SessionRemovalGuard {
+        sessions: state.sessions.clone(),
+        sid: session_id.clone(),
+    };
+
     // Send the `endpoint` event immediately so the client knows where to POST.
     if tx
         .send(SseFrame {
@@ -292,6 +315,9 @@ pub async fn mcp_sse_handler(
             "MCP SSE: failed to send endpoint event for session {}; client disconnected immediately",
             session_id
         );
+        // Requirement (1): remove the entry if initial send fails
+        let mut sessions = state.sessions.write().await;
+        sessions.remove(&session_id);
     }
 
     // Build the SSE stream from the channel: convert SseFrame → axum Event.
@@ -299,6 +325,7 @@ pub async fn mcp_sse_handler(
     let sid_cleanup = session_id.clone();
 
     let stream = async_stream::stream! {
+        let _guard = _guard; // Move guard into stream to ensure it lives as long as the stream
         while let Some(frame) = rx.recv().await {
             let ev: Result<Event, Infallible> = Ok(
                 Event::default().event(frame.event).data(frame.data)
@@ -357,6 +384,11 @@ pub async fn mcp_message_handler(
 
     let rpc_response = dispatch_method(&rpc_req);
 
+    // If it's a notification (no ID), do not respond.
+    if rpc_req.id.is_none() {
+        return StatusCode::ACCEPTED.into_response();
+    }
+
     let data = serde_json::to_string(&rpc_response).unwrap_or_else(|e| {
         warn!("Failed to serialize JSON-RPC response: {}", e);
         let id_str = rpc_req
@@ -374,15 +406,23 @@ pub async fn mcp_message_handler(
         data,
     };
 
-    if session.tx.send(frame).await.is_err() {
-        warn!(
-            "POST /mcp/message: session {} SSE channel closed",
-            query.session_id
-        );
-        return (StatusCode::GONE, "Session stream closed").into_response();
+    match session.tx.try_send(frame) {
+        Ok(()) => StatusCode::ACCEPTED.into_response(),
+        Err(mpsc::error::TrySendError::Full(_)) => {
+            warn!(
+                "POST /mcp/message: session {} SSE channel full",
+                query.session_id
+            );
+            (StatusCode::SERVICE_UNAVAILABLE, "Session stream full").into_response()
+        }
+        Err(mpsc::error::TrySendError::Closed(_)) => {
+            warn!(
+                "POST /mcp/message: session {} SSE channel closed",
+                query.session_id
+            );
+            (StatusCode::GONE, "Session stream closed").into_response()
+        }
     }
-
-    StatusCode::ACCEPTED.into_response()
 }
 
 // ── Stream helper (used by tests) ─────────────────────────────────────────────

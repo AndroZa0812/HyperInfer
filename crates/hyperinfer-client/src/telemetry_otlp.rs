@@ -29,52 +29,52 @@ pub fn init_telemetry_with_headers(
     endpoint: &str,
     headers: Vec<(String, String)>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::{WithExportConfig, WithHttpConfig};
     use tracing_subscriber::layer::SubscriberExt;
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::EnvFilter;
 
-    // Wire the OTel layer into the `tracing` subscriber first, so we only
-    // mark the provider as initialized if the subscriber actually installs.
-    let otel_layer = tracing_opentelemetry::layer();
+    // 1. Ensure the provider is initialized.
+    let provider = TRACER_PROVIDER.get_or_init(|| {
+        let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint);
+
+        if !headers.is_empty() {
+            let header_map: std::collections::HashMap<String, String> =
+                headers.iter().cloned().collect();
+            http_builder = http_builder.with_headers(header_map);
+        }
+
+        let exporter = http_builder
+            .build()
+            .expect("failed to build OTLP span exporter");
+
+        SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .build()
+    });
+
+    global::set_tracer_provider(provider.clone());
+    global::set_text_map_propagator(TraceContextPropagator::new());
+
+    // 2. Create the tracer and wire it into the `tracing` subscriber.
+    let tracer = provider.tracer("hyperinfer-client");
+    let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
-    // `try_init` is used so repeated calls in tests (which each set up
-    // their own provider) don't panic – the first subscriber wins.
     let subscriber_init = tracing_subscriber::registry()
         .with(filter)
         .with(otel_layer)
         .try_init();
 
-    // Only install the OTel provider if the subscriber was actually installed.
-    // This avoids marking TRACER_PROVIDER as initialized when tracing is not
-    // yet running (e.g., if try_init fails because a subscriber is already set).
-    if subscriber_init.is_ok() {
-        global::set_text_map_propagator(TraceContextPropagator::new());
-
-        // Build and store the provider inside get_or_init — only one thread
-        // performs the build, eliminating TOCTOU races.
-        let provider = TRACER_PROVIDER.get_or_init(|| {
-            let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
-                .with_http()
-                .with_endpoint(endpoint);
-
-            if !headers.is_empty() {
-                let header_map: std::collections::HashMap<String, String> =
-                    headers.iter().cloned().collect();
-                http_builder = http_builder.with_headers(header_map);
-            }
-
-            let exporter = http_builder
-                .build()
-                .expect("failed to build OTLP span exporter");
-
-            SdkTracerProvider::builder()
-                .with_batch_exporter(exporter)
-                .build()
-        });
-
-        global::set_tracer_provider(provider.clone());
+    if let Err(e) = subscriber_init {
+        // If try_init failed, check if the provider is already set to treat as benign re-entry.
+        if TRACER_PROVIDER.get().is_some() {
+            return Ok(());
+        }
+        return Err(e.into());
     }
 
     Ok(())

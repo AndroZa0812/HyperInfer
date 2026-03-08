@@ -39,7 +39,7 @@ pub struct ChatChunk {
     pub finish_reason: Option<String>,
     /// Token usage — only populated on the final chunk (OpenAI `usage` field
     /// with `stream_options: {include_usage: true}`, or Anthropic `message_delta`).
-    pub usage: Option<StreamUsage>,
+    pub usage: Option<Usage>,
 }
 
 impl ChatRequest {
@@ -134,13 +134,6 @@ impl std::fmt::Display for Provider {
 }
 
 /// Token usage reported on the final SSE chunk.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct StreamUsage {
-    pub input_tokens: u32,
-    pub output_tokens: u32,
-}
-
-/// Usage statistics for a request
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Usage {
     #[serde(default)]

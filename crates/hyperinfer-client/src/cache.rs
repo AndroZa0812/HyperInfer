@@ -91,7 +91,7 @@ impl ExactMatchCache {
         let raw = raw?;
         match serde_json::from_str::<ChatResponse>(&raw) {
             Ok(resp) => {
-                debug!("Cache HIT for key {}", &key[..16.min(key.len())]);
+                debug!("Cache HIT for key {}", key);
                 Some(resp)
             }
             Err(e) => {
@@ -126,11 +126,7 @@ impl ExactMatchCache {
         if let Err(e) = result {
             warn!("Cache write error: {}", e);
         } else {
-            debug!(
-                "Cache SET key {} ttl={}s",
-                &key[..16.min(key.len())],
-                self.ttl_secs
-            );
+            debug!("Cache SET key {} ttl={}s", key, self.ttl_secs);
         }
     }
 }

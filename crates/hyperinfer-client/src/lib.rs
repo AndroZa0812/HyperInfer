@@ -97,6 +97,12 @@ impl AccountedStream {
     }
 }
 
+impl Drop for AccountedStream {
+    fn drop(&mut self) {
+        self.account();
+    }
+}
+
 impl Stream for AccountedStream {
     type Item = Result<ChatChunk, HyperInferError>;
 

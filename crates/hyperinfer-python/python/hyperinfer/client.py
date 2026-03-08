@@ -1,7 +1,6 @@
 """High-level async client for HyperInfer."""
 
 import asyncio
-import sys
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -27,39 +26,29 @@ class Client:
     Provides a simplified async interface for interacting with the LLM gateway.
     """
 
-    _inner: "HyperInferClient"
-
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
         config: Config | None = None,
     ):
-        """Initialize the client.
-
-        Args:
-            redis_url: Redis connection URL for the backend.
-            config: Optional :class:`Config` instance.  API keys, routing rules,
-                model aliases, and quotas are read from this object and passed
-                directly to the Rust data plane on initialisation.
-        """
-        config_dict = config.to_dict() if config is not None else None
-        # Lazy-load HyperInferClient to avoid import error when extension not built
-        HyperInferClient = sys.modules["hyperinfer"].HyperInferClient
-        self._inner = HyperInferClient(redis_url, config_dict)
+        """Initialize the client."""
+        self._config_dict = config.to_dict() if config is not None else None
+        self._redis_url = redis_url
+        self._inner: Any = None
         self._initialized = False
         self._init_lock = asyncio.Lock()
 
     async def init(self) -> None:
-        """Initialize the client connection.
-
-        Uses double-checked locking so concurrent coroutines do not race to
-        initialise the underlying Rust client more than once.
-        """
+        """Initialize the client connection."""
         if self._initialized:
             return
         async with self._init_lock:
             if self._initialized:
                 return
+            if self._inner is None:
+                from hyperinfer._hyperinfer import HyperInferClient
+
+                self._inner = HyperInferClient(self._redis_url, self._config_dict)
             await self._inner.init()
             self._initialized = True
 
@@ -99,7 +88,7 @@ class Client:
         if stop is not None:
             request["stop"] = stop
 
-        return await self._inner.chat(key, request)
+        return await self._inner.chat(key, request)  # type: ignore[no-any-return]
 
     async def stream(
         self,
@@ -157,6 +146,7 @@ class Client:
         """Close the client connection and cleanup resources."""
         if hasattr(self._inner, "close"):
             await self._inner.close()
+        self._inner = None
         self._initialized = False
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:

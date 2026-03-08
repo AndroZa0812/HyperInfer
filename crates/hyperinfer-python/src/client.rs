@@ -223,13 +223,17 @@ impl HyperInferClient {
         let config_dict = self.config_dict.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Take the Python config dict (if provided) and release it after extraction.
-            let mut config_guard = config_dict.write().await;
-            let taken = config_guard.take();
-            drop(config_guard);
+            // Check if already initialized.
+            let inner_guard = inner.read().await;
+            if inner_guard.is_some() {
+                return Ok(Python::try_attach(|py| py.None()).unwrap());
+            }
+            drop(inner_guard);
 
+            // Parse configuration.
+            let config_guard = config_dict.read().await;
             let config = match Python::try_attach(|py| {
-                if let Some(dict) = taken {
+                if let Some(dict) = &*config_guard {
                     let bound: Bound<'_, PyAny> = dict.bind(py).clone();
                     config_from_py(py, &bound)
                         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
@@ -252,12 +256,19 @@ impl HyperInferClient {
                 }
             };
 
+            // Instantiate client.
             let client = RustClient::new(&redis_url, config)
                 .await
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
+            // Store it and then clear the config dict.
             let mut guard = inner.write().await;
             *guard = Some(client);
+            drop(guard);
+
+            let mut config_guard = config_dict.write().await;
+            config_guard.take();
+            drop(config_guard);
 
             Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")

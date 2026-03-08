@@ -1,5 +1,5 @@
 use futures::Stream;
-use hyperinfer_core::types::{ChatMessage, Choice, MessageRole, StreamUsage};
+use hyperinfer_core::types::{ChatMessage, Choice, MessageRole, Usage};
 use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, HyperInferError};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ pub struct HttpCaller {
 pub struct OpenAiResponse {
     pub id: String,
     pub choices: Vec<OpenAiChoice>,
-    pub usage: Usage,
+    pub usage: UsageDetail,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,7 +50,7 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Usage {
+pub struct UsageDetail {
     pub prompt_tokens: u32,
     pub completion_tokens: u32,
     pub total_tokens: u32,
@@ -128,7 +128,7 @@ impl HttpCaller {
                     finish_reason: c.finish_reason,
                 })
                 .collect(),
-            usage: hyperinfer_core::types::Usage {
+            usage: Usage {
                 input_tokens: data.usage.prompt_tokens,
                 output_tokens: data.usage.completion_tokens,
             },
@@ -146,18 +146,18 @@ impl HttpCaller {
         let system = request
             .messages
             .iter()
-            .find(|m| m.role == hyperinfer_core::types::MessageRole::System)
+            .find(|m| m.role == MessageRole::System)
             .map(|m| m.content.clone());
 
         let messages: Vec<_> = request
             .messages
             .iter()
-            .filter(|m| m.role != hyperinfer_core::types::MessageRole::System)
+            .filter(|m| m.role != MessageRole::System)
             .map(|m| {
                 serde_json::json!({
                     "role": match m.role {
-                        hyperinfer_core::types::MessageRole::User => "user",
-                        hyperinfer_core::types::MessageRole::Assistant => "assistant",
+                        MessageRole::User => "user",
+                        MessageRole::Assistant => "assistant",
                         _ => "user",
                     },
                     "content": m.content
@@ -204,7 +204,7 @@ impl HttpCaller {
         struct AnthropicResponse {
             id: String,
             content: Vec<ContentBlock>,
-            usage: AnthropicUsage,
+            usage: AnthropicUsageDetail,
         }
 
         #[derive(Deserialize)]
@@ -213,7 +213,7 @@ impl HttpCaller {
         }
 
         #[derive(Deserialize)]
-        struct AnthropicUsage {
+        struct AnthropicUsageDetail {
             input_tokens: u32,
             output_tokens: u32,
         }
@@ -238,7 +238,7 @@ impl HttpCaller {
                 },
                 finish_reason: Some("stop".to_string()),
             }],
-            usage: hyperinfer_core::types::Usage {
+            usage: Usage {
                 input_tokens: data.usage.input_tokens,
                 output_tokens: data.usage.output_tokens,
             },
@@ -370,7 +370,7 @@ impl HttpCaller {
                             let delta = event.choices.first()
                                 .map(|c| c.delta.content.clone())
                                 .unwrap_or_default();
-                            let usage = event.usage.map(|u| StreamUsage {
+                            let usage = event.usage.map(|u| Usage {
                                 input_tokens: u.prompt_tokens,
                                 output_tokens: u.completion_tokens,
                             });
@@ -579,7 +579,7 @@ impl HttpCaller {
                                 let finish_reason = event.delta
                                     .as_ref()
                                     .and_then(|d| d.stop_reason.clone());
-                                let usage = event.usage.map(|u| StreamUsage {
+                                let usage = event.usage.map(|u| Usage {
                                     input_tokens: cached_input_tokens,
                                     output_tokens: u.output_tokens.unwrap_or(0),
                                 });
@@ -672,7 +672,7 @@ mod tests {
             "total_tokens": 150
         }"#;
 
-        let usage: Usage = serde_json::from_str(json).unwrap();
+        let usage: UsageDetail = serde_json::from_str(json).unwrap();
         assert_eq!(usage.prompt_tokens, 100);
         assert_eq!(usage.completion_tokens, 50);
         assert_eq!(usage.total_tokens, 150);
@@ -695,7 +695,7 @@ mod tests {
         let response = OpenAiResponse {
             id: "test-id".to_string(),
             choices: vec![],
-            usage: Usage {
+            usage: UsageDetail {
                 prompt_tokens: 10,
                 completion_tokens: 5,
                 total_tokens: 15,
