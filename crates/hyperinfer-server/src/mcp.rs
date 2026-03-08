@@ -27,17 +27,12 @@ use axum::{
     http::{HeaderMap, Request, StatusCode},
     middleware::Next,
     response::{sse::Event, IntoResponse, Response, Sse},
-    Json, Extension,
+    Extension, Json,
 };
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    sync::Arc,
-    time::Duration,
-};
+use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
 use tracing::warn;
 use uuid::Uuid;
@@ -364,10 +359,15 @@ pub async fn mcp_message_handler(
 
     let data = serde_json::to_string(&rpc_response).unwrap_or_else(|e| {
         warn!("Failed to serialize JSON-RPC response: {}", e);
-        let id_str = rpc_req.id.as_ref()
+        let id_str = rpc_req
+            .id
+            .as_ref()
             .and_then(|v| serde_json::to_string(v).ok())
             .unwrap_or_else(|| "null".to_string());
-        format!(r#"{{"jsonrpc":"2.0","id":{},"error":{{"code":-32603,"message":"Internal error"}}}}"#, id_str)
+        format!(
+            r#"{{"jsonrpc":"2.0","id":{},"error":{{"code":-32603,"message":"Internal error"}}}}"#,
+            id_str
+        )
     });
     let frame = SseFrame {
         event: "message".to_string(),

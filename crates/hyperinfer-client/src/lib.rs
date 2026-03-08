@@ -301,7 +301,13 @@ impl HyperInferClient {
             let model_owned = model.clone();
             tokio::spawn(async move {
                 if let Err(e) = telemetry
-                    .record_with_tokens(&key_owned, &model_owned, input_tokens, output_tokens, elapsed)
+                    .record_with_tokens(
+                        &key_owned,
+                        &model_owned,
+                        input_tokens,
+                        output_tokens,
+                        elapsed,
+                    )
                     .await
                 {
                     tracing::warn!(error = %e, "telemetry record failed");
@@ -390,19 +396,20 @@ impl HyperInferClient {
         };
 
         // 3. Dispatch to the correct SSE stream.
-        let provider_stream: Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>> =
-            match provider {
-                Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
-                Provider::Anthropic => self
-                    .http_caller
-                    .stream_anthropic(&model, &api_key, &request),
-                _ => {
-                    return Err(HyperInferError::Config(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Unsupported provider for streaming",
-                    )));
-                }
-            };
+        let provider_stream: Pin<
+            Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
+        > = match provider {
+            Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
+            Provider::Anthropic => self
+                .http_caller
+                .stream_anthropic(&model, &api_key, &request),
+            _ => {
+                return Err(HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "Unsupported provider for streaming",
+                )));
+            }
+        };
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 

@@ -1,6 +1,7 @@
 """High-level async client for HyperInfer."""
 
 import asyncio
+import sys
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
@@ -26,6 +27,8 @@ class Client:
     Provides a simplified async interface for interacting with the LLM gateway.
     """
 
+    _inner: "HyperInferClient"
+
     def __init__(
         self,
         redis_url: str = "redis://localhost:6379",
@@ -40,6 +43,8 @@ class Client:
                 directly to the Rust data plane on initialisation.
         """
         config_dict = config.to_dict() if config is not None else None
+        # Lazy-load HyperInferClient to avoid import error when extension not built
+        HyperInferClient = sys.modules["hyperinfer"].HyperInferClient
         self._inner = HyperInferClient(redis_url, config_dict)
         self._initialized = False
         self._init_lock = asyncio.Lock()
