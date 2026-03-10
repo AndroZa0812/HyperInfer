@@ -428,7 +428,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             CorsLayer::new().allow_origin(origins)
         }
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ])
     };
 
     // MCP routes protected by JWT auth middleware.
