@@ -38,6 +38,7 @@ pub fn init_telemetry_with_headers(
     // 1. Prepare the exporter (fallible).
     let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
+        .with_http_client(reqwest::Client::new())
         .with_endpoint(endpoint);
 
     if !headers.is_empty() {

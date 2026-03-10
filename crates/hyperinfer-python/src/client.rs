@@ -276,6 +276,40 @@ impl HyperInferClient {
         })
     }
 
+    /// Configure traffic mirroring. Pass `None` to disable.
+    #[pyo3(signature = (model=None, sample_rate=None))]
+    pub fn set_mirror<'a>(
+        &self,
+        py: Python<'a>,
+        model: Option<String>,
+        sample_rate: Option<f64>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let inner = self.inner.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let guard = inner.read().await;
+            let client = guard.as_ref().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Client not initialized. Call init() first.",
+                )
+            })?;
+
+            let mirror_cfg = match (model, sample_rate) {
+                (Some(m), Some(sr)) => Some(hyperinfer_client::MirrorConfig {
+                    model: m,
+                    sample_rate: sr,
+                }),
+                _ => None,
+            };
+
+            client.set_mirror(mirror_cfg).await;
+
+            Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })?
+        })
+    }
+
     #[pyo3(name = "chat")]
     pub fn chat<'a>(
         &self,

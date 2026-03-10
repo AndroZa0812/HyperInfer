@@ -138,6 +138,19 @@ class Client:
             async for chunk in chunk_iter:
                 yield chunk
 
+    async def set_mirror(self, model: str | None = None, sample_rate: float | None = None) -> None:
+        """Configure traffic mirroring for the client.
+
+        Args:
+            model: Target model for the shadow request.
+            sample_rate: Fraction of requests to mirror in [0.0, 1.0].
+        """
+        async with self._lifecycle_lock:
+            if not self._initialized:
+                await self.init()
+
+            await self._inner.set_mirror(model, sample_rate)
+
     async def __aenter__(self) -> "Client":
         """Async context manager entry."""
         await self.init()

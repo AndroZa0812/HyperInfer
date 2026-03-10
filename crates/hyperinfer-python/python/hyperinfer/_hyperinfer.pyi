@@ -11,6 +11,32 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
+def init_langfuse_telemetry(
+    public_key: str,
+    secret_key: str,
+    langfuse_host: str | None = None,
+) -> None:
+    """Initialize OpenTelemetry pointing at a Langfuse instance.
+
+    Langfuse's OTLP endpoint requires HTTP Basic Authentication.
+
+    Args:
+        public_key: The Langfuse public key (acts as username).
+        secret_key: The Langfuse secret key (acts as password).
+        langfuse_host: Optional host URL. Defaults to 'https://cloud.langfuse.com'.
+
+    Raises:
+        RuntimeError: If telemetry fails to initialize.
+    """
+    ...
+
+def shutdown_telemetry() -> None:
+    """Flush and shut down the global tracer provider.
+
+    Should be called before process exit to ensure all buffered spans are exported.
+    """
+    ...
+
 class HyperInferClient:
     """Low-level PyO3-exported Rust client.
 
@@ -107,6 +133,15 @@ class HyperInferClient:
 
         Raises:
             RuntimeError: If the client has not been initialised.
+        """
+        ...
+
+    async def set_mirror(self, model: str | None = None, sample_rate: float | None = None) -> None:
+        """Configure traffic mirroring for the client.
+
+        Args:
+            model: Target model for the shadow request.
+            sample_rate: Fraction of requests to mirror in [0.0, 1.0].
         """
         ...
 
