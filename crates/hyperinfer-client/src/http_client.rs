@@ -143,11 +143,18 @@ impl HttpCaller {
     ) -> Result<ChatResponse, HyperInferError> {
         let url = "https://api.anthropic.com/v1/messages";
 
-        let system = request
+        let system_messages: Vec<_> = request
             .messages
             .iter()
-            .find(|m| m.role == MessageRole::System)
-            .map(|m| m.content.clone());
+            .filter(|m| m.role == MessageRole::System)
+            .map(|m| m.content.as_str())
+            .collect();
+
+        let system = if system_messages.is_empty() {
+            None
+        } else {
+            Some(system_messages.join("\n"))
+        };
 
         let messages: Vec<_> = request
             .messages
@@ -414,11 +421,18 @@ impl HttpCaller {
         let model = model.to_string();
         let api_key = api_key.to_string();
 
-        let system = request
+        let system_messages: Vec<_> = request
             .messages
             .iter()
-            .find(|m| m.role == MessageRole::System)
-            .map(|m| m.content.clone());
+            .filter(|m| m.role == MessageRole::System)
+            .map(|m| m.content.as_str())
+            .collect();
+
+        let system = if system_messages.is_empty() {
+            None
+        } else {
+            Some(system_messages.join("\n"))
+        };
 
         let messages: Vec<_> = request
             .messages
