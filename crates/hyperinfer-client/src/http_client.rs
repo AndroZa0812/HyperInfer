@@ -512,6 +512,7 @@ impl HttpCaller {
                     #[derive(Deserialize)]
                     struct AnthropicMessage {
                         id: String,
+                        usage: Option<AnthropicStreamUsage>,
                     }
                     #[derive(Deserialize)]
                     struct AnthropicDelta {
@@ -555,9 +556,9 @@ impl HttpCaller {
                             "message_start" => {
                                 if let Some(msg) = event.message {
                                     stream_id = msg.id;
-                                }
-                                if let Some(u) = event.usage {
-                                    cached_input_tokens = u.input_tokens.unwrap_or(0);
+                                    if let Some(u) = msg.usage {
+                                        cached_input_tokens = u.input_tokens.unwrap_or(0);
+                                    }
                                 }
                             }
                             "content_block_delta" => {

@@ -70,7 +70,12 @@ impl ExactMatchCache {
 
     /// Compute the cache key for `request`.
     pub fn cache_key(request: &ChatRequest) -> String {
-        let json = serde_json::to_string(request).expect("ChatRequest always serializes");
+        // Clone and normalize to ignore streaming preference
+        let mut normalized_request = request.clone();
+        normalized_request.stream = None;
+
+        let json =
+            serde_json::to_string(&normalized_request).expect("ChatRequest always serializes");
         let mut hasher = Sha256::new();
         hasher.update(json.as_bytes());
         let hash = format!("{:x}", hasher.finalize());
@@ -204,6 +209,25 @@ mod tests {
             ExactMatchCache::cache_key(&r1),
             ExactMatchCache::cache_key(&r2)
         );
+    }
+
+    #[test]
+    fn test_cache_key_ignores_stream() {
+        let mut r1 = sample_request("gpt-4");
+        r1.stream = Some(true);
+
+        let mut r2 = sample_request("gpt-4");
+        r2.stream = Some(false);
+
+        let mut r3 = sample_request("gpt-4");
+        r3.stream = None;
+
+        let k1 = ExactMatchCache::cache_key(&r1);
+        let k2 = ExactMatchCache::cache_key(&r2);
+        let k3 = ExactMatchCache::cache_key(&r3);
+
+        assert_eq!(k1, k2);
+        assert_eq!(k2, k3);
     }
 
     #[tokio::test]
