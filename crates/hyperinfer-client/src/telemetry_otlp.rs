@@ -35,22 +35,21 @@ pub fn init_telemetry_with_headers(
     use tracing_subscriber::util::SubscriberInitExt;
     use tracing_subscriber::EnvFilter;
 
-    // 1. Ensure the provider is initialized.
+    // 1. Prepare the exporter (fallible).
+    let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
+        .with_http()
+        .with_endpoint(endpoint);
+
+    if !headers.is_empty() {
+        let header_map: std::collections::HashMap<String, String> =
+            headers.iter().cloned().collect();
+        http_builder = http_builder.with_headers(header_map);
+    }
+
+    let exporter = http_builder.build()?;
+
+    // 2. Ensure the provider is initialized using the successfully built exporter.
     let provider = TRACER_PROVIDER.get_or_init(|| {
-        let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
-            .with_http()
-            .with_endpoint(endpoint);
-
-        if !headers.is_empty() {
-            let header_map: std::collections::HashMap<String, String> =
-                headers.iter().cloned().collect();
-            http_builder = http_builder.with_headers(header_map);
-        }
-
-        let exporter = http_builder
-            .build()
-            .expect("failed to build OTLP span exporter");
-
         SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
             .build()
