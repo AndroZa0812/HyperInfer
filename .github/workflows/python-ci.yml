@@ -79,7 +79,7 @@ jobs:
         run: uv run mypy .
 
       - name: Bandit — security check
-        run: uv run bandit -r . --exclude tests/
+        run: uv run bandit -r -c pyproject.toml .
 
   # ---------------------------------------------------------------------------
   # Unit tests — pytest -m "not integration"
