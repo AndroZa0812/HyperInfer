@@ -83,7 +83,12 @@ pub async fn jwt_auth_middleware(
 fn extract_bearer(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(axum::http::header::AUTHORIZATION)?;
     let s = value.to_str().ok()?;
-    s.strip_prefix("Bearer ").map(str::to_owned)
+    let mut parts = s.splitn(2, char::is_whitespace);
+    let scheme = parts.next()?;
+    if scheme.eq_ignore_ascii_case("bearer") {
+        return Some(parts.next()?.to_owned());
+    }
+    None
 }
 
 pub fn validate_jwt(
@@ -537,15 +542,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_jwt_valid_token_passes() {
+    async fn test_jwt_valid_case_insensitive_bearer_passes() {
         let secret = "test-secret";
         let state = McpState::new(secret);
         let app = build_app(state);
         let server = TestServer::new(app);
 
-        // A valid token should allow access to the protected health endpoint.
+        // A valid token with a lowercase "bearer" should allow access.
         let token = make_jwt(secret);
-        let auth_value = format!("Bearer {}", token);
+        let auth_value = format!("bearer {}", token);
         let resp: axum_test::TestResponse = server
             .get("/mcp/health")
             .add_header(
