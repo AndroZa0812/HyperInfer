@@ -202,7 +202,7 @@ impl McpState {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct JsonRpcRequest {
     pub jsonrpc: String,
-    pub id: Option<Value>,
+    pub id: Option<Option<Value>>,
     pub method: String,
     #[serde(default)]
     pub params: Option<Value>,
@@ -254,22 +254,19 @@ impl JsonRpcResponse {
 ///
 /// Extend this function to add new MCP tool methods.
 pub fn dispatch_method(req: &JsonRpcRequest) -> JsonRpcResponse {
+    let id = req.id.clone().flatten();
     match req.method.as_str() {
-        "ping" => JsonRpcResponse::ok(req.id.clone(), serde_json::json!("pong")),
-        "tools/list" => JsonRpcResponse::ok(req.id.clone(), serde_json::json!({ "tools": [] })),
+        "ping" => JsonRpcResponse::ok(id, serde_json::json!("pong")),
+        "tools/list" => JsonRpcResponse::ok(id, serde_json::json!({ "tools": [] })),
         "initialize" => JsonRpcResponse::ok(
-            req.id.clone(),
+            id,
             serde_json::json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
                 "serverInfo": { "name": "hyperinfer-mcp", "version": "0.1.0" }
             }),
         ),
-        unknown => JsonRpcResponse::err(
-            req.id.clone(),
-            -32601,
-            format!("Method not found: {}", unknown),
-        ),
+        unknown => JsonRpcResponse::err(id, -32601, format!("Method not found: {}", unknown)),
     }
 }
 
@@ -369,6 +366,18 @@ pub async fn mcp_message_handler(
     Query(query): Query<MessageQuery>,
     Json(rpc_req): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
+    if rpc_req.jsonrpc != "2.0" {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(JsonRpcResponse::err(
+                None,
+                -32600,
+                "Invalid JSON-RPC version",
+            )),
+        )
+            .into_response();
+    }
+
     let sessions = state.sessions.read().await;
     let session = match sessions.get(&query.session_id) {
         Some(s) => s.clone(),
@@ -389,15 +398,15 @@ pub async fn mcp_message_handler(
 
     let rpc_response = dispatch_method(&rpc_req);
 
-    // If it's a notification (no ID), do not respond.
+    // If it's a notification (rpc_req.id is None), do not respond.
     if rpc_req.id.is_none() {
         return StatusCode::ACCEPTED.into_response();
     }
 
     let data = serde_json::to_string(&rpc_response).unwrap_or_else(|e| {
         warn!("Failed to serialize JSON-RPC response: {}", e);
-        let id_str = rpc_req
-            .id
+        let id_val = rpc_req.id.flatten();
+        let id_str = id_val
             .as_ref()
             .and_then(|v| serde_json::to_string(v).ok())
             .unwrap_or_else(|| "null".to_string());
@@ -588,7 +597,7 @@ mod tests {
     fn test_dispatch_ping() {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
-            id: Some(json!(1)),
+            id: Some(Some(json!(1))),
             method: "ping".into(),
             params: None,
         };
@@ -601,7 +610,7 @@ mod tests {
     fn test_dispatch_tools_list() {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
-            id: Some(json!(2)),
+            id: Some(Some(json!(2))),
             method: "tools/list".into(),
             params: None,
         };
@@ -616,7 +625,7 @@ mod tests {
     fn test_dispatch_initialize() {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
-            id: Some(json!(3)),
+            id: Some(Some(json!(3))),
             method: "initialize".into(),
             params: None,
         };
@@ -630,7 +639,7 @@ mod tests {
     fn test_dispatch_unknown_method() {
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
-            id: Some(json!(4)),
+            id: Some(Some(json!(4))),
             method: "nonexistent".into(),
             params: None,
         };
