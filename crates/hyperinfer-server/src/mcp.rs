@@ -263,7 +263,7 @@ pub fn dispatch_method(req: &JsonRpcRequest) -> JsonRpcResponse {
             serde_json::json!({
                 "protocolVersion": "2024-11-05",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "hyperinfer-mcp", "version": "0.1.0" }
+                "serverInfo": { "name": "hyperinfer-mcp", "version": env!("CARGO_PKG_VERSION") }
             }),
         ),
         unknown => JsonRpcResponse::err(id, -32601, format!("Method not found: {}", unknown)),
