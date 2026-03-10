@@ -131,6 +131,9 @@ pub fn create_jwt(sub: &str, secret: &str) -> String {
 
 // ── Session registry ─────────────────────────────────────────────────────────
 
+const MAX_SESSIONS_GLOBAL: usize = 1000;
+const MAX_SESSIONS_PER_OWNER: usize = 50;
+
 struct SessionRemovalGuard {
     sessions: SessionRegistry,
     sid: String,
@@ -285,9 +288,33 @@ pub async fn mcp_sse_handler(
     let owner = claims.sub.clone();
     let (tx, mut rx) = mpsc::channel::<SseFrame>(64);
 
-    // Register session with owner.
+    // Register session with owner and enforce limits.
     {
         let mut sessions = state.sessions.write().await;
+
+        // Enforce global cap
+        if sessions.len() >= MAX_SESSIONS_GLOBAL {
+            warn!(
+                "MCP SSE: Global session limit reached ({})",
+                MAX_SESSIONS_GLOBAL
+            );
+            return (StatusCode::SERVICE_UNAVAILABLE, "Server at capacity").into_response();
+        }
+
+        // Enforce per-owner cap
+        let owner_count = sessions.values().filter(|s| s.owner == owner).count();
+        if owner_count >= MAX_SESSIONS_PER_OWNER {
+            warn!(
+                "MCP SSE: Per-owner session limit reached ({}) for owner: {}",
+                MAX_SESSIONS_PER_OWNER, owner
+            );
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                "Too many concurrent sessions",
+            )
+                .into_response();
+        }
+
         sessions.insert(
             session_id.clone(),
             McpSession {
@@ -323,28 +350,42 @@ pub async fn mcp_sse_handler(
     }
 
     // Build the SSE stream from the channel: convert SseFrame → axum Event.
-    let sessions_cleanup = state.sessions.clone();
-    let sid_cleanup = session_id.clone();
-
     let stream = async_stream::stream! {
         let _guard = _guard; // Move guard into stream to ensure it lives as long as the stream
-        while let Some(frame) = rx.recv().await {
-            let ev: Result<Event, Infallible> = Ok(
-                Event::default().event(frame.event).data(frame.data)
-            );
-            yield ev;
+
+        // Disconnect idle sessions after 30 minutes.
+        let idle_timeout = Duration::from_secs(30 * 60);
+
+        loop {
+            match tokio::time::timeout(idle_timeout, rx.recv()).await {
+                Ok(Some(frame)) => {
+                    let ev: Result<Event, Infallible> = Ok(
+                        Event::default().event(frame.event).data(frame.data)
+                    );
+                    yield ev;
+                }
+                Ok(None) => {
+                    // Channel closed (e.g. server shutdown)
+                    break;
+                }
+                Err(_) => {
+                    // Timeout elapsed
+                    tracing::info!("MCP SSE session {} timed out due to inactivity", _guard.sid);
+                    break;
+                }
+            }
         }
-        // Channel closed — remove session.
-        tracing::debug!("MCP SSE stream closed for session {}", sid_cleanup);
-        let mut sessions = sessions_cleanup.write().await;
-        sessions.remove(&sid_cleanup);
+
+        // Guard is dropped here and removes the session.
     };
 
-    Sse::new(stream).keep_alive(
-        axum::response::sse::KeepAlive::new()
-            .interval(Duration::from_secs(15))
-            .text("keep-alive"),
-    )
+    Sse::new(stream)
+        .keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(Duration::from_secs(15))
+                .text("keep-alive"),
+        )
+        .into_response()
 }
 
 /// Query parameters for `POST /mcp/message`.
