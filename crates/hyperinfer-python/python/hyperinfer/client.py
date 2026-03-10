@@ -36,12 +36,11 @@ class Client:
         self._redis_url = redis_url
         self._inner: Any = None
         self._initialized = False
+        self._lifecycle_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
 
     async def init(self) -> None:
         """Initialize the client connection."""
-        if self._initialized:
-            return
         async with self._init_lock:
             if self._initialized:
                 return
@@ -74,21 +73,22 @@ class Client:
         Returns:
             Response dictionary containing model output and usage info.
         """
-        if not self._initialized:
-            await self.init()
+        async with self._lifecycle_lock:
+            if not self._initialized:
+                await self.init()
 
-        request: dict[str, Any] = {
-            "model": model,
-            "messages": messages,
-        }
-        if temperature is not None:
-            request["temperature"] = temperature
-        if max_tokens is not None:
-            request["max_tokens"] = max_tokens
-        if stop is not None:
-            request["stop"] = stop
+            request: dict[str, Any] = {
+                "model": model,
+                "messages": messages,
+            }
+            if temperature is not None:
+                request["temperature"] = temperature
+            if max_tokens is not None:
+                request["max_tokens"] = max_tokens
+            if stop is not None:
+                request["stop"] = stop
 
-        return await self._inner.chat(key, request)  # type: ignore[no-any-return]
+            return await self._inner.chat(key, request)  # type: ignore[no-any-return]
 
     async def stream(
         self,
@@ -122,20 +122,21 @@ class Client:
             async for chunk in client.stream("my-key", "gpt-4", messages):
                 print(chunk["delta"], end="", flush=True)
         """
-        if not self._initialized:
-            await self.init()
+        async with self._lifecycle_lock:
+            if not self._initialized:
+                await self.init()
 
-        request: dict[str, Any] = {"model": model, "messages": messages}
-        if temperature is not None:
-            request["temperature"] = temperature
-        if max_tokens is not None:
-            request["max_tokens"] = max_tokens
-        if stop is not None:
-            request["stop"] = stop
+            request: dict[str, Any] = {"model": model, "messages": messages}
+            if temperature is not None:
+                request["temperature"] = temperature
+            if max_tokens is not None:
+                request["max_tokens"] = max_tokens
+            if stop is not None:
+                request["stop"] = stop
 
-        chunk_iter = await self._inner.chat_stream(key, request)
-        async for chunk in chunk_iter:
-            yield chunk
+            chunk_iter = await self._inner.chat_stream(key, request)
+            async for chunk in chunk_iter:
+                yield chunk
 
     async def __aenter__(self) -> "Client":
         """Async context manager entry."""
@@ -144,10 +145,11 @@ class Client:
 
     async def close(self) -> None:
         """Close the client connection and cleanup resources."""
-        if hasattr(self._inner, "close"):
-            await self._inner.close()
-        self._inner = None
-        self._initialized = False
+        async with self._lifecycle_lock:
+            if hasattr(self._inner, "close"):
+                await self._inner.close()
+            self._inner = None
+            self._initialized = False
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Async context manager exit."""
