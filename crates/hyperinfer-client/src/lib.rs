@@ -161,7 +161,7 @@ impl HyperInferClient {
         let telemetry = Telemetry::new(redis_url)
             .await
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
-        let cache = ExactMatchCache::new(redis_url).await;
+        let cache = ExactMatchCache::new(redis_url, "default").await;
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 

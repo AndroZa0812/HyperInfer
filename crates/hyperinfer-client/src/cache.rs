@@ -26,12 +26,14 @@ pub const DEFAULT_TTL_SECS: u64 = 300;
 pub struct ExactMatchCache {
     conn: Option<Arc<Mutex<ConnectionManager>>>,
     ttl_secs: u64,
+    /// Namespace for cache keys to avoid cross-client collisions.
+    namespace: String,
 }
 
 impl ExactMatchCache {
     /// Connect to Redis at `redis_url`.  On failure the cache is disabled and
     /// all operations become no-ops.
-    pub async fn new(redis_url: &str) -> Self {
+    pub async fn new(redis_url: &str, namespace: &str) -> Self {
         match redis::Client::open(redis_url) {
             Ok(client) => match ConnectionManager::new(client).await {
                 Ok(mgr) => {
@@ -39,6 +41,7 @@ impl ExactMatchCache {
                     Self {
                         conn: Some(Arc::new(Mutex::new(mgr))),
                         ttl_secs: DEFAULT_TTL_SECS,
+                        namespace: namespace.to_string(),
                     }
                 }
                 Err(e) => {
@@ -49,6 +52,7 @@ impl ExactMatchCache {
                     Self {
                         conn: None,
                         ttl_secs: DEFAULT_TTL_SECS,
+                        namespace: namespace.to_string(),
                     }
                 }
             },
@@ -57,6 +61,7 @@ impl ExactMatchCache {
                 Self {
                     conn: None,
                     ttl_secs: DEFAULT_TTL_SECS,
+                    namespace: namespace.to_string(),
                 }
             }
         }
@@ -69,7 +74,7 @@ impl ExactMatchCache {
     }
 
     /// Compute the cache key for `request`.
-    pub fn cache_key(request: &ChatRequest) -> String {
+    pub fn cache_key(&self, request: &ChatRequest) -> String {
         // Clone and normalize to ignore streaming preference
         let mut normalized_request = request.clone();
         normalized_request.stream = None;
@@ -79,7 +84,7 @@ impl ExactMatchCache {
         let mut hasher = Sha256::new();
         hasher.update(json.as_bytes());
         let hash = format!("{:x}", hasher.finalize());
-        format!("hyperinfer:cache:{}", hash)
+        format!("hyperinfer:cache:{}:{}", self.namespace, hash)
     }
 
     /// Attempt to retrieve a cached [`ChatResponse`] for `request`.
@@ -87,7 +92,7 @@ impl ExactMatchCache {
     /// Returns `None` on cache miss, Redis error, or deserialisation failure.
     pub async fn get(&self, request: &ChatRequest) -> Option<ChatResponse> {
         let conn = self.conn.as_ref()?;
-        let key = Self::cache_key(request);
+        let key = self.cache_key(request);
 
         let mut guard = conn.lock().await;
         let raw: Option<String> = guard.get(&key).await.ok()?;
@@ -115,7 +120,7 @@ impl ExactMatchCache {
             None => return,
         };
 
-        let key = Self::cache_key(request);
+        let key = self.cache_key(request);
         let raw = match serde_json::to_string(response) {
             Ok(s) => s,
             Err(e) => {
@@ -186,33 +191,50 @@ mod tests {
     #[test]
     fn test_cache_key_deterministic() {
         let req = sample_request("gpt-4");
-        let k1 = ExactMatchCache::cache_key(&req);
-        let k2 = ExactMatchCache::cache_key(&req);
+        let cache = ExactMatchCache {
+            conn: None,
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: "test-ns".to_string(),
+        };
+        let k1 = cache.cache_key(&req);
+        let k2 = cache.cache_key(&req);
         assert_eq!(k1, k2);
-        assert!(k1.starts_with("hyperinfer:cache:"));
+        assert!(k1.starts_with("hyperinfer:cache:test-ns:"));
     }
 
     #[test]
     fn test_cache_key_different_models() {
-        let k1 = ExactMatchCache::cache_key(&sample_request("gpt-4"));
-        let k2 = ExactMatchCache::cache_key(&sample_request("claude-3"));
+        let cache = ExactMatchCache {
+            conn: None,
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: "test-ns".to_string(),
+        };
+        let k1 = cache.cache_key(&sample_request("gpt-4"));
+        let k2 = cache.cache_key(&sample_request("claude-3"));
         assert_ne!(k1, k2);
     }
 
     #[test]
     fn test_cache_key_different_messages() {
+        let cache = ExactMatchCache {
+            conn: None,
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: "test-ns".to_string(),
+        };
         let mut r1 = sample_request("gpt-4");
         let mut r2 = sample_request("gpt-4");
         r1.messages[0].content = "hello".to_string();
         r2.messages[0].content = "goodbye".to_string();
-        assert_ne!(
-            ExactMatchCache::cache_key(&r1),
-            ExactMatchCache::cache_key(&r2)
-        );
+        assert_ne!(cache.cache_key(&r1), cache.cache_key(&r2));
     }
 
     #[test]
     fn test_cache_key_ignores_stream() {
+        let cache = ExactMatchCache {
+            conn: None,
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: "test-ns".to_string(),
+        };
         let mut r1 = sample_request("gpt-4");
         r1.stream = Some(true);
 
@@ -222,9 +244,9 @@ mod tests {
         let mut r3 = sample_request("gpt-4");
         r3.stream = None;
 
-        let k1 = ExactMatchCache::cache_key(&r1);
-        let k2 = ExactMatchCache::cache_key(&r2);
-        let k3 = ExactMatchCache::cache_key(&r3);
+        let k1 = cache.cache_key(&r1);
+        let k2 = cache.cache_key(&r2);
+        let k3 = cache.cache_key(&r3);
 
         assert_eq!(k1, k2);
         assert_eq!(k2, k3);
@@ -233,7 +255,7 @@ mod tests {
     #[tokio::test]
     async fn test_cache_disabled_get_returns_none() {
         // Build a cache with an invalid URL → disabled.
-        let cache = ExactMatchCache::new("redis://invalid-host:1").await;
+        let cache = ExactMatchCache::new("redis://invalid-host:1", "test-ns").await;
         let req = sample_request("gpt-4");
         let result = cache.get(&req).await;
         assert!(result.is_none());
@@ -241,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_disabled_set_no_panic() {
-        let cache = ExactMatchCache::new("redis://invalid-host:1").await;
+        let cache = ExactMatchCache::new("redis://invalid-host:1", "test-ns").await;
         let req = sample_request("gpt-4");
         let resp = sample_response();
         // Should not panic.
@@ -256,6 +278,7 @@ mod tests {
         let cache = ExactMatchCache {
             conn: None,
             ttl_secs: DEFAULT_TTL_SECS,
+            namespace: "test-ns".to_string(),
         };
         let cache = cache.with_ttl(60);
         assert_eq!(cache.ttl_secs, 60);
