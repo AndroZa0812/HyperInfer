@@ -79,12 +79,18 @@ impl ExactMatchCache {
         let mut normalized_request = request.clone();
         normalized_request.stream = None;
 
-        let json =
-            serde_json::to_string(&normalized_request).expect("ChatRequest always serializes");
-        let mut hasher = Sha256::new();
-        hasher.update(json.as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
-        format!("hyperinfer:cache:{}:{}", self.namespace, hash)
+        match serde_json::to_string(&normalized_request) {
+            Ok(json) => {
+                let mut hasher = Sha256::new();
+                hasher.update(json.as_bytes());
+                let hash = format!("{:x}", hasher.finalize());
+                format!("hyperinfer:cache:{}:{}", self.namespace, hash)
+            }
+            Err(_) => {
+                // Return a deterministic "miss" key to bypass cache
+                format!("hyperinfer:cache:{}:miss", self.namespace)
+            }
+        }
     }
 
     /// Attempt to retrieve a cached [`ChatResponse`] for `request`.
