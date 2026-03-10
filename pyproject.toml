@@ -127,7 +127,7 @@ ignore_missing_imports = true
 # Bandit
 # ---------------------------------------------------------------------------
 [tool.bandit]
-exclude_dirs = ["tests", "venv"]
+exclude_dirs = ["tests", "venv", ".venv"]
 
 # ---------------------------------------------------------------------------
 # bump-my-version — single command to bump version across all files + tag
