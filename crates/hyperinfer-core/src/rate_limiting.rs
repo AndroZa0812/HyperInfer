@@ -66,6 +66,7 @@ pub struct Quota {
     pub budget_cents: Option<u64>,
 }
 
+#[derive(Clone)]
 pub struct RateLimiter {
     redis_manager: Option<ConnectionManager>,
     default_rpm: u64,

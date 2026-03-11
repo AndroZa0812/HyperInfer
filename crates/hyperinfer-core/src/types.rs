@@ -15,6 +15,31 @@ pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    /// When `true` the provider is asked to stream token chunks via SSE.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<bool>,
+    /// Stop sequences: generation halts when any of these strings is produced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
+}
+
+/// A single streamed token delta from a provider SSE event.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ChatChunk {
+    /// Unique ID for this streaming response (matches across chunks).
+    #[serde(default)]
+    pub id: String,
+    /// The model that produced this chunk.
+    #[serde(default)]
+    pub model: String,
+    /// Incremental content delta for this chunk (may be empty on final chunk).
+    #[serde(default)]
+    pub delta: String,
+    /// Set to `"stop"` (or similar) on the last chunk, `None` otherwise.
+    pub finish_reason: Option<String>,
+    /// Token usage — only populated on the final chunk (OpenAI `usage` field
+    /// with `stream_options: {include_usage: true}`, or Anthropic `message_delta`).
+    pub usage: Option<Usage>,
 }
 
 impl ChatRequest {
@@ -108,7 +133,7 @@ impl std::fmt::Display for Provider {
     }
 }
 
-/// Usage statistics for a request
+/// Token usage reported on the final SSE chunk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct Usage {
     #[serde(default)]
@@ -165,6 +190,8 @@ mod tests {
             }],
             temperature: None,
             max_tokens: None,
+            stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_err());
@@ -177,6 +204,8 @@ mod tests {
             messages: vec![],
             temperature: None,
             max_tokens: None,
+            stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_err());
@@ -192,6 +221,8 @@ mod tests {
             }],
             temperature: Some(0.7),
             max_tokens: Some(100),
+            stream: None,
+            stop: None,
         };
 
         assert!(request.validate().is_ok());
