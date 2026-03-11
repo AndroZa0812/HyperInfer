@@ -143,14 +143,18 @@ impl Drop for SessionRemovalGuard {
     fn drop(&mut self) {
         let sessions = self.sessions.clone();
         let sid = self.sid.clone();
-        tokio::task::spawn_blocking(move || {
-            let handle = tokio::runtime::Handle::current();
-            handle.block_on(async move {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            handle.spawn(async move {
                 let mut sessions = sessions.write().await;
                 sessions.remove(&sid);
                 tracing::debug!("MCP SSE session {} removed by Drop guard", sid);
             });
-        });
+        } else {
+            tracing::warn!(
+                "MCP SSE session {} could not be cleaned up: no Tokio runtime",
+                sid
+            );
+        }
     }
 }
 
