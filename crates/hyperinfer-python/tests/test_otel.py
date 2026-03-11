@@ -136,6 +136,13 @@ class TestMockOtlpCollector:
             # Initialize telemetry to point to the mock server
             init_langfuse_telemetry(public_key, secret_key, langfuse_host=host)
 
+            # Create a test span to ensure an OTLP export actually occurs
+            from opentelemetry import trace
+
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("test-auth-span"):
+                pass
+
             # Since we exposed shutdown_telemetry we can force flush
             shutdown_telemetry()
 
@@ -146,9 +153,9 @@ class TestMockOtlpCollector:
                 expected = _make_basic_auth(public_key, secret_key)
                 assert auth_header == expected, f"Expected {expected}, got {auth_header}"
             else:
-                # If no request was captured (e.g., Tokio runtime absent),
-                # at minimum verify the functions are callable without errors
-                pass
+                import pytest
+
+                pytest.skip("No OTLP request captured (Tokio runtime may be absent)")
 
         finally:
             server.shutdown()
