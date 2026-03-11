@@ -296,10 +296,12 @@ impl HyperInferClient {
             })?;
 
             let mirror_cfg = match (model, sample_rate) {
-                (Some(m), Some(sr)) => Some(hyperinfer_client::MirrorConfig {
-                    model: m,
-                    sample_rate: sr,
-                }),
+                (Some(m), Some(sr)) => Some(hyperinfer_client::MirrorConfig::new(m, sr)),
+                (Some(_), None) | (None, Some(_)) => {
+                    return Err(pyo3::exceptions::PyValueError::new_err(
+                        "Both 'model' and 'sample_rate' must be provided to enable mirroring",
+                    ));
+                }
                 _ => None,
             };
 
