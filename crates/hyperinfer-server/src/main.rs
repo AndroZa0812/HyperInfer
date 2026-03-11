@@ -3,12 +3,16 @@
 use axum::{
     extract::{Json, Path, State},
     http::StatusCode,
+    middleware,
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
-use hyperinfer_server::{RedisConfigStore, SqlxDb};
+use hyperinfer_server::{
+    mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
+    RedisConfigStore, SqlxDb,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
@@ -384,6 +388,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         config_manager,
     };
 
+    // MCP state: JWT secret must be set explicitly.
+    // In production, set MCP_JWT_SECRET to a long random value.
+    // For local dev only, set MCP_INSECURE_DEV_MODE=1 to allow the hardcoded
+    // fallback — this is rejected unless that variable is explicitly present.
+    let jwt_secret = match std::env::var("MCP_JWT_SECRET") {
+        Ok(s) if !s.is_empty() => s,
+        _ => {
+            if std::env::var("MCP_INSECURE_DEV_MODE").as_deref() == Ok("1") {
+                tracing::warn!(
+                    "MCP_JWT_SECRET not set — using insecure dev secret. \
+                     NEVER use MCP_INSECURE_DEV_MODE=1 in production!"
+                );
+                "hyperinfer-dev-secret".to_string()
+            } else {
+                return Err("MCP_JWT_SECRET must be set to a non-empty value. \
+                     For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
+                    .into());
+            }
+        }
+    };
+    let mcp_state = McpState::new(jwt_secret);
+
     let cors = {
         let allowed_origins = std::env::var("ALLOWED_ORIGINS")
             .unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -402,8 +428,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             CorsLayer::new().allow_origin(origins)
         }
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ])
     };
+
+    // MCP routes protected by JWT auth middleware.
+    let mcp_router = Router::new()
+        .route("/mcp/sse", get(mcp_sse_handler))
+        .route("/mcp/message", post(mcp_message_handler))
+        .layer(middleware::from_fn_with_state(
+            mcp_state.clone(),
+            jwt_auth_middleware,
+        ))
+        .with_state(mcp_state);
 
     let app = Router::new()
         .route("/v1/config/sync", get(config_sync))
@@ -417,6 +456,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .merge(mcp_router)
         .layer(cors)
         .with_state(state);
 

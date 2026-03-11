@@ -1,0 +1,21 @@
+[project]
+name = "hyperinfer"
+version = "0.1.0"
+description = "High-performance Python SDK for HyperInfer LLM Gateway"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["typing-extensions>=4.0"]
+
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "hyperinfer._hyperinfer"
+# Include py.typed marker and .pyi stub in the wheel.
+include = [
+  { path = "python/hyperinfer/py.typed", format = "wheel" },
+  { path = "python/hyperinfer/_hyperinfer.pyi", format = "wheel" },
+]

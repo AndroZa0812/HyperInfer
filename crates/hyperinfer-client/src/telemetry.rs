@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_STREAM_KEY: &str = "hyperinfer:telemetry";
 
+#[derive(Clone)]
 pub struct Telemetry {
     manager: Option<redis::aio::ConnectionManager>,
     stream_key: String,
