@@ -41,11 +41,12 @@ jobs:
       - name: Generate changelog for this release
         id: changelog
         run: |
-          uvx git-cliff --latest --strip header 2>/dev/null > RELEASE_NOTES.md || echo "No changelog entries found." > RELEASE_NOTES.md
+          uvx git-cliff --latest --strip header > RELEASE_NOTES.md 2>&1 || echo "No changelog entries found." > RELEASE_NOTES.md
+          EOF_MARKER="RELEASE_NOTES_EOF_$(date +%s)"
           {
-            echo "content<<RELEASE_NOTES_EOF"
+            echo "content<<$EOF_MARKER"
             cat RELEASE_NOTES.md
-            echo "RELEASE_NOTES_EOF"
+            echo "$EOF_MARKER"
           } >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
@@ -83,7 +84,10 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: |
+            3.11
+            3.12
+            3.13
 
       - name: Build wheels (Linux)
         if: runner.os == 'Linux'
@@ -92,7 +96,7 @@ jobs:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux }}
           working-directory: crates/hyperinfer-python
-          args: --release --out ../../dist --interpreter python3.11 python3.12
+          args: --release --out ../../dist --interpreter python3.11 python3.12 python3.13
 
       - name: Build wheels (macOS / Windows)
         if: runner.os != 'Linux'
@@ -100,7 +104,7 @@ jobs:
         with:
           target: ${{ matrix.target }}
           working-directory: crates/hyperinfer-python
-          args: --release --out ../../dist --interpreter python3.11 python3.12
+          args: --release --out ../../dist --interpreter python3.11 python3.12 python3.13
 
       - name: Upload wheels
         uses: actions/upload-artifact@v4

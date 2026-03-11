@@ -50,6 +50,7 @@ pub fn init_telemetry_with_headers(
     let exporter = http_builder.build()?;
 
     // 2. Ensure the provider is initialized using the successfully built exporter.
+    let already_initialized = TRACER_PROVIDER.get().is_some();
     let provider = TRACER_PROVIDER.get_or_init(|| {
         SdkTracerProvider::builder()
             .with_batch_exporter(exporter)
@@ -71,7 +72,7 @@ pub fn init_telemetry_with_headers(
 
     if let Err(e) = subscriber_init {
         // If try_init failed, check if the provider is already set to treat as benign re-entry.
-        if TRACER_PROVIDER.get().is_some() {
+        if already_initialized {
             return Ok(());
         }
         return Err(e.into());

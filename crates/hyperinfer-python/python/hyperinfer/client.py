@@ -77,18 +77,18 @@ class Client:
             if not self._initialized:
                 await self.init()
 
-            request: dict[str, Any] = {
-                "model": model,
-                "messages": messages,
-            }
-            if temperature is not None:
-                request["temperature"] = temperature
-            if max_tokens is not None:
-                request["max_tokens"] = max_tokens
-            if stop is not None:
-                request["stop"] = stop
+        request: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+        }
+        if temperature is not None:
+            request["temperature"] = temperature
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
+        if stop is not None:
+            request["stop"] = stop
 
-            return await self._inner.chat(key, request)  # type: ignore[no-any-return]
+        return await self._inner.chat(key, request)  # type: ignore[no-any-return]
 
     async def stream(
         self,
@@ -126,17 +126,17 @@ class Client:
             if not self._initialized:
                 await self.init()
 
-            request: dict[str, Any] = {"model": model, "messages": messages}
-            if temperature is not None:
-                request["temperature"] = temperature
-            if max_tokens is not None:
-                request["max_tokens"] = max_tokens
-            if stop is not None:
-                request["stop"] = stop
+        request: dict[str, Any] = {"model": model, "messages": messages}
+        if temperature is not None:
+            request["temperature"] = temperature
+        if max_tokens is not None:
+            request["max_tokens"] = max_tokens
+        if stop is not None:
+            request["stop"] = stop
 
-            chunk_iter = await self._inner.chat_stream(key, request)
-            async for chunk in chunk_iter:
-                yield chunk
+        chunk_iter = await self._inner.chat_stream(key, request)
+        async for chunk in chunk_iter:
+            yield chunk
 
     async def set_mirror(self, model: str | None = None, sample_rate: float | None = None) -> None:
         """Configure traffic mirroring for the client.

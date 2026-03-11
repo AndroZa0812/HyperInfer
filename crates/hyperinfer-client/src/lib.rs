@@ -67,11 +67,8 @@ impl AccountedStream {
         let input_tokens = self.input_tokens;
         let output_tokens = self.output_tokens;
 
-        crate::telemetry_otlp::set_gen_ai_usage(
-            &tracing::Span::current(),
-            input_tokens,
-            output_tokens,
-        );
+        let _enter = self.span.clone().entered();
+        crate::telemetry_otlp::set_gen_ai_usage(&self.span, input_tokens, output_tokens);
 
         // Telemetry write is off the critical path.
         let telemetry = self.telemetry.clone();

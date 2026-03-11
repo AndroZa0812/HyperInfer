@@ -74,7 +74,7 @@ impl ExactMatchCache {
     }
 
     /// Compute the cache key for `request`.
-    pub fn cache_key(&self, request: &ChatRequest) -> String {
+    pub fn cache_key(&self, request: &ChatRequest) -> Option<String> {
         // Clone and normalize to ignore streaming preference
         let mut normalized_request = request.clone();
         normalized_request.stream = None;
@@ -84,12 +84,9 @@ impl ExactMatchCache {
                 let mut hasher = Sha256::new();
                 hasher.update(json.as_bytes());
                 let hash = format!("{:x}", hasher.finalize());
-                format!("hyperinfer:cache:{}:{}", self.namespace, hash)
+                Some(format!("hyperinfer:cache:{}:{}", self.namespace, hash))
             }
-            Err(_) => {
-                // Return a deterministic "miss" key to bypass cache
-                format!("hyperinfer:cache:{}:miss", self.namespace)
-            }
+            Err(_) => None,
         }
     }
 
@@ -98,7 +95,7 @@ impl ExactMatchCache {
     /// Returns `None` on cache miss, Redis error, or deserialisation failure.
     pub async fn get(&self, request: &ChatRequest) -> Option<ChatResponse> {
         let conn = self.conn.as_ref()?;
-        let key = self.cache_key(request);
+        let key = self.cache_key(request)?;
 
         let mut guard = conn.lock().await;
         let raw: Option<String> = guard.get(&key).await.ok()?;
@@ -126,7 +123,10 @@ impl ExactMatchCache {
             None => return,
         };
 
-        let key = self.cache_key(request);
+        let key = match self.cache_key(request) {
+            Some(k) => k,
+            None => return,
+        };
         let raw = match serde_json::to_string(response) {
             Ok(s) => s,
             Err(e) => {
@@ -205,7 +205,7 @@ mod tests {
         let k1 = cache.cache_key(&req);
         let k2 = cache.cache_key(&req);
         assert_eq!(k1, k2);
-        assert!(k1.starts_with("hyperinfer:cache:test-ns:"));
+        assert!(k1.unwrap().starts_with("hyperinfer:cache:test-ns:"));
     }
 
     #[test]

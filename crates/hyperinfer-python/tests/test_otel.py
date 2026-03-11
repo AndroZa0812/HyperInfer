@@ -16,7 +16,6 @@ from __future__ import annotations
 import base64
 import http.server
 import threading
-import time
 from http.server import BaseHTTPRequestHandler
 from typing import Any
 
@@ -140,13 +139,16 @@ class TestMockOtlpCollector:
             # Since we exposed shutdown_telemetry we can force flush
             shutdown_telemetry()
 
-            # Wait briefly for request capture
-            time.sleep(0.1)
-
-            # The background thread export might fail in Python tests due to Tokio runtime absence,
-            # but at minimum we ensure the functions are exposed and callable without TypeErrors.
-            assert init_langfuse_telemetry is not None
-            assert shutdown_telemetry is not None
+            # If the Tokio runtime is available and a request was captured, verify the header
+            if _capture.count > 0:
+                req = _capture.requests[-1]
+                auth_header = req["headers"].get("Authorization", "")
+                expected = _make_basic_auth(public_key, secret_key)
+                assert auth_header == expected, f"Expected {expected}, got {auth_header}"
+            else:
+                # If no request was captured (e.g., Tokio runtime absent),
+                # at minimum verify the functions are callable without errors
+                pass
 
         finally:
             server.shutdown()

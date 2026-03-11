@@ -47,6 +47,15 @@ pub struct MirrorConfig {
     pub sample_rate: f64,
 }
 
+impl MirrorConfig {
+    pub fn new(model: String, sample_rate: f64) -> Self {
+        Self {
+            model,
+            sample_rate: sample_rate.clamp(0.0, 1.0),
+        }
+    }
+}
+
 /// Shared, hot-swappable mirror configuration.
 pub type MirrorHandle = Arc<RwLock<Option<MirrorConfig>>>;
 

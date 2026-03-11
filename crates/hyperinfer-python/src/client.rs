@@ -223,14 +223,15 @@ impl HyperInferClient {
         let config_dict = self.config_dict.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Check if already initialized.
-            let inner_guard = inner.read().await;
+            // Acquire write lock upfront for atomic check-and-set.
+            let mut inner_guard = inner.write().await;
             if inner_guard.is_some() {
-                return Ok(Python::try_attach(|py| py.None()).unwrap());
+                return Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
+                    pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+                })?;
             }
-            drop(inner_guard);
 
-            // Parse configuration.
+            // Parse configuration (still holding inner write lock to prevent races).
             let config_guard = config_dict.read().await;
             let config = match Python::try_attach(|py| {
                 if let Some(dict) = &*config_guard {
@@ -255,16 +256,16 @@ impl HyperInferClient {
                     ))
                 }
             };
+            drop(config_guard);
 
             // Instantiate client.
             let client = RustClient::new(&redis_url, config)
                 .await
                 .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
 
-            // Store it and then clear the config dict.
-            let mut guard = inner.write().await;
-            *guard = Some(client);
-            drop(guard);
+            // Store the client (we already hold the write lock).
+            *inner_guard = Some(client);
+            drop(inner_guard);
 
             let mut config_guard = config_dict.write().await;
             config_guard.take();

@@ -143,10 +143,13 @@ impl Drop for SessionRemovalGuard {
     fn drop(&mut self) {
         let sessions = self.sessions.clone();
         let sid = self.sid.clone();
-        tokio::spawn(async move {
-            let mut sessions = sessions.write().await;
-            sessions.remove(&sid);
-            tracing::debug!("MCP SSE session {} removed by Drop guard", sid);
+        tokio::task::spawn_blocking(move || {
+            let handle = tokio::runtime::Handle::current();
+            handle.block_on(async move {
+                let mut sessions = sessions.write().await;
+                sessions.remove(&sid);
+                tracing::debug!("MCP SSE session {} removed by Drop guard", sid);
+            });
         });
     }
 }
@@ -347,6 +350,16 @@ pub async fn mcp_sse_handler(
         // Requirement (1): remove the entry if initial send fails
         let mut sessions = state.sessions.write().await;
         sessions.remove(&session_id);
+        // Return an empty stream or error response
+        return Sse::new(futures::stream::empty::<
+            Result<axum::response::sse::Event, std::convert::Infallible>,
+        >())
+        .keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .text("keep-alive"),
+        )
+        .into_response();
     }
 
     // Build the SSE stream from the channel: convert SseFrame → axum Event.

@@ -150,7 +150,13 @@ class HyperInferChatModel(BaseChatModel):
             except Exception as exc:  # noqa: BLE001
                 chunk_queue.put(exc)
             finally:
-                chunk_queue.put(_sentinel)
+                # Use timeout to avoid blocking indefinitely if consumer stopped draining
+                while True:
+                    try:
+                        chunk_queue.put(_sentinel, timeout=0.1)
+                        break
+                    except queue.Full:
+                        pass
 
         def _run_producer() -> None:
             asyncio.run(_producer())
@@ -172,13 +178,13 @@ class HyperInferChatModel(BaseChatModel):
             cancel_event.set()
             raise
         finally:
-            # Drain the queue so the producer thread is never blocked on a
-            # put() and can observe cancel_event / reach the sentinel.
-            while not chunk_queue.empty():
+            # Continuously drain queue until producer thread finishes
+            # to prevent deadlock if producer blocks on put().
+            while t.is_alive():
                 try:
-                    chunk_queue.get_nowait()
+                    chunk_queue.get(timeout=0.05)
                 except queue.Empty:
-                    break
+                    pass
             t.join()
 
     async def _astream(
