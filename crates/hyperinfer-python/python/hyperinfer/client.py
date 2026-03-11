@@ -76,6 +76,7 @@ class Client:
         async with self._lifecycle_lock:
             if not self._initialized:
                 await self.init()
+            inner = self._inner
 
         request: dict[str, Any] = {
             "model": model,
@@ -88,7 +89,7 @@ class Client:
         if stop is not None:
             request["stop"] = stop
 
-        return await self._inner.chat(key, request)  # type: ignore[no-any-return]
+        return await inner.chat(key, request)  # type: ignore[no-any-return]
 
     async def stream(
         self,
@@ -125,6 +126,7 @@ class Client:
         async with self._lifecycle_lock:
             if not self._initialized:
                 await self.init()
+            inner = self._inner
 
         request: dict[str, Any] = {"model": model, "messages": messages}
         if temperature is not None:
@@ -134,7 +136,7 @@ class Client:
         if stop is not None:
             request["stop"] = stop
 
-        chunk_iter = await self._inner.chat_stream(key, request)
+        chunk_iter = await inner.chat_stream(key, request)
         async for chunk in chunk_iter:
             yield chunk
 
