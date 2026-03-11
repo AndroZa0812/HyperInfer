@@ -86,7 +86,10 @@ impl ExactMatchCache {
                 let hash = format!("{:x}", hasher.finalize());
                 Some(format!("hyperinfer:cache:{}:{}", self.namespace, hash))
             }
-            Err(_) => None,
+            Err(e) => {
+                warn!("Cache key serialisation error: {}", e);
+                None
+            }
         }
     }
 
