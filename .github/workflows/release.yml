@@ -1,10 +1,7 @@
 name: Release
 
-# Triggered by a version tag pushed by bump-my-version:
-#   uvx bump-my-version bump minor   →   commits + pushes v0.2.0 tag
-#
-# Publishes to TestPyPI. Switch repository-url to https://upload.pypi.org/legacy/
-# (and update the trusted publisher on PyPI) when ready for production.
+# Triggered by a changeset-generated version bump:
+#   npx changeset version → commits + pushes a "Version Packages" tag
 
 on:
   push:
@@ -24,7 +21,7 @@ jobs:
   prepare:
     name: Prepare release
     runs-on: ubuntu-latest
-    if: contains(github.event.head_commit.message, 'chore: release')
+    if: contains(github.event.head_commit.message, 'Version Packages')
     permissions:
       contents: read
     outputs:
@@ -194,9 +191,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: "v${{ needs.prepare.outputs.version }}"
           name: "v${{ needs.prepare.outputs.version }}"
           body: ${{ needs.prepare.outputs.changelog }}
           files: dist/*
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
