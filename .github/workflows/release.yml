@@ -36,6 +36,11 @@ jobs:
         id: version
         run: |
           VERSION=$(grep '^version = ' crates/hyperinfer-python/pyproject.toml | cut -d'"' -f2)
+          if [ -z "$VERSION" ]; then
+            echo "Error: Failed to extract version from crates/hyperinfer-python/pyproject.toml" >&2
+            echo "Command: grep '^version = ' crates/hyperinfer-python/pyproject.toml | cut -d'\"' -f2" >&2
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Generate changelog for this release
