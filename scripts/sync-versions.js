@@ -42,16 +42,8 @@ for (const ws of workspaces) {
     } 
     // 2. Fallback: replace version = { workspace = true }
     else if (content.match(/^version = \{ workspace = true \}/m)) {
-        // Option A: Update root workspace package version (affects all)
-        if (fs.existsSync(rootCargoPath)) {
-            let rootContent = fs.readFileSync(rootCargoPath, 'utf8');
-            rootContent = rootContent.replace(/\[workspace\.package\][\s\S]*?^version = ".*"/m, (match) => {
-                return match.replace(/version = ".*"/, `version = "${version}"`);
-            });
-            fs.writeFileSync(rootCargoPath, rootContent);
-        }
-        // Option B: Optionally convert to literal in module (commented out as per instruction "or" choice)
-        // content = content.replace(/^version = \{ workspace = true \}/m, `version = "${version}"`);
+        // Convert to literal version in module
+        content = content.replace(/^version = \{ workspace = true \}/m, `version = "${version}"`);
     }
     fs.writeFileSync(cargoPath, content);
   }
