@@ -1,15 +1,12 @@
 name: Release
 
-# Triggered by a version tag pushed by bump-my-version:
-#   uvx bump-my-version bump minor   →   commits + pushes v0.2.0 tag
-#
-# Publishes to TestPyPI. Switch repository-url to https://upload.pypi.org/legacy/
-# (and update the trusted publisher on PyPI) when ready for production.
+# Triggered by a changeset-generated version bump:
+#   npx changeset version → commits + pushes a "Version Packages" tag
 
 on:
   push:
-    tags:
-      - v[0-9]+.[0-9]+.[0-9]+*
+    branches:
+      - main
 
 permissions: {}
 
@@ -18,134 +15,65 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Extract version from the tag and generate changelog for this release
-  # ---------------------------------------------------------------------------
-  prepare:
-    name: Prepare release
+  detect:
+    name: Detect changed packages
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      changelog: ${{ steps.changelog.outputs.content }}
+      changed: ${{ steps.detect.outputs.changed }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # git-cliff needs full history
-
-      - name: Extract version from tag
-        id: version
-        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-
-      - name: Generate changelog for this release
-        id: changelog
+          fetch-depth: 0
+      - name: Detect changed packages
+        id: detect
         run: |
-          uvx git-cliff --latest --strip header > RELEASE_NOTES.md 2>&1 || echo "No changelog entries found." > RELEASE_NOTES.md
-          EOF_MARKER="RELEASE_NOTES_EOF_$(date +%s)"
-          {
-            echo "content<<$EOF_MARKER"
-            cat RELEASE_NOTES.md
-            echo "$EOF_MARKER"
-          } >> "$GITHUB_OUTPUT"
+          npm install
+          CHANGED=$(node scripts/get-changed-packages.js)
+          echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
 
-  # ---------------------------------------------------------------------------
-  # Build hyperinfer (maturin / PyO3) wheels
-  # Matrix: Linux x86_64, Linux aarch64, macOS x86_64, macOS arm64, Windows x86_64
-  # ---------------------------------------------------------------------------
-  build-hyperinfer:
-    name: Build hyperinfer — ${{ matrix.target }}
-    needs: prepare
-    runs-on: ${{ matrix.os }}
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            target: x86_64
-            manylinux: auto
-          - os: ubuntu-latest
-            target: aarch64
-            manylinux: auto
-          - os: macos-latest # Intel
-            target: x86_64
-            manylinux: ""
-          - os: macos-14 # Apple Silicon
-            target: aarch64
-            manylinux: ""
-          - os: windows-latest
-            target: x86_64
-            manylinux: ""
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: |
-            3.11
-            3.12
-            3.13
-
-      - name: Build wheels (Linux)
-        if: runner.os == 'Linux'
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          manylinux: ${{ matrix.manylinux }}
-          working-directory: crates/hyperinfer-python
-          args: --release --out ../../dist --interpreter python3.11 python3.12 python3.13
-
-      - name: Build wheels (macOS / Windows)
-        if: runner.os != 'Linux'
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.target }}
-          working-directory: crates/hyperinfer-python
-          args: --release --out ../../dist --interpreter python3.11 python3.12 python3.13
-
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: hyperinfer-${{ matrix.target }}-${{ matrix.os }}
-          path: dist/*.whl
-
-  # ---------------------------------------------------------------------------
-  # Build pure-Python sdist + wheel for hyperinfer-langchain and hyperinfer-llamaindex
-  # ---------------------------------------------------------------------------
-  build-bindings:
-    name: Build Python bindings
-    needs: prepare
+  build:
+    name: Build ${{ matrix.package }}
+    needs: detect
+    if: needs.detect.outputs.changed != '[]'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.detect.outputs.changed) }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - name: Setup environment
+        run: |
+          case "${{ matrix.package }}" in
+            hyperinfer-python) dir="crates/hyperinfer-python" ;;
+            hyperinfer-langchain) dir="bindings/hyperinfer-langchain" ;;
+            hyperinfer-llamaindex) dir="bindings/hyperinfer-llamaindex" ;;
+            *) echo "Unknown package: ${{ matrix.package }}"; exit 1 ;;
+          esac
+          echo "PACKAGE_DIR=$dir" >> $GITHUB_ENV
+      
+      - name: Setup Rust
+        if: matrix.package == 'hyperinfer-python'
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        if: matrix.package == 'hyperinfer-python'
+        uses: Swatinem/rust-cache@v2
         with:
-          enable-cache: true
+          workspaces: crates/hyperinfer-python
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: 'pip'
 
-      - name: Build hyperinfer-langchain
-        run: uvx --from build pyproject-build --installer uv --outdir ../../dist .
-        working-directory: bindings/hyperinfer-langchain
-
-      - name: Build hyperinfer-llamaindex
-        run: uvx --from build pyproject-build --installer uv --outdir ../../dist .
-        working-directory: bindings/hyperinfer-llamaindex
-
+      - name: Build
+        run: |
+          chmod +x scripts/build-package.sh
+          ./scripts/build-package.sh "${{ matrix.package }}" "$PACKAGE_DIR"
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: python-bindings
+          name: ${{ matrix.package }}-dist
           path: dist/
 
   # ---------------------------------------------------------------------------
@@ -153,7 +81,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish:
     name: Publish to TestPyPI
-    needs: [prepare, build-hyperinfer, build-bindings]
+    needs: build
     runs-on: ubuntu-latest
     environment: testpypi # GitHub environment gate (optional approval)
     permissions:
@@ -177,7 +105,7 @@ jobs:
   # ---------------------------------------------------------------------------
   github-release:
     name: Create GitHub Release
-    needs: [prepare, publish]
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: write # required to create releases
@@ -191,9 +119,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "v${{ needs.prepare.outputs.version }}"
-          body: ${{ needs.prepare.outputs.changelog }}
+          tag_name: "v${{ github.sha }}" # Temporary tag based on sha, changesets usually handles tag creation
+          name: "Release ${{ github.sha }}"
           files: dist/*
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
