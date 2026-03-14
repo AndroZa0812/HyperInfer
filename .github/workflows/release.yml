@@ -15,9 +15,6 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # Extract version from the tag and generate changelog for this release
-  # ---------------------------------------------------------------------------
   detect:
     name: Detect changed packages
     runs-on: ubuntu-latest
@@ -34,10 +31,6 @@ jobs:
           CHANGED=$(node scripts/get-changed-packages.js)
           echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
 
-  # ---------------------------------------------------------------------------
-  # Build hyperinfer (maturin / PyO3) wheels
-  # Matrix: Linux x86_64, Linux aarch64, macOS x86_64, macOS arm64, Windows x86_64
-  # ---------------------------------------------------------------------------
   build:
     name: Build ${{ matrix.package }}
     needs: detect
@@ -57,6 +50,22 @@ jobs:
             *) echo "Unknown package: ${{ matrix.package }}"; exit 1 ;;
           esac
           echo "PACKAGE_DIR=$dir" >> $GITHUB_ENV
+      
+      - name: Setup Rust
+        if: matrix.package == 'hyperinfer-python'
+        uses: dtolnay/rust-toolchain@stable
+      - name: Rust Cache
+        if: matrix.package == 'hyperinfer-python'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/hyperinfer-python
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+
       - name: Build
         run: |
           chmod +x scripts/build-package.sh
@@ -72,7 +81,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish:
     name: Publish to TestPyPI
-    needs: [prepare, build-hyperinfer, build-bindings]
+    needs: build
     runs-on: ubuntu-latest
     environment: testpypi # GitHub environment gate (optional approval)
     permissions:
@@ -96,7 +105,7 @@ jobs:
   # ---------------------------------------------------------------------------
   github-release:
     name: Create GitHub Release
-    needs: [prepare, publish]
+    needs: publish
     runs-on: ubuntu-latest
     permissions:
       contents: write # required to create releases
@@ -110,9 +119,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "v${{ needs.prepare.outputs.version }}"
-          name: "v${{ needs.prepare.outputs.version }}"
-          body: ${{ needs.prepare.outputs.changelog }}
+          tag_name: "v${{ github.sha }}" # Temporary tag based on sha, changesets usually handles tag creation
+          name: "Release ${{ github.sha }}"
           files: dist/*
           draft: false
-          prerelease: ${{ contains(needs.prepare.outputs.version, '-') }}
