@@ -1,0 +1,8 @@
+{
+  "name": "hyperinfer-server",
+  "version": "0.1.1",
+  "private": true,
+  "dependencies": {
+    "hyperinfer-core": "workspace:*"
+  }
+}

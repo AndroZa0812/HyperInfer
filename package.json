@@ -1,0 +1,21 @@
+{
+  "name": "hyperinfer-monorepo",
+  "version": "0.1.0",
+  "description": "HyperInfer LLM Gateway",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "sync-versions": "node scripts/sync-versions.js",
+    "release": "changeset version && npm run sync-versions"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "workspaces": [
+    "crates/*",
+    "bindings/*"
+  ],
+  "devDependencies": {
+    "@changesets/cli": "^2.30.0"
+  }
+}
