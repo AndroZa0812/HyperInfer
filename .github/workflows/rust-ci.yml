@@ -27,7 +27,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@v2.68.34
 
       - name: Cache cargo registry
         uses: actions/cache@v4
@@ -44,9 +44,9 @@ jobs:
         run: cargo nextest run --profile ci --workspace --lib --no-default-features
 
       - name: Upload Test Results to Trunk.io
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && secrets.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@main
+        uses: trunk-io/analytics-uploader@v2.0.8
         with:
           junit-paths: "target/nextest/ci/junit.xml"
           org-slug: androza-corp
@@ -89,7 +89,7 @@ jobs:
           github.event_name == 'push' && github.ref == 'refs/heads/main' ||
           contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
           steps.changes.outputs.integration == 'true'
-        uses: taiki-e/install-action@nextest
+        uses: taiki-e/install-action@v2.68.34
 
       - name: Cache cargo registry
         if: |
@@ -114,9 +114,12 @@ jobs:
         run: cargo nextest run --profile ci --workspace --test integration
 
       - name: Upload Test Results to Trunk.io
-        if: ${{ !cancelled() }}
+        if: |
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
+          contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
+          steps.changes.outputs.integration == 'true') && !cancelled() && secrets.TRUNK_API_TOKEN != ''
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@main
+        uses: trunk-io/analytics-uploader@v2.0.8
         with:
           junit-paths: "target/nextest/ci/junit.xml"
           org-slug: androza-corp
