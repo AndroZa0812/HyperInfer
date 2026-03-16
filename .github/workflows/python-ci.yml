@@ -95,6 +95,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -133,7 +135,7 @@ jobs:
         run: uv run pytest -m "not integration" --cov --cov-report=term-missing --junit-xml=junit.xml -o junit_family=xunit1
 
       - name: Upload Test Results to Trunk.io
-        if: ${{ !cancelled() && secrets.TRUNK_API_TOKEN != '' }}
+        if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
         uses: trunk-io/analytics-uploader@v2.0.8
         with:
@@ -155,6 +157,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -193,7 +197,7 @@ jobs:
         run: uv run pytest -m "integration" --tb=short --junit-xml=junit.xml -o junit_family=xunit1
 
       - name: Upload Test Results to Trunk.io
-        if: ${{ !cancelled() && secrets.TRUNK_API_TOKEN != '' }}
+        if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
         uses: trunk-io/analytics-uploader@v2.0.8
         with:

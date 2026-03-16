@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,7 +46,7 @@ jobs:
         run: cargo nextest run --profile ci --workspace --lib --no-default-features
 
       - name: Upload Test Results to Trunk.io
-        if: ${{ !cancelled() && secrets.TRUNK_API_TOKEN != '' }}
+        if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
         uses: trunk-io/analytics-uploader@v2.0.8
         with:
@@ -63,6 +65,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -117,7 +121,7 @@ jobs:
         if: |
           (github.event_name == 'push' && github.ref == 'refs/heads/main' ||
           contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
-          steps.changes.outputs.integration == 'true') && !cancelled() && secrets.TRUNK_API_TOKEN != ''
+          steps.changes.outputs.integration == 'true') && !cancelled() && env.TRUNK_API_TOKEN != ''
         continue-on-error: true
         uses: trunk-io/analytics-uploader@v2.0.8
         with:
