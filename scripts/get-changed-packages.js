@@ -1,7 +1,7 @@
 const { execSync } = require('child_process');
 
 // Get changes since last tag
-const statusOutput = execSync('npx changeset status --since=origin/main --output json').toString();
+const statusOutput = execSync('bunx changeset status --since=origin/main --output json').toString();
 const status = JSON.parse(statusOutput);
 
 // Extract changed packages
