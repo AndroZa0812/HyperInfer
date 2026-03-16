@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "hyperinfer-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "hyperinfer-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "hyperinfer-python"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "futures",
  "hyperinfer-client",
@@ -1454,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "hyperinfer-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "async-trait",

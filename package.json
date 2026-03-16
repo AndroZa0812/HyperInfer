@@ -4,8 +4,8 @@
   "description": "HyperInfer LLM Gateway",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "sync-versions": "node scripts/sync-versions.js",
-    "release": "changeset version && npm run sync-versions"
+    "sync-versions": "bun run scripts/sync-versions.js",
+    "release": "changeset version && bun run sync-versions"
   },
   "keywords": [],
   "author": "",
