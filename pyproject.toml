@@ -79,6 +79,7 @@ testpaths = [
   "bindings/hyperinfer-llamaindex/tests",
 ]
 addopts = "--tb=short -q --import-mode=importlib"
+junit_family = "xunit1"
 markers = [
   "integration: mark a test as an integration test",
 ]
