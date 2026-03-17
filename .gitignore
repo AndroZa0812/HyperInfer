@@ -208,4 +208,4 @@ dist
 # Vite files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
-.vite/
+.vite/json
