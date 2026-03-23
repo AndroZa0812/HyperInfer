@@ -1402,6 +1402,7 @@ dependencies = [
  "futures",
  "hex",
  "hyperinfer-core",
+ "hyperinfer-providers",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
