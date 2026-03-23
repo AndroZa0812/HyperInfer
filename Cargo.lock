@@ -1459,9 +1459,12 @@ dependencies = [
 name = "hyperinfer-python"
 version = "0.1.1"
 dependencies = [
+ "async-stream",
+ "async-trait",
  "futures",
  "hyperinfer-client",
  "hyperinfer-core",
+ "hyperinfer-providers",
  "pyo3",
  "pyo3-async-runtimes",
  "serde",
