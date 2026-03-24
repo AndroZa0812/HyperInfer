@@ -26,4 +26,20 @@ pub trait LlmProvider: Send + Sync {
         request: &ChatRequest,
         api_key: &str,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + '_>>;
+
+    async fn health_check(&self, api_key: &str) -> Result<(), hyperinfer_core::HyperInferError> {
+        let request = ChatRequest {
+            model: "health-check-probe".to_string(),
+            messages: vec![hyperinfer_core::ChatMessage {
+                role: hyperinfer_core::MessageRole::User,
+                content: "ping".to_string(),
+            }],
+            temperature: None,
+            max_tokens: Some(1),
+            stream: None,
+            stop: None,
+        };
+        self.chat(&request, api_key).await?;
+        Ok(())
+    }
 }
