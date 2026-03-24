@@ -22,14 +22,18 @@ pub fn init_default_registry(registry: &ProviderRegistry) {
     #[cfg(feature = "openai")]
     {
         if let Ok(provider) = openai::OpenAiProvider::new() {
-            registry.register(provider);
+            if !registry.contains(provider.name()) {
+                registry.register(provider);
+            }
         }
     }
 
     #[cfg(feature = "anthropic")]
     {
         if let Ok(provider) = anthropic::AnthropicProvider::new() {
-            registry.register(provider);
+            if !registry.contains(provider.name()) {
+                registry.register(provider);
+            }
         }
     }
 }

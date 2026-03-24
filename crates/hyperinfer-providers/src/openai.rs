@@ -33,16 +33,19 @@ impl Clone for OpenAiProvider {
 }
 
 fn chat_request_to_openai_body(request: &ChatRequest) -> serde_json::Value {
-    let mut body = serde_json::json!({
-        "model": request.model,
-        "messages": request.messages,
-        "temperature": request.temperature,
-        "max_tokens": request.max_tokens,
-    });
-    if let Some(stop) = &request.stop {
-        body["stop"] = serde_json::json!(stop);
+    let mut body = serde_json::Map::new();
+    body.insert("model".to_string(), serde_json::json!(request.model));
+    body.insert("messages".to_string(), serde_json::json!(request.messages));
+    if let Some(temperature) = request.temperature {
+        body.insert("temperature".to_string(), serde_json::json!(temperature));
     }
-    body
+    if let Some(max_tokens) = request.max_tokens {
+        body.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
+    }
+    if let Some(stop) = &request.stop {
+        body.insert("stop".to_string(), serde_json::json!(stop));
+    }
+    serde_json::Value::Object(body)
 }
 
 #[async_trait]
@@ -150,14 +153,27 @@ impl LlmProvider for OpenAiProvider {
         api_key: &str,
     ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + '_>> {
         let url = format!("{}/v1/chat/completions", self.base_url);
-        let body = serde_json::json!({
-            "model": request.model.clone(),
-            "messages": request.messages.clone(),
-            "temperature": request.temperature,
-            "max_tokens": request.max_tokens,
-            "stream": true,
-            "stream_options": { "include_usage": true },
-        });
+        let mut body = serde_json::Map::new();
+        body.insert(
+            "model".to_string(),
+            serde_json::json!(request.model.clone()),
+        );
+        body.insert(
+            "messages".to_string(),
+            serde_json::json!(request.messages.clone()),
+        );
+        body.insert("stream".to_string(), serde_json::json!(true));
+        body.insert(
+            "stream_options".to_string(),
+            serde_json::json!({ "include_usage": true }),
+        );
+        if let Some(temperature) = request.temperature {
+            body.insert("temperature".to_string(), serde_json::json!(temperature));
+        }
+        if let Some(max_tokens) = request.max_tokens {
+            body.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
+        }
+        let body = serde_json::Value::Object(body);
         let client = self.http_client.clone();
         let api_key = api_key.to_string();
 

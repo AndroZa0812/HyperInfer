@@ -184,6 +184,16 @@ impl HyperInferClient {
         *guard = cfg;
     }
 
+    pub fn inject_provider_registry(&self, external_registry: &ProviderRegistry) {
+        for name in external_registry.list() {
+            if let Some(provider) = external_registry.get(name) {
+                if !self.provider_registry.contains(name) {
+                    self.provider_registry.register_arc(name, provider);
+                }
+            }
+        }
+    }
+
     pub async fn chat(
         &self,
         key: &str,
@@ -408,7 +418,10 @@ impl HyperInferClient {
             _ => {
                 return Err(HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "Unsupported provider for streaming",
+                    format!(
+                        "Unsupported provider '{}' for streaming (model: '{}')",
+                        provider_name, model
+                    ),
                 )));
             }
         };

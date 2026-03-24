@@ -21,6 +21,12 @@ pub trait LlmProvider: Send + Sync {
         api_key: &str,
     ) -> Result<ChatResponse, hyperinfer_core::HyperInferError>;
 
+    // TODO: stream() and supports_streaming() are currently dead code because
+    // chat_stream() in hyperinfer-client routes streaming through HttpCaller
+    // directly (http_caller.stream_openai() / http_caller.stream_anthropic())
+    // instead of through the provider registry. In future, routing streaming
+    // through LlmProvider::stream() would allow custom providers to implement
+    // their own streaming logic.
     fn stream(
         &self,
         request: &ChatRequest,

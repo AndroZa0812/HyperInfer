@@ -28,6 +28,9 @@ impl ProviderRegistry {
         provider: Arc<dyn crate::provider_trait::LlmProvider>,
     ) {
         let mut providers = self.providers.write().unwrap();
+        if providers.contains_key(name) {
+            panic!("Provider '{}' is already registered", name);
+        }
         providers.insert(name, provider);
     }
 
@@ -58,6 +61,9 @@ impl Default for ProviderRegistry {
     }
 }
 
+/// Cloning produces a shared, reference-counted view of the registry.
+/// Both the original and the clone share the same underlying provider map;
+/// no providers are deep-copied. This is the same semantics as `Arc::clone()`.
 impl Clone for ProviderRegistry {
     fn clone(&self) -> Self {
         Self {

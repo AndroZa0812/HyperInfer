@@ -65,20 +65,40 @@ impl PythonProvider {
         &self,
         dict: &Bound<'_, PyDict>,
     ) -> PyResult<hyperinfer_core::ChatResponse> {
-        let id: String = dict.get_item("id")?.unwrap().extract()?;
-        let model: String = dict.get_item("model")?.unwrap().extract()?;
+        let id: String = dict
+            .get_item("id")?
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'id'"))?
+            .extract()?;
+        let model: String = dict
+            .get_item("model")?
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'model'"))?
+            .extract()?;
 
-        let choices_list = dict.get_item("choices")?.unwrap();
+        let choices_list = dict
+            .get_item("choices")?
+            .ok_or_else(|| PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'choices'"))?;
         let py_choices = choices_list.cast::<PyList>()?;
         let mut choices = Vec::new();
 
         for (idx, item) in py_choices.iter().enumerate() {
             let choice_dict = item.cast::<PyDict>()?;
-            let message = choice_dict.get_item("message")?.unwrap();
+            let message = choice_dict.get_item("message")?.ok_or_else(|| {
+                PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'message' in choice")
+            })?;
             let msg_dict = message.cast::<PyDict>()?;
 
-            let role_str: String = msg_dict.get_item("role")?.unwrap().extract()?;
-            let content: String = msg_dict.get_item("content")?.unwrap().extract()?;
+            let role_str: String = msg_dict
+                .get_item("role")?
+                .ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'role' in message")
+                })?
+                .extract()?;
+            let content: String = msg_dict
+                .get_item("content")?
+                .ok_or_else(|| {
+                    PyErr::new::<pyo3::exceptions::PyKeyError, _>("missing 'content' in message")
+                })?
+                .extract()?;
             let role = match role_str.as_str() {
                 "system" => hyperinfer_core::MessageRole::System,
                 "user" => hyperinfer_core::MessageRole::User,
@@ -108,9 +128,25 @@ impl PythonProvider {
         let usage = if let Some(u) = dict.get_item("usage")? {
             if !u.is_none() {
                 let usage_dict = u.cast::<PyDict>()?;
+                let input_tokens: u32 = usage_dict
+                    .get_item("input_tokens")?
+                    .ok_or_else(|| {
+                        PyErr::new::<pyo3::exceptions::PyKeyError, _>(
+                            "missing 'input_tokens' in usage",
+                        )
+                    })?
+                    .extract()?;
+                let output_tokens: u32 = usage_dict
+                    .get_item("output_tokens")?
+                    .ok_or_else(|| {
+                        PyErr::new::<pyo3::exceptions::PyKeyError, _>(
+                            "missing 'output_tokens' in usage",
+                        )
+                    })?
+                    .extract()?;
                 Some(hyperinfer_core::Usage {
-                    input_tokens: usage_dict.get_item("input_tokens")?.unwrap().extract()?,
-                    output_tokens: usage_dict.get_item("output_tokens")?.unwrap().extract()?,
+                    input_tokens,
+                    output_tokens,
                 })
             } else {
                 None
@@ -145,7 +181,7 @@ impl hyperinfer_providers::LlmProvider for PythonProvider {
     }
 
     fn supports_streaming(&self) -> bool {
-        self.stream_callable.is_some()
+        false
     }
 
     async fn chat(

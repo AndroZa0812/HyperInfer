@@ -12,6 +12,67 @@ pub struct AnthropicProvider {
     base_url: &'static str,
 }
 
+fn build_anthropic_request_body(
+    request: &ChatRequest,
+    stream: bool,
+) -> (
+    Option<String>,
+    Vec<serde_json::Value>,
+    serde_json::Map<String, serde_json::Value>,
+) {
+    let system_messages: Vec<_> = request
+        .messages
+        .iter()
+        .filter(|m| m.role == MessageRole::System)
+        .map(|m| m.content.as_str())
+        .collect();
+
+    let system = if system_messages.is_empty() {
+        None
+    } else {
+        Some(system_messages.join("\n"))
+    };
+
+    let messages: Vec<_> = request
+        .messages
+        .iter()
+        .filter(|m| m.role != MessageRole::System)
+        .map(|m| {
+            serde_json::json!({
+                "role": match m.role {
+                    MessageRole::User => "user",
+                    MessageRole::Assistant => "assistant",
+                    _ => "user",
+                },
+                "content": m.content
+            })
+        })
+        .collect();
+
+    let mut body = serde_json::Map::new();
+    body.insert("model".to_string(), serde_json::json!(request.model));
+    body.insert("messages".to_string(), serde_json::json!(messages));
+    body.insert(
+        "max_tokens".to_string(),
+        serde_json::json!(request.max_tokens.unwrap_or(1024)),
+    );
+
+    if stream {
+        body.insert("stream".to_string(), serde_json::json!(true));
+    }
+    if let Some(s) = &system {
+        body.insert("system".to_string(), serde_json::json!(s));
+    }
+    if let Some(t) = request.temperature {
+        body.insert("temperature".to_string(), serde_json::json!(t));
+    }
+    if let Some(stop) = &request.stop {
+        body.insert("stop_sequences".to_string(), serde_json::json!(stop));
+    }
+
+    (system, messages, body)
+}
+
 impl AnthropicProvider {
     pub fn new() -> Result<Self, reqwest::Error> {
         Ok(Self {
@@ -49,50 +110,8 @@ impl LlmProvider for AnthropicProvider {
     ) -> Result<ChatResponse, HyperInferError> {
         let url = format!("{}/v1/messages", self.base_url);
 
-        let system_messages: Vec<_> = request
-            .messages
-            .iter()
-            .filter(|m| m.role == MessageRole::System)
-            .map(|m| m.content.as_str())
-            .collect();
-
-        let system = if system_messages.is_empty() {
-            None
-        } else {
-            Some(system_messages.join("\n"))
-        };
-
-        let messages: Vec<_> = request
-            .messages
-            .iter()
-            .filter(|m| m.role != MessageRole::System)
-            .map(|m| {
-                serde_json::json!({
-                    "role": match m.role {
-                        MessageRole::User => "user",
-                        MessageRole::Assistant => "assistant",
-                        _ => "user",
-                    },
-                    "content": m.content
-                })
-            })
-            .collect();
-
-        let mut body = serde_json::json!({
-            "model": request.model,
-            "messages": messages,
-            "max_tokens": request.max_tokens.unwrap_or(1024),
-        });
-
-        if let Some(s) = system {
-            body["system"] = serde_json::json!(s);
-        }
-        if let Some(t) = request.temperature {
-            body["temperature"] = serde_json::json!(t);
-        }
-        if let Some(stop) = &request.stop {
-            body["stop_sequences"] = serde_json::json!(stop);
-        }
+        let (_system, _messages, body) = build_anthropic_request_body(request, false);
+        let body = serde_json::Value::Object(body);
 
         let response = self
             .http_client
@@ -118,6 +137,7 @@ impl LlmProvider for AnthropicProvider {
             id: String,
             content: Vec<ContentBlock>,
             usage: AnthropicUsageDetail,
+            stop_reason: Option<String>,
         }
 
         #[derive(serde::Deserialize)]
@@ -149,7 +169,7 @@ impl LlmProvider for AnthropicProvider {
                     role: MessageRole::Assistant,
                     content,
                 },
-                finish_reason: Some("stop".to_string()),
+                finish_reason: data.stop_reason,
             }],
             usage: Usage {
                 input_tokens: data.usage.input_tokens,
@@ -166,56 +186,13 @@ impl LlmProvider for AnthropicProvider {
         let url = format!("{}/v1/messages", self.base_url);
         let client = self.http_client.clone();
         let model = request.model.clone();
-        let messages = request.messages.clone();
-        let temperature = request.temperature;
-        let max_tokens = request.max_tokens;
-        let stop = request.stop.clone();
         let api_key = api_key.to_string();
 
+        let (_system, _messages, mut body) = build_anthropic_request_body(request, true);
+        body.insert("stream".to_string(), serde_json::json!(true));
+        let body = serde_json::Value::Object(body);
+
         let stream = async_stream::try_stream! {
-            let system_messages: Vec<_> = messages
-                .iter()
-                .filter(|m| m.role == MessageRole::System)
-                .map(|m| m.content.as_str())
-                .collect();
-
-            let system = if system_messages.is_empty() {
-                None
-            } else {
-                Some(system_messages.join("\n"))
-            };
-
-            let messages: Vec<_> = messages
-                .iter()
-                .filter(|m| m.role != MessageRole::System)
-                .map(|m| {
-                    serde_json::json!({
-                        "role": match m.role {
-                            MessageRole::User => "user",
-                            MessageRole::Assistant => "assistant",
-                            _ => "user",
-                        },
-                        "content": m.content,
-                    })
-                })
-                .collect();
-
-            let mut body = serde_json::json!({
-                "model": model,
-                "messages": messages,
-                "max_tokens": max_tokens.unwrap_or(1024),
-                "stream": true,
-            });
-            if let Some(s) = system {
-                body["system"] = serde_json::json!(s);
-            }
-            if let Some(t) = temperature {
-                body["temperature"] = serde_json::json!(t);
-            }
-            if let Some(ref stop) = stop {
-                body["stop_sequences"] = serde_json::json!(stop);
-            }
-
             let response = client
                 .post(&url)
                 .header("x-api-key", api_key)
