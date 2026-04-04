@@ -295,15 +295,39 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_deserialisation_error() {
-        // Fallback to local redis if available, or skip if no Redis server
-        let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        // We use testcontainers to reliably spin up a redis instance to test this properly,
+        // covering both ExactMatchCache struct's internal `get()` interaction with ConnectionManager
+        // and deserialization match arms seamlessly.
+        use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
+        use testcontainers_modules::redis::REDIS_PORT;
+
+        let container_result = GenericImage::new("redis", "7.2.4")
+            .with_exposed_port(REDIS_PORT.tcp())
+            .with_wait_for(testcontainers::core::WaitFor::message_on_stdout(
+                "Ready to accept connections",
+            ))
+            .start()
+            .await;
+
+        // In CI some docker socket configurations may fail, skip gracefully if that occurs
+        let container = match container_result {
+            Ok(c) => c,
+            Err(e) => {
+                println!(
+                    "Skipping test: testcontainers failed to start Redis ({})",
+                    e
+                );
+                return;
+            }
+        };
+
+        let port = container
+            .get_host_port_ipv4(REDIS_PORT)
+            .await
+            .expect("Failed to get port");
+        let redis_url = format!("redis://127.0.0.1:{}", port);
 
         let cache = ExactMatchCache::new(&redis_url, "test-ns-malformed").await;
-
-        if cache.conn.is_none() {
-            println!("Skipping test: Redis not available at {}", redis_url);
-            return;
-        }
 
         let req = sample_request("gpt-4");
         let key = cache.cache_key(&req).unwrap();
@@ -320,6 +344,9 @@ mod tests {
 
         // The get should return None and not panic
         let result = cache.get(&req).await;
-        assert!(result.is_none(), "Deserialization error should result in a cache miss (None)");
+        assert!(
+            result.is_none(),
+            "Deserialization error should result in a cache miss (None)"
+        );
     }
 }
