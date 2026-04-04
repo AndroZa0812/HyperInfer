@@ -295,39 +295,31 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_deserialisation_error() {
-        use redis_test::{MockCmd, MockRedisConnection};
+        // Fallback to local redis if available, or skip if no Redis server
+        let redis_url = std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+
+        let cache = ExactMatchCache::new(&redis_url, "test-ns-malformed").await;
+
+        if cache.conn.is_none() {
+            println!("Skipping test: Redis not available at {}", redis_url);
+            return;
+        }
 
         let req = sample_request("gpt-4");
-
-        let cache = ExactMatchCache {
-            conn: None,
-            ttl_secs: DEFAULT_TTL_SECS,
-            namespace: "test-ns".to_string(),
-        };
-
         let key = cache.cache_key(&req).unwrap();
 
-        let mut mock_connection = MockRedisConnection::new(vec![MockCmd::new(
-            redis::cmd("GET").arg(&key),
-            Ok("not valid json".to_string()),
-        )]);
+        // Directly insert malformed JSON into Redis
+        let client = redis::Client::open(redis_url.as_str()).unwrap();
+        let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+        let _: () = redis::cmd("SET")
+            .arg(&key)
+            .arg("not valid json")
+            .query_async(&mut conn)
+            .await
+            .unwrap();
 
-        // Since ExactMatchCache's get method is tightly coupled to ConnectionManager (which internally
-        // manages a pool and cannot easily wrap our MockRedisConnection), we must test the extraction
-        // logic locally by invoking the mock connection directly and validating that serde correctly
-        // fails and we handle the missing match properly.
-        let raw: Option<String> = mock_connection.get(&key).await.ok().flatten();
-        assert_eq!(raw, Some("not valid json".to_string()));
-
-        let raw_val = raw.unwrap();
-        let result = match serde_json::from_str::<ChatResponse>(&raw_val) {
-            Ok(resp) => Some(resp),
-            Err(_) => None,
-        };
-
-        assert!(
-            result.is_none(),
-            "Deserialization error should result in a cache miss (None)"
-        );
+        // The get should return None and not panic
+        let result = cache.get(&req).await;
+        assert!(result.is_none(), "Deserialization error should result in a cache miss (None)");
     }
 }
