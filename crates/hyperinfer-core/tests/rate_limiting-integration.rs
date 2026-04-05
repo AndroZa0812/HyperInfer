@@ -3,8 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 // Mock redis client using real redis instance running on host
 async fn setup_redis() -> String {
-    let redis_url = "redis://127.0.0.1:6379".to_string();
-    redis_url
+    "redis://127.0.0.1:6379".to_string()
 }
 
 #[tokio::test]
@@ -75,11 +74,7 @@ async fn test_rate_limiter_check_rpm() {
     for i in 0..limit {
         let result = limiter.check_rpm(&key, limit).await.unwrap();
         assert!(result.0, "Expected to be allowed");
-        assert_eq!(
-            result.1,
-            limit - i as u64 - 1,
-            "Remaining count should decrease"
-        );
+        assert_eq!(result.1, limit - i - 1, "Remaining count should decrease");
     }
 
     // The next one should be blocked
