@@ -77,50 +77,45 @@ impl TelemetryConsumer {
         }
     }
 
-    async fn ack_message(
+    async fn ack_messages(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
         consumer_group: &str,
-        msg_id: &str,
+        msg_ids: &[&str],
     ) -> Result<(), redis::RedisError> {
-        redis::cmd("XACK")
-            .arg(stream_key)
-            .arg(consumer_group)
-            .arg(msg_id)
-            .query_async::<()>(conn)
-            .await
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        let mut cmd = redis::cmd("XACK");
+        cmd.arg(stream_key).arg(consumer_group);
+        for id in msg_ids {
+            cmd.arg(id);
+        }
+        cmd.query_async::<()>(conn).await
     }
 
     async fn process_entry<F, Fut>(
-        conn: &mut MultiplexedConnection,
-        stream_key: &str,
-        consumer_group: &str,
         msg_id: &str,
         fields: &[(String, String)],
         handler: &F,
-    ) where
+    ) -> bool
+    where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
         if let Some(record) = Self::parse_entry(fields) {
             match handler(record).await {
-                Ok(_) => {
-                    if let Err(e) =
-                        Self::ack_message(conn, stream_key, consumer_group, msg_id).await
-                    {
-                        warn!("Failed to XACK message {}: {}", msg_id, e);
-                    }
-                }
+                Ok(_) => true,
                 Err(e) => {
                     warn!("Failed to process message {}: {:?}", msg_id, e);
+                    false
                 }
             }
         } else {
             warn!("Failed to parse message {}", msg_id);
-            if let Err(e) = Self::ack_message(conn, stream_key, consumer_group, msg_id).await {
-                warn!("Failed to XACK unparseable message {}: {}", msg_id, e);
-            }
+            true
         }
     }
 
@@ -157,9 +152,16 @@ impl TelemetryConsumer {
                 }
             };
 
-            for (msg_id, fields) in claimed {
-                Self::process_entry(conn, stream_key, consumer_group, &msg_id, &fields, handler)
-                    .await;
+            let mut ack_ids = Vec::with_capacity(claimed.len());
+            for (msg_id, fields) in &claimed {
+                if Self::process_entry(msg_id, fields, handler).await {
+                    ack_ids.push(msg_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                if let Err(e) = Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await {
+                    warn!("Failed to batch XACK messages in recover_pending: {}", e);
+                }
             }
 
             if next_start == "0-0" {
@@ -197,16 +199,14 @@ impl TelemetryConsumer {
             .await?;
 
         for (_stream, entries) in results {
-            for (entry_id, fields) in entries {
-                Self::process_entry(
-                    conn,
-                    stream_key,
-                    consumer_group,
-                    &entry_id,
-                    &fields,
-                    handler,
-                )
-                .await;
+            let mut ack_ids = Vec::with_capacity(entries.len());
+            for (entry_id, fields) in &entries {
+                if Self::process_entry(entry_id, fields, handler).await {
+                    ack_ids.push(entry_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await?;
             }
         }
 
