@@ -95,11 +95,7 @@ impl TelemetryConsumer {
         cmd.query_async::<()>(conn).await
     }
 
-    async fn process_entry<F, Fut>(
-        msg_id: &str,
-        fields: &[(String, String)],
-        handler: &F,
-    ) -> bool
+    async fn process_entry<F, Fut>(msg_id: &str, fields: &[(String, String)], handler: &F) -> bool
     where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
@@ -159,7 +155,8 @@ impl TelemetryConsumer {
                 }
             }
             if !ack_ids.is_empty() {
-                if let Err(e) = Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await {
+                if let Err(e) = Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await
+                {
                     warn!("Failed to batch XACK messages in recover_pending: {}", e);
                 }
             }
