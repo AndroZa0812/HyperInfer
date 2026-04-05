@@ -20,7 +20,13 @@ async fn test_rate_limiter_is_allowed() {
     let redis_url = setup_redis().await;
     let limiter = RateLimiter::new(Some(&redis_url)).await.unwrap();
 
-    let key = format!("test_key_is_allowed_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!(
+        "test_key_is_allowed_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
 
     // First request should be allowed
     let result = limiter.is_allowed(&key, 10).await;
@@ -33,7 +39,13 @@ async fn test_rate_limiter_is_allowed_blocking() {
     let redis_url = setup_redis().await;
     let limiter = RateLimiter::new(Some(&redis_url)).await.unwrap();
 
-    let key = format!("test_key_is_allowed_blocking_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!(
+        "test_key_is_allowed_blocking_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
 
     // Default RPM is 60.
     for _i in 0..60 {
@@ -51,13 +63,23 @@ async fn test_rate_limiter_check_rpm() {
     let redis_url = setup_redis().await;
     let limiter = RateLimiter::new(Some(&redis_url)).await.unwrap();
 
-    let key = format!("test_key_check_rpm_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!(
+        "test_key_check_rpm_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
     let limit = 5;
 
     for i in 0..limit {
         let result = limiter.check_rpm(&key, limit).await.unwrap();
         assert!(result.0, "Expected to be allowed");
-        assert_eq!(result.1, limit - i as u64 - 1, "Remaining count should decrease");
+        assert_eq!(
+            result.1,
+            limit - i as u64 - 1,
+            "Remaining count should decrease"
+        );
     }
 
     // The next one should be blocked
@@ -71,7 +93,13 @@ async fn test_rate_limiter_check_tpm() {
     let redis_url = setup_redis().await;
     let limiter = RateLimiter::new(Some(&redis_url)).await.unwrap();
 
-    let key = format!("test_key_check_tpm_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!(
+        "test_key_check_tpm_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
     let limit = 10000;
 
     // Check with 50 tokens
@@ -84,7 +112,13 @@ async fn test_rate_limiter_record_usage() {
     let redis_url = setup_redis().await;
     let limiter = RateLimiter::new(Some(&redis_url)).await.unwrap();
 
-    let key = format!("test_key_record_usage_{}", SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos());
+    let key = format!(
+        "test_key_record_usage_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
 
     // Record usage
     let result = limiter.record_usage(&key, 150).await;
@@ -106,7 +140,10 @@ async fn test_rate_limiter_record_usage() {
         .await
         .unwrap();
 
-    assert_eq!(tokens_used, 200, "Tokens used should be sum of recorded amounts");
+    assert_eq!(
+        tokens_used, 200,
+        "Tokens used should be sum of recorded amounts"
+    );
 
     let requests_made: u64 = redis::cmd("GET")
         .arg(format!("hyperinfer:usage:requests:{}", key))
@@ -114,5 +151,8 @@ async fn test_rate_limiter_record_usage() {
         .await
         .unwrap();
 
-    assert_eq!(requests_made, 2, "Requests made should reflect number of calls");
+    assert_eq!(
+        requests_made, 2,
+        "Requests made should reflect number of calls"
+    );
 }
