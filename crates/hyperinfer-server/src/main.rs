@@ -1,10 +1,11 @@
 //! HyperInfer Server (Control Plane)
 
 use axum::{
+    body::Body,
     extract::{Json, Path, State},
-    http::StatusCode,
-    middleware,
-    response::IntoResponse,
+    http::{Request, StatusCode},
+    middleware::{self, Next},
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -30,6 +31,30 @@ struct AppState<D: Database, C: ConfigStore> {
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
+
+pub async fn admin_auth_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, &'static str)> {
+    let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
+    if admin_token.is_empty() {
+        tracing::error!("ADMIN_TOKEN environment variable is not set");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ADMIN_TOKEN not configured",
+        ));
+    }
+
+    let auth_header = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok());
+
+    match auth_header {
+        Some(header) if header == format!("Bearer {}", admin_token) => Ok(next.run(req).await),
+        _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    }
+}
 
 async fn config_sync<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
@@ -444,18 +469,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ))
         .with_state(mcp_state);
 
+    let v1_router = Router::new()
+        .route("/config/sync", get(config_sync))
+        .route("/teams/:id", get(get_team))
+        .route("/teams", post(create_team))
+        .route("/users/:id", get(get_user))
+        .route("/users", post(create_user))
+        .route("/api_keys/:id", get(get_api_key))
+        .route("/api_keys", post(create_api_key))
+        .route("/model_aliases/:id", get(get_model_alias))
+        .route("/model_aliases", post(create_model_alias))
+        .route("/quotas/:team_id", get(get_quota))
+        .route("/quotas", post(create_quota))
+        .layer(middleware::from_fn(admin_auth_middleware));
+
     let app = Router::new()
-        .route("/v1/config/sync", get(config_sync))
-        .route("/v1/teams/:id", get(get_team))
-        .route("/v1/teams", post(create_team))
-        .route("/v1/users/:id", get(get_user))
-        .route("/v1/users", post(create_user))
-        .route("/v1/api_keys/:id", get(get_api_key))
-        .route("/v1/api_keys", post(create_api_key))
-        .route("/v1/model_aliases/:id", get(get_model_alias))
-        .route("/v1/model_aliases", post(create_model_alias))
-        .route("/v1/quotas/:team_id", get(get_quota))
-        .route("/v1/quotas", post(create_quota))
+        .nest("/v1", v1_router)
         .merge(mcp_router)
         .layer(cors)
         .with_state(state);
