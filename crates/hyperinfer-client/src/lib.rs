@@ -20,9 +20,9 @@ pub use telemetry_otlp::{
 
 use futures::Stream;
 use hyperinfer_core::{
-    rate_limiting::RateLimiter, types::Provider, ChatChunk, ChatRequest, ChatResponse, Config,
-    HyperInferError,
+    rate_limiting::RateLimiter, ChatChunk, ChatRequest, ChatResponse, Config, HyperInferError,
 };
+use hyperinfer_providers::ProviderRegistry;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -142,6 +142,7 @@ pub struct HyperInferClient {
     telemetry: Telemetry,
     cache: ExactMatchCache,
     mirror: MirrorHandle,
+    provider_registry: Arc<RwLock<Arc<ProviderRegistry>>>,
 }
 
 impl HyperInferClient {
@@ -162,6 +163,10 @@ impl HyperInferClient {
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
+        let provider_registry_inner = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&provider_registry_inner);
+        let provider_registry = Arc::new(RwLock::new(provider_registry_inner));
+
         Ok(Self {
             config,
             http_caller,
@@ -170,6 +175,7 @@ impl HyperInferClient {
             telemetry,
             cache,
             mirror,
+            provider_registry,
         })
     }
 
@@ -177,6 +183,11 @@ impl HyperInferClient {
     pub async fn set_mirror(&self, cfg: Option<MirrorConfig>) {
         let mut guard = self.mirror.write().await;
         *guard = cfg;
+    }
+
+    pub async fn inject_provider_registry(&self, external_registry: Arc<ProviderRegistry>) {
+        let mut guard = self.provider_registry.write().await;
+        *guard = external_registry;
     }
 
     pub async fn chat(
@@ -253,25 +264,20 @@ impl HyperInferClient {
                 "chat",
             );
 
-            // 3. Execute HTTP call
-            let response = match provider {
-                Provider::OpenAI => {
-                    self.http_caller
-                        .call_openai(&model, &api_key, &request)
-                        .await?
-                }
-                Provider::Anthropic => {
-                    self.http_caller
-                        .call_anthropic(&model, &api_key, &request)
-                        .await?
-                }
-                _ => {
-                    return Err(HyperInferError::Config(std::io::Error::new(
-                        std::io::ErrorKind::Unsupported,
-                        "Unsupported provider",
-                    )));
-                }
+            // 3. Execute HTTP call via provider registry
+            let llm_provider = {
+                let registry = self.provider_registry.read().await;
+                registry.get(&provider_name).ok_or_else(|| {
+                    HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("Provider '{}' not found in registry", provider_name),
+                    ))
+                })?
             };
+
+            let mut resolved_request = request.clone();
+            resolved_request.model = model.clone();
+            let response = llm_provider.chat(&resolved_request, &api_key).await?;
 
             // 4. Record OTel usage and response attributes on the span.
             let elapsed = start.elapsed().as_millis() as u64;
@@ -370,7 +376,7 @@ impl HyperInferClient {
         }
 
         // 2. Resolve model / provider / api key.
-        let (model, provider, api_key) = {
+        let (model, provider_name, api_key) = {
             let config = self.config.read().await;
             let resolved = self.router.resolve(&request.model, &config);
 
@@ -384,9 +390,10 @@ impl HyperInferClient {
                 ))
             })?;
 
+            let provider_name = provider.to_string();
             let api_key = config
                 .api_keys
-                .get(&provider.to_string())
+                .get(&provider_name)
                 .cloned()
                 .ok_or_else(|| {
                     HyperInferError::Config(std::io::Error::new(
@@ -395,21 +402,27 @@ impl HyperInferClient {
                     ))
                 })?;
 
-            (model, provider, api_key)
+            (model, provider_name, api_key)
         };
 
-        // 3. Dispatch to the correct SSE stream.
+        // 3. Get provider from registry and create stream
+        // Note: Due to lifetime issues with dynamic dispatch and AccountedStream,
+        // we use HttpCaller directly for streaming. The providers in the registry
+        // are used for non-streaming chat() calls.
         let provider_stream: Pin<
             Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = match provider {
-            Provider::OpenAI => self.http_caller.stream_openai(&model, &api_key, &request),
-            Provider::Anthropic => self
+        > = match provider_name.as_str() {
+            "openai" => self.http_caller.stream_openai(&model, &api_key, &request),
+            "anthropic" => self
                 .http_caller
                 .stream_anthropic(&model, &api_key, &request),
             _ => {
                 return Err(HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::Unsupported,
-                    "Unsupported provider for streaming",
+                    format!(
+                        "Unsupported provider '{}' for streaming (model: '{}')",
+                        provider_name, model
+                    ),
                 )));
             }
         };
@@ -423,7 +436,6 @@ impl HyperInferClient {
             gen_ai.operation.name = "chat_stream",
             gen_ai.request.model = %request.model,
         );
-        let provider_name = provider.to_string();
         crate::telemetry_otlp::set_gen_ai_attributes(&span, &provider_name, &model, "chat_stream");
 
         // 5. Wrap the provider stream so usage/telemetry are recorded on
