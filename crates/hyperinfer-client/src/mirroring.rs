@@ -269,4 +269,57 @@ mod tests {
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
+
+    static SERIALIZE_MIRROR_TEST: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+    fn get_serialize_mutex() -> &'static tokio::sync::Mutex<()> {
+        SERIALIZE_MIRROR_TEST.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    #[tokio::test]
+    async fn test_maybe_mirror_concurrency_limit_no_panic() {
+        let _guard = get_serialize_mutex().lock().await;
+
+        let sem = mirror_semaphore();
+        let mut permits: Vec<tokio::sync::SemaphorePermit<'_>> =
+            Vec::with_capacity(MIRROR_CONCURRENCY_LIMIT);
+        for _ in 0..MIRROR_CONCURRENCY_LIMIT {
+            let permit = sem.acquire().await.expect("should acquire permit");
+            permits.push(permit);
+        }
+
+        assert_eq!(sem.available_permits(), 0);
+
+        let handle: MirrorHandle = Arc::new(RwLock::new(Some(MirrorConfig {
+            model: "gpt-4o".to_string(),
+            sample_rate: 1.0,
+        })));
+        let http = Arc::new(HttpCaller::new().unwrap());
+        let router = Arc::new(Router::new(vec![]));
+        let config = Arc::new(empty_config());
+
+        let request = hyperinfer_core::ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![hyperinfer_core::types::ChatMessage {
+                role: hyperinfer_core::types::MessageRole::User,
+                content: "hello".to_string(),
+            }],
+            max_tokens: Some(10),
+            temperature: None,
+            stream: None,
+            stop: None,
+        };
+
+        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+
+        let acquired_after = sem.clone().try_acquire_owned();
+        assert!(
+            acquired_after.is_err(),
+            "maybe_mirror should not have acquired a permit when at capacity"
+        );
+
+        drop(permits);
+
+        assert_eq!(sem.available_permits(), MIRROR_CONCURRENCY_LIMIT);
+    }
 }
