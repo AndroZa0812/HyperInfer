@@ -20,10 +20,10 @@ jobs:
         uses: qodo-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NVIDIA API configuration
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          config.model: "nvidia/gemma-4-31b-it"  # Gemma 4 31B Instruct
-          config.fallback_models: '["nvidia/gemma-4-31b-it"]'
+          # NVIDIA NIM API configuration
+          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          config.model: "nvidia_nim/google/gemma-4-31b-it"  # Gemma 4 31B Instruct
+          config.fallback_models: '["nvidia_nim/google/gemma-4-31b-it"]'
           config.custom_model_max_tokens: "128000"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
