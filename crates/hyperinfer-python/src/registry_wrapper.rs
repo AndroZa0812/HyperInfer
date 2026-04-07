@@ -26,14 +26,21 @@ impl ProviderRegistryWrapper {
     /// Register a Python callable as a provider.
     ///
     /// The provider name is owned by the registry via Arc<str>, so no memory
-    /// leaking is required. Repeated registrations with the same name will panic.
+    /// leaking is required. Returns an error if a provider with the same name
+    /// is already registered.
     pub fn register_provider(
         &self,
         name: String,
         chat_callable: Py<PyAny>,
         stream_callable: Option<Py<PyAny>>,
     ) -> PyResult<()> {
-        let name_arc: Arc<str> = name.into();
+        let name_arc: Arc<str> = name.clone().into();
+        if self.registry.contains(&name_arc) {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Provider '{}' is already registered",
+                name
+            )));
+        }
         let provider = PythonProvider::new(name_arc.clone(), chat_callable, stream_callable);
         self.registry.register_arc(name_arc, Arc::new(provider));
         Ok(())

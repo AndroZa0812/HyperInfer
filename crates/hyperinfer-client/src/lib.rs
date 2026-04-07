@@ -265,13 +265,15 @@ impl HyperInferClient {
             );
 
             // 3. Execute HTTP call via provider registry
-            let registry = self.provider_registry.read().await;
-            let llm_provider = registry.get(&provider_name).ok_or_else(|| {
-                HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("Provider '{}' not found in registry", provider_name),
-                ))
-            })?;
+            let llm_provider = {
+                let registry = self.provider_registry.read().await;
+                registry.get(&provider_name).ok_or_else(|| {
+                    HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("Provider '{}' not found in registry", provider_name),
+                    ))
+                })?
+            };
 
             let mut resolved_request = request.clone();
             resolved_request.model = model.clone();
