@@ -4,9 +4,12 @@
 //! to Python environments.
 
 mod client;
+mod providers;
+mod registry_wrapper;
 mod types;
 
 pub use client::{ChunkStream, HyperInferClient};
+pub use registry_wrapper::{create_provider_registry, ProviderRegistryWrapper};
 
 use pyo3::prelude::*;
 
@@ -30,7 +33,9 @@ fn shutdown_telemetry() {
 fn _hyperinfer(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<HyperInferClient>()?;
     m.add_class::<ChunkStream>()?;
+    m.add_class::<ProviderRegistryWrapper>()?;
     m.add_function(wrap_pyfunction!(init_langfuse_telemetry, m)?)?;
     m.add_function(wrap_pyfunction!(shutdown_telemetry, m)?)?;
+    m.add_function(wrap_pyfunction!(create_provider_registry, m)?)?;
     Ok(())
 }
