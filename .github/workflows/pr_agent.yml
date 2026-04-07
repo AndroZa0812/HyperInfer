@@ -23,7 +23,8 @@ jobs:
           config.model: "ollama/gemma4"
           config.fallback_models: '["ollama/gemma4"]'
           config.custom_model_max_tokens: "128000"
-          OLLAMA.API_BASE: "http://localhost:8001"
+          # Use host.docker.internal if running in Docker, localhost if native
+          OLLAMA.API_BASE: "${{ env.OLLAMA_API_BASE || 'http://localhost:8001' }}"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"

@@ -1,0 +1,17 @@
+# Environment variables (contains secrets)
+.env
+
+# Runner configuration (contains sensitive data)
+.runner
+.credentials
+.credentials_rsaparams
+
+# Work directory
+_work/
+
+# Logs
+*.log
+
+# Model files (if stored locally)
+models/
+*.gguf
