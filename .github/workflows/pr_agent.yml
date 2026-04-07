@@ -6,6 +6,10 @@ on:
   issue_comment:
     types: [created, edited]
 
+env:
+  PR_AGENT_MODEL: ${{ vars.PR_AGENT_MODEL || 'nvidia_nim/google/gemma-4-31b-it' }}
+  PR_AGENT_MODEL_FALLBACK: ${{ vars.PR_AGENT_MODEL_FALLBACK || 'nvidia_nim/google/gemma-4-31b-it' }}
+
 jobs:
   pr_agent_job:
     # Allow running on PRs created by anyone (including bots)
