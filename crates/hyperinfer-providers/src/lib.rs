@@ -62,3 +62,97 @@ pub fn init_default_registry(registry: &ProviderRegistry) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn feed_chunks(chunks: &[&[u8]]) -> (Vec<String>, Vec<u8>) {
+        let mut raw_buf: Vec<u8> = Vec::new();
+        let mut all_lines: Vec<String> = Vec::new();
+        for chunk in chunks {
+            raw_buf.extend_from_slice(chunk);
+            drain_lines(&mut raw_buf, &mut all_lines);
+        }
+        (all_lines, raw_buf)
+    }
+
+    #[test]
+    fn test_drain_lines_single_chunk() {
+        let (lines, remainder) = feed_chunks(&[b"data: hello\ndata: world\n"]);
+        assert_eq!(lines, vec!["data: hello", "data: world"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_crlf_endings() {
+        let (lines, remainder) = feed_chunks(&[b"data: hello\r\ndata: world\r\n"]);
+        assert_eq!(lines, vec!["data: hello", "data: world"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_incomplete_line_buffered() {
+        let (lines, remainder) = feed_chunks(&[b"data: hello\n", b"data: partial"]);
+        assert_eq!(lines, vec!["data: hello"]);
+        assert_eq!(remainder, b"data: partial");
+    }
+
+    #[test]
+    fn test_drain_lines_multibyte_split_across_chunks() {
+        let chunk1: &[u8] = b"data: caf\xc3";
+        let chunk2: &[u8] = b"\xa9\ndata: done\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2]);
+        assert_eq!(lines[0], "data: café");
+        assert_eq!(lines[1], "data: done");
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_three_byte_split_across_three_chunks() {
+        let chunk1: &[u8] = b"data: \xe4";
+        let chunk2: &[u8] = b"\xb8";
+        let chunk3: &[u8] = b"\xad\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2, chunk3]);
+        assert_eq!(lines, vec!["data: 中"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_empty_lines_preserved() {
+        let (lines, _) = feed_chunks(&[b"data: hello\n\ndata: world\n"]);
+        assert_eq!(lines, vec!["data: hello", "", "data: world"]);
+    }
+
+    #[test]
+    fn test_drain_lines_no_newline_nothing_emitted() {
+        let (lines, remainder) = feed_chunks(&[b"data: no newline yet"]);
+        assert!(lines.is_empty());
+        assert_eq!(remainder, b"data: no newline yet");
+    }
+
+    #[test]
+    fn test_drain_lines_utf8_invalid_bytes_preserved() {
+        let chunk1: &[u8] = b"data: \xc3";
+        let chunk2: &[u8] = b"\xa9\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2]);
+        assert_eq!(lines, vec!["data: é"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_multiple_incomplete_chunks() {
+        let chunk1: &[u8] = b"data: \xe4\xb8";
+        let chunk2: &[u8] = b"\xad";
+        let chunk3: &[u8] = b"\ndata: done\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2, chunk3]);
+        assert_eq!(lines, vec!["data: 中", "data: done"]);
+        assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_drain_lines_mixed_crlf_and_lf() {
+        let (lines, _) = feed_chunks(&[b"line1\r\nline2\nline3\r\n"]);
+        assert_eq!(lines, vec!["line1", "line2", "line3"]);
+    }
+}
