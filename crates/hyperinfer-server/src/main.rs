@@ -10,6 +10,7 @@ use axum::{
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{
+    admin_auth_middleware, AdminAuthState,
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
     RedisConfigStore, SqlxDb,
 };
@@ -432,7 +433,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ))
         .with_state(mcp_state);
 
-    let app = Router::new()
+    let admin_auth_state = AdminAuthState {
+        admin_token: Arc::new(std::env::var("ADMIN_TOKEN").unwrap_or_default()),
+    };
+
+    // Control plane API routes protected by admin_auth_middleware.
+    let api_router = Router::new()
         .route("/v1/config/sync", get(config_sync))
         .route("/v1/teams/:id", get(get_team))
         .route("/v1/teams", post(create_team))
@@ -444,9 +450,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .layer(middleware::from_fn_with_state(admin_auth_state.clone(), admin_auth_middleware))
+        .with_state(state.clone()); // api_router needs the same AppState
+
+    let app = Router::new()
+        .merge(api_router)
         .merge(mcp_router)
-        .layer(cors)
-        .with_state(state);
+        .layer(cors);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await?;
     info!("Server listening on {}", listener.local_addr()?);
