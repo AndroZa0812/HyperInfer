@@ -100,14 +100,11 @@ Comment out `network_mode: host` and uncomment the bridge network section.
     --temp 1.0 --top-p 0.95 --top-k 64
 ```
 
-### 3. Update the workflow file
+### 3. Update the workflow file (if needed)
 
-Edit `.github/workflows/pr_agent.yml`:
+The workflow is already configured to use llama.cpp's OpenAI-compatible API via the `LLAMA_API_BASE` environment variable. The default is `http://host.docker.internal:8001/v1` for Docker setups.
 
-```yaml
-env:
-  OLLAMA.API_BASE: "http://host.docker.internal:8001"
-```
+If you need to change the llama-server URL, edit `.github/workflows/pr_agent.yml` or set the environment variable in `docker-compose.yml`.
 
 ## Alternative Setup: Fully Containerized (Most Isolated)
 
@@ -148,6 +145,7 @@ docker-compose up -d
 | `REPO_URL` | Yes | - | Your GitHub repository URL |
 | `RUNNER_TOKEN` | Yes | - | GitHub runner registration token |
 | `RUNNER_NAME` | No | `hyperinfer-runner` | Name shown in GitHub |
+| `LLAMA_API_BASE` | No | `http://host.docker.internal:8001/v1` | llama.cpp OpenAI-compatible API URL |
 | `MODELS_DIR` | No | `./models` | Path to GGUF models (Option 3) |
 
 ## Security Considerations
