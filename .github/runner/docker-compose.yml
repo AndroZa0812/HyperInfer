@@ -1,6 +1,6 @@
-# IMPORTANT: This runner runs INSIDE Docker, so it always uses Linux (linux-x64)
+# IMPORTANT: This runner runs INSIDE Docker, so it always uses Linux (linux-arm64)
 # even on macOS/Windows. The runner architecture should NOT match your host OS,
-# it should match the Docker container OS (Linux).
+# it should match the Docker container OS (Linux ARM64 for Apple Silicon Macs).
 # Only change RUNNER_VERSION if GitHub releases a newer version.
 
 services:
@@ -12,15 +12,15 @@ services:
         # Use the latest runner version from GitHub
         # Check: https://github.com/actions/runner/releases
         - RUNNER_VERSION=2.333.1
-        # Always linux-x64 (Docker containers are Linux, even on macOS/Windows)
-        - RUNNER_ARCH=linux-x64
+        # Use linux-arm64 for ARM64 Docker containers (Apple Silicon Macs, AWS Graviton, etc.)
+        - RUNNER_ARCH=linux-arm64
     container_name: hyperinfer-github-runner
     environment:
       # Required: Set these when running
       - REPO_URL=${REPO_URL:-https://github.com/your-username/HyperInfer}
       - RUNNER_TOKEN=${RUNNER_TOKEN}
       - RUNNER_NAME=${RUNNER_NAME:-hyperinfer-runner}
-      - RUNNER_LABELS=self-hosted,Linux,X64,pr-agent
+      - RUNNER_LABELS=self-hosted,Linux,ARM64,pr-agent
     volumes:
       # Docker socket for Docker-in-Docker (PR Agent uses Docker)
       - /var/run/docker.sock:/var/run/docker.sock
