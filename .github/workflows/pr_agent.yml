@@ -20,9 +20,8 @@ jobs:
         uses: qodo-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NVIDIA API configuration (OpenAI-compatible)
-          OPENAI__API_BASE: "https://integrate.api.nvidia.com/v1"
-          OPENAI__KEY: ${{ secrets.NVIDIA_API_KEY }}
+          # NVIDIA API configuration
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           config.model: "nvidia/gemma-4-31b-it"  # Gemma 4 31B Instruct
           config.fallback_models: '["nvidia/gemma-4-31b-it"]'
           config.custom_model_max_tokens: "128000"
