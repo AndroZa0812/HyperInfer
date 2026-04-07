@@ -23,8 +23,8 @@ jobs:
           # NVIDIA API configuration (OpenAI-compatible)
           OPENAI__API_BASE: "https://integrate.api.nvidia.com/v1"
           OPENAI__KEY: ${{ secrets.NVIDIA_API_KEY }}
-          config.model: "nvidia/llama-4-17b-4o"  # or any available NVIDIA model
-          config.fallback_models: '["nvidia/llama-4-17b-4o"]'
+          config.model: "nvidia/gemma-4-31b-it"  # Gemma 4 31B Instruct
+          config.fallback_models: '["nvidia/gemma-4-31b-it"]'
           config.custom_model_max_tokens: "128000"
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
