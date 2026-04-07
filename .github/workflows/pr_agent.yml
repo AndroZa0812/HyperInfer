@@ -20,11 +20,14 @@ jobs:
         uses: qodo-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          config.model: "ollama/gemma4"
-          config.fallback_models: '["ollama/gemma4"]'
+          # Use custom model since we're using llama.cpp's OpenAI-compatible API
+          config.model: "custom/gemma-4"
+          config.fallback_models: '["custom/gemma-4"]'
           config.custom_model_max_tokens: "128000"
-          # Use host.docker.internal if running in Docker, localhost if native
-          OLLAMA.API_BASE: "${{ env.OLLAMA_API_BASE || 'http://localhost:8001' }}"
+          # llama.cpp OpenAI-compatible API configuration
+          # Use host.docker.internal:8001 for Docker containers, localhost:8001 for native
+          OPENAI__API_BASE: "${{ env.LLAMA_API_BASE || 'http://host.docker.internal:8001/v1' }}"
+          OPENAI__KEY: "dummy-key-for-llama-cpp"  # llama.cpp doesn't require auth
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
