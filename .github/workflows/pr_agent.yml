@@ -8,7 +8,9 @@ on:
 
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' && github.event.issue.pull_request != null }}
+    # Allow running on PRs created by anyone (including bots)
+    # Exclude PR Agent itself and CodeRabbit to prevent infinite comment loops and duplicate reviews
+    if: ${{ github.event.sender.login != 'github-actions[bot]' && github.event.sender.login != 'coderabbitai[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
