@@ -71,8 +71,62 @@ pub fn maybe_mirror(
     _key: String,
     mut request: ChatRequest,
 ) {
-    // Acquire a permit before spawning; if already at capacity, skip this mirror
-    // request to avoid unbounded task growth.
+    // Read mirror config and bail out early if disabled.
+    let mirror_cfg = match mirror_handle.try_read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(cfg) if cfg.sample_rate > 0.0 => cfg.clone(),
+            _ => return,
+        },
+        Err(_) => return,
+    };
+
+    // Probabilistic sampling — skip if not selected.
+    if mirror_cfg.sample_rate < 1.0 {
+        let roll: f64 = rand_f64();
+        if roll > mirror_cfg.sample_rate {
+            tracing::debug!(
+                "Mirror skipped (sample_rate={:.2}, roll={:.2})",
+                mirror_cfg.sample_rate,
+                roll
+            );
+            return;
+        }
+    }
+
+    // Rewrite the model to the mirror target.
+    request.model = mirror_cfg.model.clone();
+
+    // Resolve provider for the mirror model — bail out early if not resolvable.
+    let resolved = router.resolve(&request.model, &config_snapshot);
+    let (model, provider) = match resolved {
+        Some(r) => r,
+        None => {
+            warn!(
+                "Mirror: could not resolve model '{}', skipping",
+                request.model
+            );
+            return;
+        }
+    };
+
+    // Check we have an API key and supported provider — bail out early if not.
+    let api_key = match config_snapshot.api_keys.get(&provider.to_string()) {
+        Some(k) => k.clone(),
+        None => {
+            warn!("Mirror: no API key for provider {:?}", provider);
+            return;
+        }
+    };
+
+    match provider {
+        Provider::OpenAI | Provider::Anthropic => {}
+        _ => {
+            warn!("Mirror: unsupported provider {:?}", provider);
+            return;
+        }
+    }
+
+    // Acquire permit only after all pre-checks pass; if at capacity, skip this request.
     let permit = match mirror_semaphore().clone().try_acquire_owned() {
         Ok(p) => p,
         Err(_) => {
@@ -82,62 +136,12 @@ pub fn maybe_mirror(
     };
 
     tokio::spawn(async move {
-        // Hold the permit for the lifetime of this task.
         let _permit = permit;
-
-        // Sample check — read the mirror config, bail out quickly if disabled.
-        let mirror_cfg = {
-            let guard = mirror_handle.read().await;
-            match guard.as_ref() {
-                Some(cfg) if cfg.sample_rate > 0.0 => cfg.clone(),
-                _ => return,
-            }
-        };
-
-        // Probabilistic sampling.
-        if mirror_cfg.sample_rate < 1.0 {
-            let roll: f64 = rand_f64();
-            if roll > mirror_cfg.sample_rate {
-                tracing::debug!(
-                    "Mirror skipped (sample_rate={:.2}, roll={:.2})",
-                    mirror_cfg.sample_rate,
-                    roll
-                );
-                return;
-            }
-        }
-
-        // Rewrite the model to the mirror target.
-        request.model = mirror_cfg.model.clone();
-
-        // Resolve provider for the mirror model.
-        let resolved = router.resolve(&request.model, &config_snapshot);
-        let (model, provider) = match resolved {
-            Some(r) => r,
-            None => {
-                warn!(
-                    "Mirror: could not resolve model '{}', skipping",
-                    request.model
-                );
-                return;
-            }
-        };
-
-        let api_key = match config_snapshot.api_keys.get(&provider.to_string()) {
-            Some(k) => k.clone(),
-            None => {
-                warn!("Mirror: no API key for provider {:?}", provider);
-                return;
-            }
-        };
 
         let result = match provider {
             Provider::OpenAI => http_caller.call_openai(&model, &api_key, &request).await,
             Provider::Anthropic => http_caller.call_anthropic(&model, &api_key, &request).await,
-            _ => {
-                warn!("Mirror: unsupported provider {:?}", provider);
-                return;
-            }
+            _ => unreachable!(),
         };
 
         match result {
@@ -268,5 +272,56 @@ mod tests {
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+
+    static SERIALIZE_MIRROR_TEST: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+    fn get_serialize_mutex() -> &'static tokio::sync::Mutex<()> {
+        SERIALIZE_MIRROR_TEST.get_or_init(|| tokio::sync::Mutex::new(()))
+    }
+
+    #[tokio::test]
+    async fn test_maybe_mirror_concurrency_limit_no_panic() {
+        let _guard = get_serialize_mutex().lock().await;
+
+        let sem = mirror_semaphore();
+        let mut permits: Vec<tokio::sync::SemaphorePermit<'_>> =
+            Vec::with_capacity(MIRROR_CONCURRENCY_LIMIT);
+        for _ in 0..MIRROR_CONCURRENCY_LIMIT {
+            let permit = sem.acquire().await.expect("should acquire permit");
+            permits.push(permit);
+        }
+
+        assert_eq!(sem.available_permits(), 0);
+
+        let handle: MirrorHandle = Arc::new(RwLock::new(Some(MirrorConfig {
+            model: "gpt-4o".to_string(),
+            sample_rate: 1.0,
+        })));
+        let http = Arc::new(HttpCaller::new().unwrap());
+        let router = Arc::new(Router::new(vec![]));
+        let config = Arc::new(empty_config());
+
+        let request = hyperinfer_core::ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![hyperinfer_core::types::ChatMessage {
+                role: hyperinfer_core::types::MessageRole::User,
+                content: "hello".to_string(),
+            }],
+            max_tokens: Some(10),
+            temperature: None,
+            stream: None,
+            stop: None,
+        };
+
+        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+
+        drop(permits);
+
+        assert_eq!(
+            sem.available_permits(),
+            MIRROR_CONCURRENCY_LIMIT,
+            "maybe_mirror should not have acquired a permit when at capacity"
+        );
     }
 }
