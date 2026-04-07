@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+#[allow(clippy::type_complexity)]
 pub struct ProviderRegistry {
-    providers: Arc<RwLock<HashMap<&'static str, Arc<dyn crate::provider_trait::LlmProvider>>>>,
+    providers: Arc<RwLock<HashMap<Arc<str>, Arc<dyn crate::provider_trait::LlmProvider>>>>,
 }
 
 impl ProviderRegistry {
@@ -14,9 +15,9 @@ impl ProviderRegistry {
     }
 
     pub fn register<P: crate::provider_trait::LlmProvider + 'static>(&self, provider: P) {
-        let name = provider.name();
+        let name = Arc::from(provider.name());
         let mut providers = self.providers.write().unwrap();
-        if providers.contains_key(name) {
+        if providers.contains_key(&name) {
             panic!("Provider '{}' is already registered", name);
         }
         providers.insert(name, Arc::new(provider));
@@ -24,11 +25,11 @@ impl ProviderRegistry {
 
     pub fn register_arc(
         &self,
-        name: &'static str,
+        name: Arc<str>,
         provider: Arc<dyn crate::provider_trait::LlmProvider>,
     ) {
         let mut providers = self.providers.write().unwrap();
-        if providers.contains_key(name) {
+        if providers.contains_key(&name) {
             panic!("Provider '{}' is already registered", name);
         }
         providers.insert(name, provider);
@@ -39,9 +40,9 @@ impl ProviderRegistry {
         providers.get(name).cloned()
     }
 
-    pub fn list(&self) -> Vec<&'static str> {
+    pub fn list(&self) -> Vec<Arc<str>> {
         let providers = self.providers.read().unwrap();
-        providers.keys().copied().collect()
+        providers.keys().cloned().collect()
     }
 
     pub fn contains(&self, name: &str) -> bool {

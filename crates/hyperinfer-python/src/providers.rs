@@ -1,20 +1,22 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
+use std::sync::Arc;
+
 pub struct PythonProvider {
-    name: &'static str,
+    name: Arc<str>,
     chat_callable: Py<PyAny>,
     stream_callable: Option<Py<PyAny>>,
 }
 
 impl PythonProvider {
     pub fn new(
-        name: &'static str,
+        name: impl Into<Arc<str>>,
         chat_callable: Py<PyAny>,
         stream_callable: Option<Py<PyAny>>,
     ) -> Self {
         Self {
-            name,
+            name: name.into(),
             chat_callable,
             stream_callable,
         }
@@ -167,7 +169,7 @@ impl PythonProvider {
 impl Clone for PythonProvider {
     fn clone(&self) -> Self {
         Python::attach(|py| Self {
-            name: self.name,
+            name: self.name.clone(),
             chat_callable: self.chat_callable.clone_ref(py),
             stream_callable: self.stream_callable.as_ref().map(|c| c.clone_ref(py)),
         })
@@ -176,8 +178,8 @@ impl Clone for PythonProvider {
 
 #[async_trait::async_trait]
 impl hyperinfer_providers::LlmProvider for PythonProvider {
-    fn name(&self) -> &'static str {
-        self.name
+    fn name(&self) -> &str {
+        &self.name
     }
 
     fn supports_streaming(&self) -> bool {

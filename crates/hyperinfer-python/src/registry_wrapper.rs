@@ -25,27 +25,24 @@ impl ProviderRegistryWrapper {
 
     /// Register a Python callable as a provider.
     ///
-    /// Note: This function uses `Box::leak()` to convert the provider name to a
-    /// `'static` lifetime for use as a registry key. This means repeated calls
-    /// with the same name will leak memory. Providers should be registered once
-    /// at startup and not re-registered.
+    /// The provider name is owned by the registry via Arc<str>, so no memory
+    /// leaking is required. Repeated registrations with the same name will panic.
     pub fn register_provider(
         &self,
         name: String,
         chat_callable: Py<PyAny>,
         stream_callable: Option<Py<PyAny>>,
     ) -> PyResult<()> {
-        let name_static = Box::leak(name.into_boxed_str());
-        let provider = PythonProvider::new(name_static, chat_callable, stream_callable);
-        self.registry.register_arc(name_static, Arc::new(provider));
+        let name_arc: Arc<str> = name.into();
+        let provider = PythonProvider::new(name_arc.clone(), chat_callable, stream_callable);
+        self.registry.register_arc(name_arc, Arc::new(provider));
         Ok(())
     }
 
     /// Unregister a provider by name.
     ///
-    /// Note: This does not reclaim the memory leaked by `register_provider`
-    /// (the leaked string memory). It only removes the provider entry from
-    /// the registry. See `register_provider` for more details.
+    /// Removes the provider from the registry. The Arc<str> key will be
+    /// dropped when the last reference is released.
     pub fn unregister_provider(&self, name: &str) -> bool {
         self.registry.unregister(name).is_some()
     }

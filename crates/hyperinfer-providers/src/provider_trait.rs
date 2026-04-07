@@ -5,9 +5,9 @@ use std::pin::Pin;
 
 #[async_trait]
 pub trait LlmProvider: Send + Sync {
-    fn name(&self) -> &'static str;
+    fn name(&self) -> &str;
 
-    fn base_url(&self) -> &'static str {
+    fn base_url(&self) -> &str {
         ""
     }
 

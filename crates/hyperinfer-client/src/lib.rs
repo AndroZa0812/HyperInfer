@@ -142,7 +142,7 @@ pub struct HyperInferClient {
     telemetry: Telemetry,
     cache: ExactMatchCache,
     mirror: MirrorHandle,
-    provider_registry: Arc<ProviderRegistry>,
+    provider_registry: Arc<RwLock<Arc<ProviderRegistry>>>,
 }
 
 impl HyperInferClient {
@@ -163,8 +163,9 @@ impl HyperInferClient {
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
-        let provider_registry = Arc::new(ProviderRegistry::new());
-        hyperinfer_providers::init_default_registry(&provider_registry);
+        let provider_registry_inner = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&provider_registry_inner);
+        let provider_registry = Arc::new(RwLock::new(provider_registry_inner));
 
         Ok(Self {
             config,
@@ -184,14 +185,9 @@ impl HyperInferClient {
         *guard = cfg;
     }
 
-    pub fn inject_provider_registry(&self, external_registry: &ProviderRegistry) {
-        for name in external_registry.list() {
-            if let Some(provider) = external_registry.get(name) {
-                if !self.provider_registry.contains(name) {
-                    self.provider_registry.register_arc(name, provider);
-                }
-            }
-        }
+    pub async fn inject_provider_registry(&self, external_registry: Arc<ProviderRegistry>) {
+        let mut guard = self.provider_registry.write().await;
+        *guard = external_registry;
     }
 
     pub async fn chat(
@@ -269,14 +265,17 @@ impl HyperInferClient {
             );
 
             // 3. Execute HTTP call via provider registry
-            let llm_provider = self.provider_registry.get(&provider_name).ok_or_else(|| {
+            let registry = self.provider_registry.read().await;
+            let llm_provider = registry.get(&provider_name).ok_or_else(|| {
                 HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("Provider '{}' not found in registry", provider_name),
                 ))
             })?;
 
-            let response = llm_provider.chat(&request, &api_key).await?;
+            let mut resolved_request = request.clone();
+            resolved_request.model = model.clone();
+            let response = llm_provider.chat(&resolved_request, &api_key).await?;
 
             // 4. Record OTel usage and response attributes on the span.
             let elapsed = start.elapsed().as_millis() as u64;

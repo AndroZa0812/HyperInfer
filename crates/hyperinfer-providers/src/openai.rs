@@ -173,6 +173,9 @@ impl LlmProvider for OpenAiProvider {
         if let Some(max_tokens) = request.max_tokens {
             body.insert("max_tokens".to_string(), serde_json::json!(max_tokens));
         }
+        if let Some(ref stop) = request.stop {
+            body.insert("stop".to_string(), serde_json::json!(stop));
+        }
         let body = serde_json::Value::Object(body);
         let client = self.http_client.clone();
         let api_key = api_key.to_string();
