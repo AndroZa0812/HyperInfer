@@ -1,14 +1,16 @@
 name: PR Agent
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
     types: [created, edited]
 
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' }}
+    # Allow running on PRs created by anyone (including bots)
+    # Exclude PR Agent itself and CodeRabbit to prevent infinite comment loops and duplicate reviews
+    if: ${{ github.event.sender.login != 'github-actions[bot]' && github.event.sender.login != 'coderabbitai[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -22,9 +24,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          config.model: nvidia_nim/google/gemma-4-31b-it
-          config.fallback_models: ["nvidia_nim/google/gemma-4-31b-it"]
-          config.custom_model_max_tokens: 128000
+          config.model: "nvidia_nim/google/gemma-4-31b-it"
+          config.fallback_models: '["nvidia_nim/google/gemma-4-31b-it"]'
+          config.custom_model_max_tokens: "128000"
           github_action_config.auto_review: true
           github_action_config.auto_describe: true
           github_action_config.auto_improve: true
