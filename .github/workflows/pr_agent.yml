@@ -7,8 +7,8 @@ on:
     types: [created, edited]
 
 env:
-  # Model configuration - override via repo secrets or environment variables
   PR_AGENT_MODEL: ${{ vars.PR_AGENT_MODEL || 'nvidia_nim/google/gemma-4-31b-it' }}
+  PR_AGENT_MODEL_FALLBACK: ${{ vars.PR_AGENT_MODEL_FALLBACK || 'nvidia_nim/google/gemma-4-31b-it' }}
 
 jobs:
   pr_agent_job:
@@ -29,7 +29,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           config.model: ${{ env.PR_AGENT_MODEL }}
-          config.fallback_models: '["${{ env.PR_AGENT_MODEL }}"]'
+          config.fallback_models: '["${{ env.PR_AGENT_MODEL_FALLBACK }}"]'
           config.custom_model_max_tokens: "128000"
           github_action_config.auto_review: true
           github_action_config.auto_describe: true
