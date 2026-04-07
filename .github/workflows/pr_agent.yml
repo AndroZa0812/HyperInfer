@@ -8,7 +8,7 @@ on:
 jobs:
   pr_agent_job:
     if: ${{ github.event.sender.type != 'Bot' }}
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     permissions:
       issues: write
       pull-requests: write
@@ -20,14 +20,12 @@ jobs:
         uses: qodo-ai/pr-agent@main
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Use custom model since we're using llama.cpp's OpenAI-compatible API
-          config.model: "custom/gemma-4"
-          config.fallback_models: '["custom/gemma-4"]'
+          # NVIDIA API configuration (OpenAI-compatible)
+          OPENAI__API_BASE: "https://integrate.api.nvidia.com/v1"
+          OPENAI__KEY: ${{ secrets.NVIDIA_API_KEY }}
+          config.model: "nvidia/llama-4-17b-4o"  # or any available NVIDIA model
+          config.fallback_models: '["nvidia/llama-4-17b-4o"]'
           config.custom_model_max_tokens: "128000"
-          # llama.cpp OpenAI-compatible API configuration
-          # Use host.docker.internal:8001 for Docker containers, localhost:8001 for native
-          OPENAI__API_BASE: "${{ env.LLAMA_API_BASE || 'http://host.docker.internal:8001/v1' }}"
-          OPENAI__KEY: "dummy-key-for-llama-cpp"  # llama.cpp doesn't require auth
           github_action_config.auto_review: "true"
           github_action_config.auto_describe: "true"
           github_action_config.auto_improve: "true"
