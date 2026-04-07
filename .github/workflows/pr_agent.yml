@@ -8,7 +8,9 @@ on:
 
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' }}
+    # Allow running on PRs created by anyone (including bots)
+    # Exclude PR Agent itself to prevent infinite comment loops
+    if: ${{ github.event.sender.login != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
