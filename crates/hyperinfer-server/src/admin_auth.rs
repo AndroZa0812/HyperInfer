@@ -18,7 +18,9 @@ pub async fn admin_auth_middleware(
     next: Next,
 ) -> Response {
     if state.admin_token.is_empty() {
-        tracing::error!("ADMIN_TOKEN is not configured. Admin endpoints are disabled for security.");
+        tracing::error!(
+            "ADMIN_TOKEN is not configured. Admin endpoints are disabled for security."
+        );
         return (StatusCode::UNAUTHORIZED, "Admin endpoints are disabled").into_response();
     }
 
@@ -28,7 +30,11 @@ pub async fn admin_auth_middleware(
         Some(v) if v.starts_with("Bearer ") => v.trim_start_matches("Bearer "),
         _ => {
             tracing::debug!("Missing or invalid Authorization header format");
-            return (StatusCode::UNAUTHORIZED, "Missing or invalid Authorization header").into_response();
+            return (
+                StatusCode::UNAUTHORIZED,
+                "Missing or invalid Authorization header",
+            )
+                .into_response();
         }
     };
 

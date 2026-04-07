@@ -10,9 +10,9 @@ use axum::{
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{
-    admin_auth_middleware, AdminAuthState,
+    admin_auth_middleware,
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
-    RedisConfigStore, SqlxDb,
+    AdminAuthState, RedisConfigStore, SqlxDb,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -450,7 +450,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
-        .layer(middleware::from_fn_with_state(admin_auth_state.clone(), admin_auth_middleware))
+        .layer(middleware::from_fn_with_state(
+            admin_auth_state.clone(),
+            admin_auth_middleware,
+        ))
         .with_state(state.clone()); // api_router needs the same AppState
 
     let app = Router::new()
