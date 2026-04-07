@@ -21,6 +21,9 @@ services:
       - RUNNER_TOKEN=${RUNNER_TOKEN}
       - RUNNER_NAME=${RUNNER_NAME:-hyperinfer-runner}
       - RUNNER_LABELS=self-hosted,Linux,ARM64,pr-agent
+      # llama.cpp server URL (OpenAI-compatible API)
+      # Default: host.docker.internal:8001 for Docker, change to localhost:8001 if running runner natively
+      - LLAMA_API_BASE=${LLAMA_API_BASE:-http://host.docker.internal:8001/v1}
     volumes:
       # Docker socket for Docker-in-Docker (PR Agent uses Docker)
       - /var/run/docker.sock:/var/run/docker.sock
