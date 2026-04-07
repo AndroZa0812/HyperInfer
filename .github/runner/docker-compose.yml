@@ -1,4 +1,7 @@
-version: '3.8'
+# IMPORTANT: This runner runs INSIDE Docker, so it always uses Linux (linux-x64)
+# even on macOS/Windows. The runner architecture should NOT match your host OS,
+# it should match the Docker container OS (Linux).
+# Only change RUNNER_VERSION if GitHub releases a newer version.
 
 services:
   github-runner:
@@ -6,7 +9,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - RUNNER_VERSION=2.322.0
+        # Use the latest runner version from GitHub
+        # Check: https://github.com/actions/runner/releases
+        - RUNNER_VERSION=2.333.1
+        # Always linux-x64 (Docker containers are Linux, even on macOS/Windows)
+        - RUNNER_ARCH=linux-x64
     container_name: hyperinfer-github-runner
     environment:
       # Required: Set these when running

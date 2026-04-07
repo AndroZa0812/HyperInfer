@@ -22,10 +22,11 @@ WORKDIR /home/runner
 USER runner
 
 # Download and extract GitHub Actions runner
-# Version will be passed as build arg
-ARG RUNNER_VERSION=2.322.0
+# Version and architecture can be overridden via build args
+ARG RUNNER_VERSION=2.333.1
+ARG RUNNER_ARCH=linux-x64
 RUN curl -o actions-runner.tar.gz -L \
-    https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz && \
+    https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz && \
     tar xzf actions-runner.tar.gz && \
     rm actions-runner.tar.gz
 
