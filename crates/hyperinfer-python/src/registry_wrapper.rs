@@ -35,14 +35,17 @@ impl ProviderRegistryWrapper {
         stream_callable: Option<Py<PyAny>>,
     ) -> PyResult<()> {
         let name_arc: Arc<str> = name.clone().into();
-        if self.registry.contains(&name_arc) {
+        let provider = PythonProvider::new(name_arc.clone(), chat_callable, stream_callable);
+        if self
+            .registry
+            .register_arc_if_absent(name_arc, Arc::new(provider))
+            .is_err()
+        {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "Provider '{}' is already registered",
                 name
             )));
         }
-        let provider = PythonProvider::new(name_arc.clone(), chat_callable, stream_callable);
-        self.registry.register_arc(name_arc, Arc::new(provider));
         Ok(())
     }
 

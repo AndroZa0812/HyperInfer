@@ -23,16 +23,17 @@ impl ProviderRegistry {
         providers.insert(name, Arc::new(provider));
     }
 
-    pub fn register_arc(
+    pub fn register_arc_if_absent(
         &self,
         name: Arc<str>,
         provider: Arc<dyn crate::provider_trait::LlmProvider>,
-    ) {
+    ) -> Result<(), Arc<str>> {
         let mut providers = self.providers.write().unwrap();
         if providers.contains_key(&name) {
-            panic!("Provider '{}' is already registered", name);
+            return Err(name);
         }
         providers.insert(name, provider);
+        Ok(())
     }
 
     pub fn get(&self, name: &str) -> Option<Arc<dyn crate::provider_trait::LlmProvider>> {
