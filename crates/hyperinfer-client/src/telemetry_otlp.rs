@@ -206,4 +206,11 @@ mod tests {
             "get_or_init should return same instance"
         );
     }
+
+    #[test]
+    fn test_init_telemetry_with_headers_build_error() {
+        let endpoint = "http://\0invalid";
+        let res = init_telemetry_with_headers(endpoint, vec![]);
+        assert!(res.is_err());
+    }
 }

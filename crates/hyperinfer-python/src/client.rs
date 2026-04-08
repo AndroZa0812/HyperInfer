@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 
+use super::registry_wrapper::ProviderRegistryWrapper;
+
 /// Convert a Python config `dict` (as returned by `Config.to_dict()`) into
 /// the Rust `hyperinfer_core::Config`.
 ///
@@ -207,6 +209,65 @@ pub struct HyperInferClient {
     config_dict: Arc<RwLock<Option<Py<PyAny>>>>,
 }
 
+async fn create_client(
+    redis_url: &str,
+    inner: &Arc<RwLock<Option<RustClient>>>,
+    config_dict: &Arc<RwLock<Option<Py<PyAny>>>>,
+) -> Result<RustClient, PyErr> {
+    let inner_guard = inner.write().await;
+    if inner_guard.is_some() {
+        return Err(pyo3::exceptions::PyRuntimeError::new_err(
+            "Client already initialized",
+        ));
+    }
+
+    let config = {
+        let config_guard = config_dict.read().await;
+        match Python::try_attach(|py| {
+            if let Some(dict) = &*config_guard {
+                let bound: Bound<'_, PyAny> = dict.bind(py).clone();
+                config_from_py(py, &bound)
+                    .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
+            } else {
+                Ok(Config {
+                    api_keys: std::collections::HashMap::new(),
+                    routing_rules: Vec::new(),
+                    quotas: std::collections::HashMap::new(),
+                    model_aliases: std::collections::HashMap::new(),
+                    default_provider: None,
+                })
+            }
+        }) {
+            Some(Ok(config)) => config,
+            Some(Err(e)) => return Err(e),
+            None => {
+                return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                    "Failed to attach to Python",
+                ))
+            }
+        }
+    };
+
+    let client = RustClient::new(redis_url, config)
+        .await
+        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+
+    Ok(client)
+}
+
+async fn store_and_clear(
+    client: RustClient,
+    inner: &Arc<RwLock<Option<RustClient>>>,
+    config_dict: &Arc<RwLock<Option<Py<PyAny>>>>,
+) {
+    let mut inner_guard = inner.write().await;
+    *inner_guard = Some(client);
+    drop(inner_guard);
+
+    let mut config_guard = config_dict.write().await;
+    config_guard.take();
+}
+
 #[pymethods]
 impl HyperInferClient {
     /// Create a new (uninitialised) client.
@@ -233,54 +294,32 @@ impl HyperInferClient {
         let config_dict = self.config_dict.clone();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            // Acquire write lock upfront for atomic check-and-set.
-            let mut inner_guard = inner.write().await;
-            if inner_guard.is_some() {
-                return Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
-                    pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
-                })?;
-            }
+            let client = create_client(&redis_url, &inner, &config_dict).await?;
+            store_and_clear(client, &inner, &config_dict).await;
+            Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })?
+        })
+    }
 
-            // Parse configuration (still holding inner write lock to prevent races).
-            let config_guard = config_dict.read().await;
-            let config = match Python::try_attach(|py| {
-                if let Some(dict) = &*config_guard {
-                    let bound: Bound<'_, PyAny> = dict.bind(py).clone();
-                    config_from_py(py, &bound)
-                        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))
-                } else {
-                    Ok(Config {
-                        api_keys: std::collections::HashMap::new(),
-                        routing_rules: Vec::new(),
-                        quotas: std::collections::HashMap::new(),
-                        model_aliases: std::collections::HashMap::new(),
-                        default_provider: None,
-                    })
-                }
-            }) {
-                Some(Ok(config)) => config,
-                Some(Err(e)) => return Err(e),
-                None => {
-                    return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                        "Failed to attach to Python",
-                    ))
-                }
-            };
-            drop(config_guard);
+    /// Asynchronously initialise the underlying Rust client with a shared provider registry.
+    ///
+    /// This allows Python-registered providers (via ProviderRegistryWrapper) to be used
+    /// by the HyperInferClient for LLM calls.
+    pub fn init_with_registry<'a>(
+        &self,
+        py: Python<'a>,
+        registry_wrapper: &ProviderRegistryWrapper,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let redis_url = self.redis_url.clone();
+        let inner = self.inner.clone();
+        let config_dict = self.config_dict.clone();
+        let registry = registry_wrapper.get_registry();
 
-            // Instantiate client.
-            let client = RustClient::new(&redis_url, config)
-                .await
-                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-
-            // Store the client (we already hold the write lock).
-            *inner_guard = Some(client);
-            drop(inner_guard);
-
-            let mut config_guard = config_dict.write().await;
-            config_guard.take();
-            drop(config_guard);
-
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = create_client(&redis_url, &inner, &config_dict).await?;
+            client.inject_provider_registry(registry).await;
+            store_and_clear(client, &inner, &config_dict).await;
             Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
             })?
