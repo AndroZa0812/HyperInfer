@@ -428,23 +428,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
 
     // MCP state: JWT secret must be set explicitly.
-    // In production, set MCP_JWT_SECRET to a long random value.
-    // For local dev only, set MCP_INSECURE_DEV_MODE=1 to allow the hardcoded
-    // fallback — this is rejected unless that variable is explicitly present.
+    // Set MCP_JWT_SECRET to a long random value in the environment.
     let jwt_secret = match std::env::var("MCP_JWT_SECRET") {
         Ok(s) if !s.is_empty() => s,
         _ => {
-            if std::env::var("MCP_INSECURE_DEV_MODE").as_deref() == Ok("1") {
-                tracing::warn!(
-                    "MCP_JWT_SECRET not set — using insecure dev secret. \
-                     NEVER use MCP_INSECURE_DEV_MODE=1 in production!"
-                );
-                "hyperinfer-dev-secret".to_string()
-            } else {
-                return Err("MCP_JWT_SECRET must be set to a non-empty value. \
-                     For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
-                    .into());
-            }
+            return Err("MCP_JWT_SECRET must be set to a non-empty value.".into());
         }
     };
     let mcp_state = McpState::new(jwt_secret);
