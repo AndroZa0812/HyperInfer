@@ -23,7 +23,17 @@ use super::registry_wrapper::ProviderRegistryWrapper;
 ///     "default_provider": "openai",   # or null
 /// }
 /// ```
-fn parse_routing_rules(dict: &Bound<'_, PyDict>) -> PyResult<Vec<RoutingRule>> {
+fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
+    let dict = obj.cast::<PyDict>()?;
+
+    // --- api_keys ---
+    let api_keys: HashMap<String, String> = if let Some(val) = dict.get_item("api_keys")? {
+        val.extract()?
+    } else {
+        HashMap::new()
+    };
+
+    // --- routing_rules ---
     let mut routing_rules: Vec<RoutingRule> = Vec::new();
     if let Some(val) = dict.get_item("routing_rules")? {
         let list = val.cast::<PyList>()?;
@@ -52,10 +62,8 @@ fn parse_routing_rules(dict: &Bound<'_, PyDict>) -> PyResult<Vec<RoutingRule>> {
             });
         }
     }
-    Ok(routing_rules)
-}
 
-fn parse_quotas(dict: &Bound<'_, PyDict>) -> PyResult<HashMap<String, Quota>> {
+    // --- quotas ---
     let mut quotas: HashMap<String, Quota> = HashMap::new();
     if let Some(val) = dict.get_item("quotas")? {
         let q_dict = val.cast::<PyDict>()?;
@@ -87,24 +95,6 @@ fn parse_quotas(dict: &Bound<'_, PyDict>) -> PyResult<HashMap<String, Quota>> {
             );
         }
     }
-    Ok(quotas)
-}
-
-fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
-    let dict = obj.cast::<PyDict>()?;
-
-    // --- api_keys ---
-    let api_keys: HashMap<String, String> = if let Some(val) = dict.get_item("api_keys")? {
-        val.extract()?
-    } else {
-        HashMap::new()
-    };
-
-    // --- routing_rules ---
-    let routing_rules = parse_routing_rules(dict)?;
-
-    // --- quotas ---
-    let quotas = parse_quotas(dict)?;
 
     // --- model_aliases ---
     let model_aliases: HashMap<String, String> =

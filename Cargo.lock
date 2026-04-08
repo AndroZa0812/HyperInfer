@@ -1411,8 +1411,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "testcontainers",
- "testcontainers-modules",
  "tokio",
  "tracing",
  "tracing-opentelemetry",

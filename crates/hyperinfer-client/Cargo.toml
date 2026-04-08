@@ -32,6 +32,4 @@ futures = "0.3"
 async-stream = "0.3"
 
 [dev-dependencies]
-testcontainers = "0.27.2"
-testcontainers-modules = { version = "0.15.0", features = ["redis"] }
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
