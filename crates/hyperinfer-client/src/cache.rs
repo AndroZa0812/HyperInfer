@@ -292,4 +292,70 @@ mod tests {
         let cache = cache.with_ttl(60);
         assert_eq!(cache.ttl_secs, 60);
     }
+
+    #[tokio::test]
+    async fn test_cache_deserialisation_error() {
+        // We use testcontainers to reliably spin up a redis instance to test this properly,
+        // covering both ExactMatchCache struct's internal `get()` interaction with ConnectionManager
+        // and deserialization match arms seamlessly.
+        use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
+        use testcontainers_modules::redis::REDIS_PORT;
+
+        let container_result = GenericImage::new("redis", "7.2.4")
+            .with_exposed_port(REDIS_PORT.tcp())
+            .with_wait_for(testcontainers::core::WaitFor::message_on_stdout(
+                "Ready to accept connections",
+            ))
+            .start()
+            .await;
+
+        // In CI some docker socket configurations may fail - fail the test explicitly in CI, skip gracefully locally
+        let container = match container_result {
+            Ok(c) => c,
+            Err(e) => {
+                let is_ci = std::env::var("CI").map(|v| v == "true").unwrap_or(false);
+                if is_ci {
+                    panic!(
+                        "FATAL: testcontainers failed to start Redis in CI environment: {}. \
+                         This indicates a test infrastructure issue that must be resolved.",
+                        e
+                    );
+                } else {
+                    println!(
+                        "Skipping test: testcontainers failed to start Redis ({})",
+                        e
+                    );
+                    return;
+                }
+            }
+        };
+
+        let port = container
+            .get_host_port_ipv4(REDIS_PORT)
+            .await
+            .expect("Failed to get port");
+        let redis_url = format!("redis://127.0.0.1:{}", port);
+
+        let cache = ExactMatchCache::new(&redis_url, "test-ns-malformed").await;
+
+        let req = sample_request("gpt-4");
+        let key = cache.cache_key(&req).unwrap();
+
+        // Directly insert malformed JSON into Redis
+        let client = redis::Client::open(redis_url.as_str()).unwrap();
+        let mut conn = client.get_multiplexed_async_connection().await.unwrap();
+        let _: () = redis::cmd("SET")
+            .arg(&key)
+            .arg("not valid json")
+            .query_async(&mut conn)
+            .await
+            .unwrap();
+
+        // The get should return None and not panic
+        let result = cache.get(&req).await;
+        assert!(
+            result.is_none(),
+            "Deserialization error should result in a cache miss (None)"
+        );
+    }
 }
