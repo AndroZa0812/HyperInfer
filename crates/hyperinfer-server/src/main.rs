@@ -28,25 +28,16 @@ struct AppState<D: Database, C: ConfigStore> {
     db: D,
     #[allow(dead_code)]
     config_manager: C,
-    #[allow(dead_code)]
     admin_token: Arc<String>,
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
 
-pub async fn admin_auth_middleware(
+pub(crate) async fn admin_auth_middleware(
+    State(state): State<AppState<SqlxDb, RedisConfigStore>>,
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
-    if admin_token.is_empty() {
-        tracing::error!("ADMIN_TOKEN environment variable is not set");
-        return Err((
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "ADMIN_TOKEN not configured",
-        ));
-    }
-
     let token = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
@@ -62,7 +53,7 @@ pub async fn admin_auth_middleware(
         });
 
     match token {
-        Some(t) if t == admin_token => Ok(next.run(req).await),
+        Some(t) if t == *state.admin_token => Ok(next.run(req).await),
         _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
     }
 }
@@ -498,7 +489,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
-        .layer(middleware::from_fn(admin_auth_middleware));
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin_auth_middleware,
+        ));
 
     let app = Router::new()
         .merge(v1_router)
