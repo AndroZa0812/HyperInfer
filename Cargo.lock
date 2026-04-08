@@ -55,9 +55,9 @@ checksum = "03918c3dbd7701a85c6b9887732e2921175f26c350b4563841d0958c21d57e6d"
 
 [[package]]
 name = "astral-tokio-tar"
-version = "0.6.0"
+version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c23f3af104b40a3430ccb90ed5f7bd877a8dc5c26fc92fde51a22b40890dcf9"
+checksum = "ec179a06c1769b1e42e1e2cbe74c7dcdb3d6383c838454d063eaac5bbb7ebbe5"
 dependencies = [
  "filetime",
  "futures-core",
@@ -1395,14 +1395,13 @@ dependencies = [
 
 [[package]]
 name = "hyperinfer-client"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
  "futures",
  "hex",
  "hyperinfer-core",
- "hyperinfer-providers",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
@@ -1411,8 +1410,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "testcontainers",
- "testcontainers-modules",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -1442,32 +1439,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyperinfer-providers"
-version = "0.1.0"
-dependencies = [
- "async-stream",
- "async-trait",
- "futures",
- "hyperinfer-core",
- "parking_lot",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "hyperinfer-python"
-version = "0.2.0"
+version = "0.1.1"
 dependencies = [
- "async-stream",
- "async-trait",
  "futures",
  "hyperinfer-client",
  "hyperinfer-core",
- "hyperinfer-providers",
  "pyo3",
  "pyo3-async-runtimes",
  "serde",
@@ -3549,9 +3526,9 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "testcontainers"
-version = "0.27.2"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd36b06a2a6c0c3c81a83be1ab05fe86460d054d4d51bf513bc56b3e15bdc22"
+checksum = "c3fdcea723c64cc08dbc533b3761e345a15bf1222cbe6cb611de09b43f17a168"
 dependencies = [
  "astral-tokio-tar",
  "async-trait",
