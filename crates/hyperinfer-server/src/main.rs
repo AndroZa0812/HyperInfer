@@ -28,28 +28,43 @@ struct AppState<D: Database, C: ConfigStore> {
     db: D,
     #[allow(dead_code)]
     config_manager: C,
+    #[allow(dead_code)]
     admin_token: Arc<String>,
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
 
-async fn admin_auth_middleware<D: Database, C: ConfigStore>(
-    State(state): State<AppState<D, C>>,
+pub async fn admin_auth_middleware(
     req: Request<Body>,
     next: Next,
-) -> Response {
-    let auth_header = req.headers().get(axum::http::header::AUTHORIZATION);
-    if let Some(auth_value) = auth_header {
-        if let Ok(auth_str) = auth_value.to_str() {
-            if auth_str.starts_with("Bearer ") {
-                let token = auth_str.trim_start_matches("Bearer ");
-                if token == state.admin_token.as_str() {
-                    return next.run(req).await;
-                }
-            }
-        }
+) -> Result<Response, (StatusCode, &'static str)> {
+    let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_default();
+    if admin_token.is_empty() {
+        tracing::error!("ADMIN_TOKEN environment variable is not set");
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ADMIN_TOKEN not configured",
+        ));
     }
-    (StatusCode::UNAUTHORIZED, "Missing or invalid admin token").into_response()
+
+    let token = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| {
+            let mut parts = s.splitn(2, char::is_whitespace);
+            let scheme = parts.next()?;
+            if scheme.eq_ignore_ascii_case("bearer") {
+                Some(parts.next()?.to_owned())
+            } else {
+                None
+            }
+        });
+
+    match token {
+        Some(t) if t == admin_token => Ok(next.run(req).await),
+        _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    }
 }
 
 async fn config_sync<D: Database, C: ConfigStore>(
@@ -483,10 +498,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
-        .layer(middleware::from_fn_with_state(
-            state.clone(),
-            admin_auth_middleware,
-        ));
+        .layer(middleware::from_fn(admin_auth_middleware));
 
     let app = Router::new()
         .merge(v1_router)
