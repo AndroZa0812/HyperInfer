@@ -1,14 +1,20 @@
 name: PR Agent
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, ready_for_review, synchronize]
   issue_comment:
     types: [created, edited]
 
+env:
+  PR_AGENT_MODEL: ${{ vars.PR_AGENT_MODEL }}
+  PR_AGENT_MODEL_FALLBACK: ${{ vars.PR_AGENT_MODEL_FALLBACK }}
+
 jobs:
   pr_agent_job:
-    if: ${{ github.event.sender.type != 'Bot' && github.event.issue.pull_request != null }}
+    # Allow running on PRs created by anyone (including bots)
+    # Exclude PR Agent itself and CodeRabbit to prevent infinite comment loops and duplicate reviews
+    if: ${{ github.event.sender.login != 'github-actions[bot]' && github.event.sender.login != 'coderabbitai[bot]' }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -21,10 +27,13 @@ jobs:
         uses: qodo-ai/pr-agent@v0.34
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NVIDIA_NIM_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
-          config.model: nvidia_nim/google/gemma-4-31b-it
-          config.fallback_models: ["nvidia_nim/google/gemma-4-31b-it"]
-          config.custom_model_max_tokens: 128000
+          OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI__KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API__BASE: ${{ secrets.OPENAI_API_BASE }}
+          OPENAI_API_BASE: ${{ secrets.OPENAI_API_BASE }}
+          config.model: '${{ env.PR_AGENT_MODEL }}'
+          config.fallback_models: '["${{ env.PR_AGENT_MODEL_FALLBACK }}"]'
+          config.custom_model_max_tokens: "128000"
           github_action_config.auto_review: true
           github_action_config.auto_describe: true
           github_action_config.auto_improve: true
