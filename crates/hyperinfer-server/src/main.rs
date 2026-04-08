@@ -45,13 +45,22 @@ pub async fn admin_auth_middleware(
         ));
     }
 
-    let auth_header = req
+    let token = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok());
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| {
+            let mut parts = s.splitn(2, char::is_whitespace);
+            let scheme = parts.next()?;
+            if scheme.eq_ignore_ascii_case("bearer") {
+                Some(parts.next()?.to_owned())
+            } else {
+                None
+            }
+        });
 
-    match auth_header {
-        Some(header) if header == format!("Bearer {}", admin_token) => Ok(next.run(req).await),
+    match token {
+        Some(t) if t == admin_token => Ok(next.run(req).await),
         _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
     }
 }
