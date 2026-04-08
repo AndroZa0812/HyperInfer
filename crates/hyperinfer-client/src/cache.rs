@@ -309,15 +309,24 @@ mod tests {
             .start()
             .await;
 
-        // In CI some docker socket configurations may fail, skip gracefully if that occurs
+        // In CI some docker socket configurations may fail - fail the test explicitly in CI, skip gracefully locally
         let container = match container_result {
             Ok(c) => c,
             Err(e) => {
-                println!(
-                    "Skipping test: testcontainers failed to start Redis ({})",
-                    e
-                );
-                return;
+                let is_ci = std::env::var("CI").map(|v| v == "true").unwrap_or(false);
+                if is_ci {
+                    panic!(
+                        "FATAL: testcontainers failed to start Redis in CI environment: {}. \
+                         This indicates a test infrastructure issue that must be resolved.",
+                        e
+                    );
+                } else {
+                    println!(
+                        "Skipping test: testcontainers failed to start Redis ({})",
+                        e
+                    );
+                    return;
+                }
             }
         };
 
