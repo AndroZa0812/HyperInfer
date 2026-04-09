@@ -27,9 +27,35 @@ struct AppState<D: Database, C: ConfigStore> {
     db: D,
     #[allow(dead_code)]
     config_manager: C,
+    admin_token: Arc<String>,
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
+
+pub(crate) async fn admin_auth_middleware(
+    State(state): State<AppState<SqlxDb, RedisConfigStore>>,
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, &'static str)> {
+    let token = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| {
+            let mut parts = s.splitn(2, char::is_whitespace);
+            let scheme = parts.next()?;
+            if scheme.eq_ignore_ascii_case("bearer") {
+                Some(parts.next()?.to_owned())
+            } else {
+                None
+            }
+        });
+
+    match token {
+        Some(t) if t == *state.admin_token => Ok(next.run(req).await),
+        _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    }
+}
 
 async fn config_sync<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
@@ -382,10 +408,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         )
         .await?;
 
+    let admin_token = match std::env::var("ADMIN_TOKEN") {
+        Ok(s) if !s.is_empty() => s,
+        _ => {
+            if std::env::var("MCP_INSECURE_DEV_MODE").as_deref() == Ok("1") {
+                tracing::warn!(
+                    "ADMIN_TOKEN not set — using insecure dev secret. \
+                     NEVER use MCP_INSECURE_DEV_MODE=1 in production!"
+                );
+                "hyperinfer-admin-dev".to_string()
+            } else {
+                return Err("ADMIN_TOKEN must be set to a non-empty value. \
+                     For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
+                    .into());
+            }
+        }
+    };
+
     let state: ProdState = AppState {
         config,
         db,
         config_manager,
+        admin_token: Arc::new(admin_token),
     };
 
     // MCP state: JWT secret must be set explicitly.
@@ -444,7 +488,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ))
         .with_state(mcp_state);
 
-    let app = Router::new()
+    let v1_router = Router::new()
         .route("/v1/config/sync", get(config_sync))
         .route("/v1/teams/:id", get(get_team))
         .route("/v1/teams", post(create_team))
@@ -456,6 +500,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/:team_id", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin_auth_middleware,
+        ));
+
+    let app = Router::new()
+        .merge(v1_router)
         .merge(mcp_router)
         .layer(cors)
         .with_state(state);
@@ -530,6 +581,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db: MockDatabase::new(),
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         }
     }
 
@@ -560,6 +612,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_team(State(state), Path("nonexistent-id".to_string())).await;
@@ -597,6 +650,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_team(State(state), Path("test-team-id".to_string())).await;
@@ -633,6 +687,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_team(
@@ -666,6 +721,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_user(State(state), Path("nonexistent-user".to_string())).await;
@@ -692,6 +748,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_api_key(State(state), Path("nonexistent-key".to_string())).await;
@@ -718,6 +775,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_model_alias(State(state), Path("nonexistent-alias".to_string())).await;
@@ -744,6 +802,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_quota(State(state), Path("nonexistent-team".to_string())).await;
@@ -770,6 +829,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = get_team(State(state), Path("error-id".to_string())).await;
@@ -912,6 +972,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_user(
@@ -964,6 +1025,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_api_key(
@@ -1015,6 +1077,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_model_alias(
@@ -1060,6 +1123,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_quota(
@@ -1096,6 +1160,7 @@ mod tests {
             config: Arc::new(RwLock::new(config)),
             db,
             config_manager: MockConfigStore::new(),
+            admin_token: Arc::new("test-token".to_string()),
         };
 
         let response = create_team(
