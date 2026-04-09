@@ -1,0 +1,4 @@
+## 2024-05-15 - Timing Attack Vulnerability in Admin Authentication
+**Vulnerability:** The `admin_auth_middleware` function used the `==` operator to compare the provided bearer token with the expected admin token. This allows for a timing attack where an attacker could deduce the correct token length and its contents character by character, bypassing authentication.
+**Learning:** Comparing sensitive secrets like authentication tokens must be done in constant time to avoid leaking information through side channels. The standard Rust string comparison `==` short-circuits upon the first mismatched character.
+**Prevention:** Using a constant time equality comparison prevents this issue. In Rust, this is commonly done using the `.ct_eq()` method provided by the `subtle` crate. Ensure that length checks are performed prior to the constant time byte comparison when lengths can vary.

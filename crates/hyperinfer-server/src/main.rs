@@ -17,6 +17,7 @@ use hyperinfer_server::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
@@ -53,7 +54,12 @@ pub(crate) async fn admin_auth_middleware(
         });
 
     match token {
-        Some(t) if t == *state.admin_token => Ok(next.run(req).await),
+        // SECURITY: Using constant-time equality comparison (`ct_eq`) to prevent timing attacks.
+        // Standard string comparison (`==`) short-circuits on the first mismatched character,
+        // allowing an attacker to deduce the token character by character.
+        Some(t) if t.len() == state.admin_token.len() && t.as_bytes().ct_eq(state.admin_token.as_bytes()).into() => {
+            Ok(next.run(req).await)
+        }
         _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
     }
 }

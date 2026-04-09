@@ -45,6 +45,7 @@ futures = "0.3"
 async-stream = "0.3"
 axum-extra = { version = "0.12", features = ["typed-header"] }
 headers = "0.4"
+subtle = "2.6.1"
 
 [dev-dependencies]
 hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }
