@@ -57,7 +57,10 @@ pub(crate) async fn admin_auth_middleware(
         // SECURITY: Using constant-time equality comparison (`ct_eq`) to prevent timing attacks.
         // Standard string comparison (`==`) short-circuits on the first mismatched character,
         // allowing an attacker to deduce the token character by character.
-        Some(t) if t.len() == state.admin_token.len() && t.as_bytes().ct_eq(state.admin_token.as_bytes()).into() => {
+        Some(t)
+            if t.len() == state.admin_token.len()
+                && t.as_bytes().ct_eq(state.admin_token.as_bytes()).into() =>
+        {
             Ok(next.run(req).await)
         }
         _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
