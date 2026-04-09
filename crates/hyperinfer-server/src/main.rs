@@ -34,9 +34,9 @@ type ProdState = AppState<SqlxDb, RedisConfigStore>;
 
 pub(crate) async fn admin_auth_middleware(
     State(state): State<AppState<SqlxDb, RedisConfigStore>>,
-    req: Request<Body>,
-    next: Next,
-) -> Result<Response, (StatusCode, &'static str)> {
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Result<axum::response::Response, (StatusCode, &'static str)> {
     let token = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
