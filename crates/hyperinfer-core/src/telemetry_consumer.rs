@@ -317,30 +317,39 @@ impl TelemetryConsumer {
     }
 
     fn parse_entry(fields: &[(String, String)]) -> Option<UsageRecord> {
-        let mut map = std::collections::HashMap::new();
+        let mut key = None;
+        let mut model = None;
+        let mut input_tokens = None;
+        let mut output_tokens = None;
+        let mut response_time_ms = None;
+        let mut timestamp = None;
+
         for (k, v) in fields {
-            map.insert(k.clone(), v.clone());
+            match k.as_str() {
+                "key" => key = Some(v),
+                "model" => model = Some(v),
+                "input_tokens" => input_tokens = Some(v),
+                "output_tokens" => output_tokens = Some(v),
+                "response_time_ms" => response_time_ms = Some(v),
+                "timestamp" => timestamp = Some(v),
+                _ => {}
+            }
         }
 
-        let key = map.get("key")?.clone();
-        let model = map.get("model")?.clone();
+        let key = key?.clone();
+        let model = model?.clone();
 
         if key.trim().is_empty() || model.trim().is_empty() {
             return None;
         }
 
-        let input_tokens: u32 = map.get("input_tokens")?.parse().ok()?;
-        let output_tokens: u32 = map.get("output_tokens")?.parse().ok()?;
-        let response_time_ms: u64 = map.get("response_time_ms")?.parse().ok()?;
-        let timestamp: u64 = map.get("timestamp")?.parse().ok()?;
-
         Some(UsageRecord {
             key,
             model,
-            input_tokens,
-            output_tokens,
-            response_time_ms,
-            timestamp,
+            input_tokens: input_tokens?.parse().ok()?,
+            output_tokens: output_tokens?.parse().ok()?,
+            response_time_ms: response_time_ms?.parse().ok()?,
+            timestamp: timestamp?.parse().ok()?,
         })
     }
 
