@@ -97,14 +97,20 @@ mod tests {
     use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, HyperInferError};
     use std::pin::Pin;
 
+    #[derive(Clone)]
     struct MockProvider {
         name: &'static str,
+        streaming: bool,
     }
 
     #[async_trait]
     impl LlmProvider for MockProvider {
         fn name(&self) -> &str {
             self.name
+        }
+
+        fn supports_streaming(&self) -> bool {
+            self.streaming
         }
 
         async fn chat(
@@ -119,7 +125,8 @@ mod tests {
             &self,
             _request: &ChatRequest,
             _api_key: &str,
-        ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + '_>> {
+        ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>
+        {
             Box::pin(futures::stream::empty())
         }
     }
@@ -141,6 +148,7 @@ mod tests {
         let registry = ProviderRegistry::new();
         let provider = MockProvider {
             name: "test-provider",
+            streaming: true,
         };
         registry.register(provider);
         assert!(registry.contains("test-provider"));
@@ -151,6 +159,7 @@ mod tests {
         let registry = ProviderRegistry::new();
         let provider = MockProvider {
             name: "test-provider",
+            streaming: true,
         };
         registry.register(provider);
 
@@ -166,6 +175,7 @@ mod tests {
         let registry = ProviderRegistry::new();
         let provider = MockProvider {
             name: "test-provider",
+            streaming: true,
         };
         registry.register(provider);
 
@@ -179,9 +189,11 @@ mod tests {
         let registry = ProviderRegistry::new();
         registry.register(MockProvider {
             name: "test-provider",
+            streaming: true,
         });
         registry.register(MockProvider {
             name: "test-provider",
+            streaming: true,
         });
     }
 
@@ -191,6 +203,7 @@ mod tests {
         let name: Arc<str> = Arc::from("test-provider");
         let provider: Arc<dyn LlmProvider> = Arc::new(MockProvider {
             name: "test-provider",
+            streaming: true,
         });
 
         let result = registry.register_arc_if_absent(name.clone(), provider.clone());
@@ -205,8 +218,14 @@ mod tests {
     #[test]
     fn test_registry_list() {
         let registry = ProviderRegistry::new();
-        registry.register(MockProvider { name: "p1" });
-        registry.register(MockProvider { name: "p2" });
+        registry.register(MockProvider {
+            name: "p1",
+            streaming: true,
+        });
+        registry.register(MockProvider {
+            name: "p2",
+            streaming: true,
+        });
 
         let list = registry.list();
         assert_eq!(list.len(), 2);
@@ -219,6 +238,7 @@ mod tests {
         let registry = ProviderRegistry::new();
         registry.register(MockProvider {
             name: "test-provider",
+            streaming: true,
         });
 
         let removed = registry.unregister("test-provider");
@@ -236,11 +256,46 @@ mod tests {
 
         registry.register(MockProvider {
             name: "test-provider",
+            streaming: true,
         });
 
         assert!(clone.contains("test-provider"));
 
-        clone.register(MockProvider { name: "cloned-p" });
+        clone.register(MockProvider {
+            name: "cloned-p",
+            streaming: true,
+        });
         assert!(registry.contains("cloned-p"));
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_provider() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "streaming-provider",
+            streaming: true,
+        });
+
+        let result = registry.get_streaming("streaming-provider");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_none_for_non_streaming() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "non-streaming-provider",
+            streaming: false,
+        });
+
+        let result = registry.get_streaming("non-streaming-provider");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_none_for_unknown() {
+        let registry = ProviderRegistry::new();
+        let result = registry.get_streaming("non-existent");
+        assert!(result.is_none());
     }
 }
