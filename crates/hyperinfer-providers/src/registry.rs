@@ -55,6 +55,20 @@ impl ProviderRegistry {
         let mut providers = self.providers.write().unwrap();
         providers.remove(name)
     }
+
+    /// Get a StreamingProvider for the named provider, suitable for calling into_stream().
+    /// Returns None if the provider is not registered or does not support streaming.
+    /// Clones the Arc (O(1)) rather than deep-cloning the provider internals.
+    pub fn get_streaming(&self, name: &str) -> Option<crate::provider_trait::StreamingProvider> {
+        let providers = self.providers.read().unwrap();
+        let provider = providers.get(name)?;
+        if !provider.supports_streaming() {
+            return None;
+        }
+        Some(crate::provider_trait::StreamingProvider::new(Arc::clone(
+            provider,
+        )))
+    }
 }
 
 impl Default for ProviderRegistry {

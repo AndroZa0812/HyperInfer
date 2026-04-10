@@ -84,6 +84,7 @@ impl AnthropicProvider {
     }
 }
 
+// Clone is required by LlmProvider supertrait. The HTTP client is cheap to clone.
 impl Clone for AnthropicProvider {
     fn clone(&self) -> Self {
         Self {
@@ -182,7 +183,7 @@ impl LlmProvider for AnthropicProvider {
         &self,
         request: &ChatRequest,
         api_key: &str,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>> {
         let url = format!("{}/v1/messages", self.base_url);
         let client = self.http_client.clone();
         let model = request.model.clone();

@@ -405,27 +405,22 @@ impl HyperInferClient {
             (model, provider_name, api_key)
         };
 
-        // 3. Get provider from registry and create stream
-        // Note: Due to lifetime issues with dynamic dispatch and AccountedStream,
-        // we use HttpCaller directly for streaming. The providers in the registry
-        // are used for non-streaming chat() calls.
+        // 3. Get streaming provider from registry
+        let streaming_provider = {
+            let registry = self.provider_registry.read().await;
+            registry.get_streaming(&provider_name).ok_or_else(|| {
+                HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Provider '{}' not found in registry", provider_name),
+                ))
+            })?
+        };
+
+        let mut resolved_request = request.clone();
+        resolved_request.model = model.clone();
         let provider_stream: Pin<
             Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = match provider_name.as_str() {
-            "openai" => self.http_caller.stream_openai(&model, &api_key, &request),
-            "anthropic" => self
-                .http_caller
-                .stream_anthropic(&model, &api_key, &request),
-            _ => {
-                return Err(HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    format!(
-                        "Unsupported provider '{}' for streaming (model: '{}')",
-                        provider_name, model
-                    ),
-                )));
-            }
-        };
+        > = streaming_provider.into_stream(&resolved_request, &api_key);
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 
