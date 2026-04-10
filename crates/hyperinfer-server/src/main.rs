@@ -48,9 +48,11 @@ pub(crate) async fn admin_auth_middleware(
 
     match auth_header {
         Some(header) => {
-            let prefix = "Bearer ";
-            if let Some(provided_token) = header.strip_prefix(prefix) {
-                let eq = provided_token.as_bytes().ct_eq(expected_token.as_bytes());
+            let provided_token = parse_bearer_token(header);
+            if let Some(token) = provided_token {
+                let digest_provided = sha2::Sha256::digest(token.as_bytes());
+                let digest_expected = sha2::Sha256::digest(expected_token.as_bytes());
+                let eq = digest_provided.ct_eq(&digest_expected);
                 if eq.into() {
                     return Ok(next.run(req).await);
                 }
@@ -58,6 +60,16 @@ pub(crate) async fn admin_auth_middleware(
             Err((StatusCode::UNAUTHORIZED, "Unauthorized"))
         }
         None => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    }
+}
+
+fn parse_bearer_token(header: &str) -> Option<String> {
+    let mut parts = header.splitn(2, char::is_whitespace);
+    let scheme = parts.next()?;
+    if scheme.eq_ignore_ascii_case("bearer") {
+        parts.next()?.trim().to_owned().into()
+    } else {
+        None
     }
 }
 
