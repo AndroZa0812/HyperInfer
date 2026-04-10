@@ -8,7 +8,7 @@ license = "MIT"
 hyperinfer-core = { path = "../hyperinfer-core" }
 hyperinfer-providers = { path = "../hyperinfer-providers", features = ["openai", "anthropic"] }
 reqwest = { version = "0.12", features = ["json", "stream"] }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.51", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
@@ -34,4 +34,4 @@ async-stream = "0.3"
 [dev-dependencies]
 testcontainers = "0.27.2"
 testcontainers-modules = { version = "0.15.0", features = ["redis"] }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.51", features = ["macros", "rt-multi-thread"] }
