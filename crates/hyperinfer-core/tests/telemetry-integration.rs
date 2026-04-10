@@ -3,8 +3,13 @@ use std::sync::Once;
 use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
 use testcontainers_modules::redis::REDIS_PORT;
 
+/// Helper for enabling tracing in tests when debugging.
+/// Usage: call `init_tracing()` at the start of a test, then run with
+/// `RUST_LOG=debug cargo test ...` to see trace output.
+#[allow(dead_code)]
 static TRACING_INIT: Once = Once::new();
 
+#[allow(dead_code)]
 fn init_tracing() {
     TRACING_INIT.call_once(|| {
         let _ = tracing_subscriber::fmt()
