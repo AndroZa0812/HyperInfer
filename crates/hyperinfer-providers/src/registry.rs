@@ -87,3 +87,215 @@ impl Clone for ProviderRegistry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::provider_trait::LlmProvider;
+    use async_trait::async_trait;
+    use futures::Stream;
+    use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, HyperInferError};
+    use std::pin::Pin;
+
+    #[derive(Clone)]
+    struct MockProvider {
+        name: &'static str,
+        streaming: bool,
+    }
+
+    #[async_trait]
+    impl LlmProvider for MockProvider {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn supports_streaming(&self) -> bool {
+            self.streaming
+        }
+
+        async fn chat(
+            &self,
+            _request: &ChatRequest,
+            _api_key: &str,
+        ) -> Result<ChatResponse, HyperInferError> {
+            Ok(ChatResponse::default())
+        }
+
+        fn stream(
+            &self,
+            _request: &ChatRequest,
+            _api_key: &str,
+        ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>
+        {
+            Box::pin(futures::stream::empty())
+        }
+    }
+
+    #[test]
+    fn test_registry_new() {
+        let registry = ProviderRegistry::new();
+        assert!(registry.list().is_empty());
+    }
+
+    #[test]
+    fn test_registry_default() {
+        let registry = ProviderRegistry::default();
+        assert!(registry.list().is_empty());
+    }
+
+    #[test]
+    fn test_registry_register() {
+        let registry = ProviderRegistry::new();
+        let provider = MockProvider {
+            name: "test-provider",
+            streaming: true,
+        };
+        registry.register(provider);
+        assert!(registry.contains("test-provider"));
+    }
+
+    #[test]
+    fn test_registry_get() {
+        let registry = ProviderRegistry::new();
+        let provider = MockProvider {
+            name: "test-provider",
+            streaming: true,
+        };
+        registry.register(provider);
+
+        let retrieved = registry.get("test-provider");
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name(), "test-provider");
+
+        assert!(registry.get("non-existent").is_none());
+    }
+
+    #[test]
+    fn test_registry_contains() {
+        let registry = ProviderRegistry::new();
+        let provider = MockProvider {
+            name: "test-provider",
+            streaming: true,
+        };
+        registry.register(provider);
+
+        assert!(registry.contains("test-provider"));
+        assert!(!registry.contains("non-existent"));
+    }
+
+    #[test]
+    #[should_panic(expected = "Provider 'test-provider' is already registered")]
+    fn test_registry_register_duplicate() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "test-provider",
+            streaming: true,
+        });
+        registry.register(MockProvider {
+            name: "test-provider",
+            streaming: true,
+        });
+    }
+
+    #[test]
+    fn test_registry_register_arc_if_absent() {
+        let registry = ProviderRegistry::new();
+        let name: Arc<str> = Arc::from("test-provider");
+        let provider: Arc<dyn LlmProvider> = Arc::new(MockProvider {
+            name: "test-provider",
+            streaming: true,
+        });
+
+        let result = registry.register_arc_if_absent(name.clone(), provider.clone());
+        assert!(result.is_ok());
+        assert!(registry.contains("test-provider"));
+
+        let result = registry.register_arc_if_absent(name.clone(), provider);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), name);
+    }
+
+    #[test]
+    fn test_registry_list() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "p1",
+            streaming: true,
+        });
+        registry.register(MockProvider {
+            name: "p2",
+            streaming: true,
+        });
+
+        let list = registry.list();
+        assert_eq!(list.len(), 2);
+        assert!(list.contains(&Arc::from("p1")));
+        assert!(list.contains(&Arc::from("p2")));
+    }
+
+    #[test]
+    fn test_registry_unregister() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "test-provider",
+            streaming: true,
+        });
+
+        let removed = registry.unregister("test-provider");
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().name(), "test-provider");
+        assert!(!registry.contains("test-provider"));
+
+        assert!(registry.unregister("non-existent").is_none());
+    }
+
+    #[test]
+    fn test_registry_clone() {
+        let registry = ProviderRegistry::new();
+        let clone = registry.clone();
+
+        registry.register(MockProvider {
+            name: "test-provider",
+            streaming: true,
+        });
+
+        assert!(clone.contains("test-provider"));
+
+        clone.register(MockProvider {
+            name: "cloned-p",
+            streaming: true,
+        });
+        assert!(registry.contains("cloned-p"));
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_provider() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "streaming-provider",
+            streaming: true,
+        });
+
+        let result = registry.get_streaming("streaming-provider");
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_none_for_non_streaming() {
+        let registry = ProviderRegistry::new();
+        registry.register(MockProvider {
+            name: "non-streaming-provider",
+            streaming: false,
+        });
+
+        let result = registry.get_streaming("non-streaming-provider");
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_registry_get_streaming_returns_none_for_unknown() {
+        let registry = ProviderRegistry::new();
+        let result = registry.get_streaming("non-existent");
+        assert!(result.is_none());
+    }
+}
