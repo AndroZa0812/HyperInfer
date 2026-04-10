@@ -23,6 +23,7 @@ impl OpenAiProvider {
     }
 }
 
+// Clone is required by LlmProvider supertrait. The HTTP client is cheap to clone.
 impl Clone for OpenAiProvider {
     fn clone(&self) -> Self {
         Self {

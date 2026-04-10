@@ -4,7 +4,7 @@ use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse};
 use std::pin::Pin;
 
 #[async_trait]
-pub trait LlmProvider: Send + Sync {
+pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
     fn name(&self) -> &str;
 
     fn base_url(&self) -> &str {
@@ -21,12 +21,6 @@ pub trait LlmProvider: Send + Sync {
         api_key: &str,
     ) -> Result<ChatResponse, hyperinfer_core::HyperInferError>;
 
-    // TODO: stream() and supports_streaming() are currently dead code because
-    // chat_stream() in hyperinfer-client routes streaming through HttpCaller
-    // directly (http_caller.stream_openai() / http_caller.stream_anthropic())
-    // instead of through the provider registry. In future, routing streaming
-    // through LlmProvider::stream() would allow custom providers to implement
-    // their own streaming logic.
     fn stream(
         &self,
         request: &ChatRequest,
@@ -47,5 +41,48 @@ pub trait LlmProvider: Send + Sync {
         };
         self.chat(&request, api_key).await?;
         Ok(())
+    }
+}
+
+dyn_clone::clone_trait_object!(LlmProvider);
+
+/// Helper to obtain an owned clone of a boxed trait object.
+/// The returned `Box<dyn LlmProvider>` is `'static` so its `stream()`
+/// method can be called without lifetime issues.
+pub struct OwnedClone {
+    inner: Box<dyn LlmProvider + Send + 'static>,
+}
+
+impl OwnedClone {
+    pub fn new(provider: Box<dyn LlmProvider + Send + 'static>) -> Self {
+        Self { inner: provider }
+    }
+
+    pub fn into_stream(
+        self,
+        request: &ChatRequest,
+        api_key: &str,
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,
+        >,
+    > {
+        use futures::StreamExt;
+
+        let provider = self.inner;
+        let request = request.clone();
+        let api_key = api_key.to_string();
+
+        // Use async_stream to take ownership of `provider`, `request`, and `api_key`.
+        let stream = async_stream::try_stream! {
+            // We can now call provider.stream() here because provider is alive
+            // for the duration of this async block.
+            let mut inner_stream = provider.stream(&request, &api_key);
+            while let Some(chunk) = inner_stream.next().await {
+                yield chunk?;
+            }
+        };
+
+        Box::pin(stream)
     }
 }

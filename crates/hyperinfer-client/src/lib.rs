@@ -134,6 +134,19 @@ impl Stream for AccountedStream {
     }
 }
 
+/// Extension trait to get an owned clone from &Arc<dyn LlmProvider>.
+trait OwnedCloneExt {
+    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static>;
+}
+
+impl OwnedCloneExt for std::sync::Arc<dyn hyperinfer_providers::LlmProvider> {
+    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static> {
+        // Clone the Arc and clone the inner provider
+        let inner: &dyn hyperinfer_providers::LlmProvider = &**self;
+        dyn_clone::clone_box(inner)
+    }
+}
+
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
     http_caller: Arc<HttpCaller>,
@@ -406,26 +419,27 @@ impl HyperInferClient {
         };
 
         // 3. Get provider from registry and create stream
-        // Note: Due to lifetime issues with dynamic dispatch and AccountedStream,
-        // we use HttpCaller directly for streaming. The providers in the registry
-        // are used for non-streaming chat() calls.
+        let llm_provider = {
+            let registry = self.provider_registry.read().await;
+            registry.get(&provider_name).ok_or_else(|| {
+                HyperInferError::Config(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Provider '{}' not found in registry", provider_name),
+                ))
+            })?
+        };
+
+        // Clone the provider to get owned state, allowing 'static lifetime
+        // for the returned stream. All provider state (HTTP client, base_url)
+        // is cheap to clone.
+        let provider_clone = llm_provider.owned_clone();
+
+        // Wrap the dynamic provider into OwnedClone so we can use into_stream
+        let owned_provider = hyperinfer_providers::provider_trait::OwnedClone::new(provider_clone);
+
         let provider_stream: Pin<
             Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = match provider_name.as_str() {
-            "openai" => self.http_caller.stream_openai(&model, &api_key, &request),
-            "anthropic" => self
-                .http_caller
-                .stream_anthropic(&model, &api_key, &request),
-            _ => {
-                return Err(HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    format!(
-                        "Unsupported provider '{}' for streaming (model: '{}')",
-                        provider_name, model
-                    ),
-                )));
-            }
-        };
+        > = owned_provider.into_stream(&request, &api_key);
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 

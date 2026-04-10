@@ -1496,6 +1496,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
+ "dyn-clone",
  "futures",
  "hex",
  "http",
@@ -1546,6 +1547,7 @@ version = "0.1.0"
 dependencies = [
  "async-stream",
  "async-trait",
+ "dyn-clone",
  "futures",
  "hyperinfer-core",
  "parking_lot",
