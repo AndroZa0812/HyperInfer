@@ -53,7 +53,7 @@ jobs:
             *) echo "Unknown package: ${{ matrix.package }}"; exit 1 ;;
           esac
           echo "PACKAGE_DIR=$dir" >> $GITHUB_ENV
-      
+
       - name: Setup Rust
         if: matrix.package == 'hyperinfer-python'
         uses: dtolnay/rust-toolchain@stable
@@ -67,7 +67,7 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
-          cache: 'pip'
+          cache: pip
 
       - name: Build
         run: |
