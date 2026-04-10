@@ -17,7 +17,7 @@ redis = { version = "1.2", features = [
   "tokio-comp",
   "connection-manager",
 ] }
-reqwest = "0.12"
+reqwest = "0.13.2"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres"] }
 tokio = { version = "1.51", features = ["sync", "rt", "macros", "rt-multi-thread"] }
 tokio-util = { version = "0.7", features = ["rt"] }
