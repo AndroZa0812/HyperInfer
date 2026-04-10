@@ -412,17 +412,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let admin_token = match std::env::var("ADMIN_TOKEN") {
         Ok(s) if !s.is_empty() => s,
         _ => {
-            if std::env::var("MCP_INSECURE_DEV_MODE").as_deref() == Ok("1") {
-                tracing::warn!(
-                    "ADMIN_TOKEN not set — using insecure dev secret. \
-                     NEVER use MCP_INSECURE_DEV_MODE=1 in production!"
-                );
-                "hyperinfer-admin-dev".to_string()
-            } else {
-                return Err("ADMIN_TOKEN must be set to a non-empty value. \
-                     For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
-                    .into());
-            }
+            return Err("ADMIN_TOKEN must be set to a non-empty value.".into());
         }
     };
 
