@@ -1,9 +1,33 @@
 use opentelemetry::global;
+use opentelemetry_http::HttpClient;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use std::sync::OnceLock;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+#[derive(Debug, Clone)]
+struct ReqwestHttpClient(reqwest::Client);
+
+#[async_trait::async_trait]
+impl HttpClient for ReqwestHttpClient {
+    async fn send_bytes(
+        &self,
+        request: http::Request<bytes::Bytes>,
+    ) -> Result<http::Response<bytes::Bytes>, opentelemetry_http::HttpError> {
+        let mut response = self
+            .0
+            .execute(request.try_into()?)
+            .await?
+            .error_for_status()?;
+        let status = response.status();
+        let headers = std::mem::take(response.headers_mut());
+        let body = response.bytes().await?;
+        let mut http_response = http::Response::builder().status(status).body(body)?;
+        *http_response.headers_mut() = headers;
+        Ok(http_response)
+    }
+}
 
 /// Module-level storage for the tracer provider so both `init_telemetry_with_headers`
 /// and `shutdown_telemetry` share the same instance.
@@ -43,7 +67,7 @@ pub fn init_telemetry_with_headers(
     // 1. Prepare the exporter (fallible). Only reached on first call.
     let mut http_builder = opentelemetry_otlp::SpanExporter::builder()
         .with_http()
-        .with_http_client(reqwest::Client::new())
+        .with_http_client(ReqwestHttpClient(reqwest::Client::new()))
         .with_endpoint(endpoint);
 
     if !headers.is_empty() {
