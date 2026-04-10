@@ -1,11 +1,16 @@
 use hyperinfer_core::{TelemetryConsumer, UsageRecord};
+use std::sync::Once;
 use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
 use testcontainers_modules::redis::REDIS_PORT;
 
+static TRACING_INIT: Once = Once::new();
+
 fn init_tracing() {
-    let _ = tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+    TRACING_INIT.call_once(|| {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .try_init();
+    });
 }
 
 async fn setup_redis() -> (String, testcontainers::ContainerAsync<GenericImage>) {

@@ -134,6 +134,19 @@ impl Stream for AccountedStream {
     }
 }
 
+/// Extension trait to get an owned clone from &Arc<dyn LlmProvider>.
+trait OwnedCloneExt {
+    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static>;
+}
+
+impl OwnedCloneExt for std::sync::Arc<dyn hyperinfer_providers::LlmProvider> {
+    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static> {
+        // Clone the Arc and clone the inner provider
+        let inner: &dyn hyperinfer_providers::LlmProvider = &**self;
+        dyn_clone::clone_box(inner)
+    }
+}
+
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
     http_caller: Arc<HttpCaller>,
@@ -405,13 +418,16 @@ impl HyperInferClient {
             (model, provider_name, api_key)
         };
 
-        // 3. Get streaming provider from registry
+        // 3. Get streaming provider from registry (already checks supports_streaming)
         let streaming_provider = {
             let registry = self.provider_registry.read().await;
             registry.get_streaming(&provider_name).ok_or_else(|| {
                 HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Provider '{}' not found in registry", provider_name),
+                    format!(
+                        "Provider '{}' not found in registry or does not support streaming",
+                        provider_name
+                    ),
                 ))
             })?
         };

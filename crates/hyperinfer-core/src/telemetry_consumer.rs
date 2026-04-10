@@ -263,18 +263,33 @@ impl TelemetryConsumer {
 
             let (next_start, claimed) = match result {
                 Ok(redis::Value::Array(arr)) => {
-                    if arr.len() < 2 {
-                        warn!("XAUTOCLAIM returned unexpected array length: {}", arr.len());
-                        return Ok(());
+                    // XAUTOCLAIM returns [cursor, claimed_messages, deleted_ids]
+                    // Validate expected 3-element structure
+                    if arr.len() != 3 {
+                        return Err(redis::RedisError::from((
+                            redis::ErrorKind::UnexpectedReturnType,
+                            "XAUTOCLAIM returned unexpected array length",
+                            format!("expected 3 elements, got {}", arr.len()),
+                        )));
                     }
-                    let next_start =
-                        Self::extract_string(&arr[0]).unwrap_or_else(|| "0-0".to_string());
+                    let next_start = Self::extract_string(&arr[0]).ok_or_else(|| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::UnexpectedReturnType,
+                            "XAUTOCLAIM cursor is not a valid string",
+                            String::new(),
+                        ))
+                    })?;
                     let claimed = Self::extract_stream_entries(&arr[1]);
+                    // arr[2] contains deleted message IDs that were claimed but no longer exist
+                    // We don't need to process them - they're already removed from the stream
                     (next_start, claimed)
                 }
-                Ok(_) => {
-                    warn!("XAUTOCLAIM returned unexpected type");
-                    return Ok(());
+                Ok(other) => {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::UnexpectedReturnType,
+                        "XAUTOCLAIM returned unexpected type",
+                        format!("{:?}", other),
+                    )));
                 }
                 Err(e) => {
                     warn!("XAUTOCLAIM failed: {}", e);
