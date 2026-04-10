@@ -27,6 +27,9 @@ pub enum HyperInferError {
 
     #[error("Redis error")]
     Redis(#[from] redis::RedisError),
+
+    #[error("Streaming not supported by provider: {0}")]
+    UnsupportedStreaming(String),
 }
 
 #[derive(Debug, Error)]

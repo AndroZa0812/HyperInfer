@@ -405,13 +405,16 @@ impl HyperInferClient {
             (model, provider_name, api_key)
         };
 
-        // 3. Get streaming provider from registry
+        // 3. Get streaming provider from registry (already checks supports_streaming)
         let streaming_provider = {
             let registry = self.provider_registry.read().await;
             registry.get_streaming(&provider_name).ok_or_else(|| {
                 HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Provider '{}' not found in registry", provider_name),
+                    format!(
+                        "Provider '{}' not found in registry or does not support streaming",
+                        provider_name
+                    ),
                 ))
             })?
         };
