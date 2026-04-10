@@ -1586,6 +1586,7 @@ dependencies = [
  "chrono",
  "futures",
  "headers",
+ "hex",
  "http-body-util",
  "hyperinfer-core",
  "jsonwebtoken",
