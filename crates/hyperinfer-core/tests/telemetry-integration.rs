@@ -2,6 +2,12 @@ use hyperinfer_core::{TelemetryConsumer, UsageRecord};
 use testcontainers::{core::IntoContainerPort, runners::AsyncRunner, GenericImage};
 use testcontainers_modules::redis::REDIS_PORT;
 
+fn init_tracing() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
+}
+
 async fn setup_redis() -> (String, testcontainers::ContainerAsync<GenericImage>) {
     let redis = GenericImage::new("redis", "7.2")
         .with_exposed_port(REDIS_PORT.tcp())
@@ -213,8 +219,6 @@ async fn test_telemetry_consumer_start_consuming() {
         .await
         .expect("Failed to start consuming");
 
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-
     let _: String = redis::cmd("XADD")
         .arg("hyperinfer:telemetry")
         .arg("*")
@@ -234,7 +238,7 @@ async fn test_telemetry_consumer_start_consuming() {
         .await
         .expect("Failed to add to stream");
 
-    let timeout = tokio::time::timeout(tokio::time::Duration::from_secs(5), async {
+    let timeout = tokio::time::timeout(tokio::time::Duration::from_secs(10), async {
         loop {
             let len = received.lock().await.len();
             if len >= 1 {

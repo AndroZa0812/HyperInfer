@@ -56,6 +56,10 @@ impl TelemetryConsumer {
         stream_key: &str,
         consumer_group: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "Creating consumer group {} for stream {}",
+            consumer_group, stream_key
+        );
         let result: Result<(), redis::RedisError> = redis::cmd("XGROUP")
             .arg("CREATE")
             .arg(stream_key)
@@ -66,9 +70,13 @@ impl TelemetryConsumer {
             .await;
 
         match result {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                info!("Consumer group created successfully");
+                Ok(())
+            }
             Err(e) => {
                 if e.to_string().contains("BUSYGROUP") {
+                    info!("Consumer group already exists");
                     Ok(())
                 } else {
                     Err(e.into())
@@ -165,6 +173,59 @@ impl TelemetryConsumer {
         }
     }
 
+    fn extract_string(value: &redis::Value) -> Option<String> {
+        match value {
+            redis::Value::BulkString(bytes) => Some(String::from_utf8_lossy(bytes).to_string()),
+            redis::Value::SimpleString(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn extract_stream_entries(value: &redis::Value) -> Vec<StreamEntry> {
+        match value {
+            redis::Value::Array(entries) => {
+                let mut result = Vec::new();
+                for entry in entries {
+                    if let redis::Value::Array(entry_data) = entry {
+                        if let Some((msg_id, fields)) = Self::extract_stream_entry(entry_data) {
+                            result.push((msg_id, fields));
+                        }
+                    }
+                }
+                result
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    fn extract_stream_entry(
+        entry_data: &[redis::Value],
+    ) -> Option<(String, Vec<(String, String)>)> {
+        if entry_data.len() < 2 {
+            return None;
+        }
+        let msg_id = Self::extract_string(&entry_data[0])?;
+        let fields = Self::extract_fields(&entry_data[1])?;
+        Some((msg_id, fields))
+    }
+
+    fn extract_fields(value: &redis::Value) -> Option<Vec<(String, String)>> {
+        match value {
+            redis::Value::Array(field_pairs) => {
+                let mut pairs = Vec::new();
+                for chunk in field_pairs.chunks(2) {
+                    if chunk.len() == 2 {
+                        let key = Self::extract_string(&chunk[0])?;
+                        let value = Self::extract_string(&chunk[1])?;
+                        pairs.push((key, value));
+                    }
+                }
+                Some(pairs)
+            }
+            _ => None,
+        }
+    }
+
     async fn recover_pending_messages<F, Fut>(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
@@ -179,25 +240,47 @@ impl TelemetryConsumer {
     {
         let mut start_id = "0-0".to_string();
         loop {
-            let result: Result<(String, Vec<StreamEntry>), redis::RedisError> =
-                redis::cmd("XAUTOCLAIM")
-                    .arg(stream_key)
-                    .arg(consumer_group)
-                    .arg(consumer_name)
-                    .arg(XAUTOCLAIM_IDLE_MS)
-                    .arg(&start_id)
-                    .arg("COUNT")
-                    .arg(XAUTOCLAIM_COUNT)
-                    .query_async(conn)
-                    .await;
+            info!(
+                "XAUTOCLAIM: group={}, consumer={}, start={}",
+                consumer_group, consumer_name, start_id
+            );
+            let result: Result<redis::Value, redis::RedisError> = redis::cmd("XAUTOCLAIM")
+                .arg(stream_key)
+                .arg(consumer_group)
+                .arg(consumer_name)
+                .arg(XAUTOCLAIM_IDLE_MS)
+                .arg(&start_id)
+                .arg("COUNT")
+                .arg(XAUTOCLAIM_COUNT)
+                .query_async(conn)
+                .await;
 
             let (next_start, claimed) = match result {
-                Ok(res) => res,
+                Ok(redis::Value::Array(arr)) => {
+                    if arr.len() < 2 {
+                        warn!("XAUTOCLAIM returned unexpected array length: {}", arr.len());
+                        return Ok(());
+                    }
+                    let next_start =
+                        Self::extract_string(&arr[0]).unwrap_or_else(|| "0-0".to_string());
+                    let claimed = Self::extract_stream_entries(&arr[1]);
+                    (next_start, claimed)
+                }
+                Ok(_) => {
+                    warn!("XAUTOCLAIM returned unexpected type");
+                    return Ok(());
+                }
                 Err(e) => {
                     warn!("XAUTOCLAIM failed: {}", e);
                     return Err(e);
                 }
             };
+
+            info!(
+                "XAUTOCLAIM returned {} entries, next_start={}",
+                claimed.len(),
+                next_start
+            );
 
             let mut ack_ids = Vec::with_capacity(claimed.len());
             for (msg_id, fields) in &claimed {
@@ -228,6 +311,10 @@ impl TelemetryConsumer {
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
+        info!(
+            "XREADGROUP: group={}, consumer={}, stream={}",
+            consumer_group, consumer_name, stream_key
+        );
         #[allow(clippy::type_complexity)]
         let results: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREADGROUP")
             .arg("GROUP")
@@ -242,6 +329,7 @@ impl TelemetryConsumer {
             .arg(">")
             .query_async(conn)
             .await?;
+        info!("XREADGROUP returned {} streams", results.len());
 
         for (_stream, entries) in results {
             let mut ack_ids = Vec::with_capacity(entries.len());
