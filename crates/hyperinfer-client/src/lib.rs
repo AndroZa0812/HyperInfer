@@ -134,19 +134,6 @@ impl Stream for AccountedStream {
     }
 }
 
-/// Extension trait to get an owned clone from &Arc<dyn LlmProvider>.
-trait OwnedCloneExt {
-    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static>;
-}
-
-impl OwnedCloneExt for std::sync::Arc<dyn hyperinfer_providers::LlmProvider> {
-    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static> {
-        // Clone the Arc and clone the inner provider
-        let inner: &dyn hyperinfer_providers::LlmProvider = &**self;
-        dyn_clone::clone_box(inner)
-    }
-}
-
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
     http_caller: Arc<HttpCaller>,

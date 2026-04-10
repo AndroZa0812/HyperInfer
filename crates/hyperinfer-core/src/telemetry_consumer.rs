@@ -181,32 +181,53 @@ impl TelemetryConsumer {
         }
     }
 
-    fn extract_stream_entries(value: &redis::Value) -> Vec<StreamEntry> {
+    fn extract_stream_entries(value: &redis::Value) -> Result<Vec<StreamEntry>, redis::RedisError> {
         match value {
             redis::Value::Array(entries) => {
                 let mut result = Vec::new();
-                for entry in entries {
-                    if let redis::Value::Array(entry_data) = entry {
-                        if let Some((msg_id, fields)) = Self::extract_stream_entry(entry_data) {
-                            result.push((msg_id, fields));
+                for (i, entry) in entries.iter().enumerate() {
+                    match entry {
+                        redis::Value::Array(entry_data) => {
+                            result.push(Self::extract_stream_entry(entry_data)?);
+                        }
+                        other => {
+                            return Err(redis::RedisError::from((
+                                redis::ErrorKind::UnexpectedReturnType,
+                                "XAUTOCLAIM entry is not an array",
+                                format!("entry {}: {:?}", i, other),
+                            )));
                         }
                     }
                 }
-                result
+                Ok(result)
             }
-            _ => Vec::new(),
+            other => Err(redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM claimed_messages is not an array",
+                format!("{:?}", other),
+            ))),
         }
     }
 
     fn extract_stream_entry(
         entry_data: &[redis::Value],
-    ) -> Option<(String, Vec<(String, String)>)> {
+    ) -> Result<(String, Vec<(String, String)>), redis::RedisError> {
         if entry_data.len() < 2 {
-            return None;
+            return Err(redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM entry has insufficient elements",
+                format!("expected >= 2, got {}", entry_data.len()),
+            )));
         }
-        let msg_id = Self::extract_string(&entry_data[0])?;
+        let msg_id = Self::extract_string(&entry_data[0]).ok_or_else(|| {
+            redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM entry ID is not a valid string",
+                String::new(),
+            ))
+        })?;
         let fields = Self::extract_fields(&entry_data[1]);
-        Some((msg_id, fields))
+        Ok((msg_id, fields))
     }
 
     fn extract_fields(value: &redis::Value) -> Vec<(String, String)> {
@@ -279,7 +300,7 @@ impl TelemetryConsumer {
                             String::new(),
                         ))
                     })?;
-                    let claimed = Self::extract_stream_entries(&arr[1]);
+                    let claimed = Self::extract_stream_entries(&arr[1])?;
                     // arr[2] contains deleted message IDs that were claimed but no longer exist
                     // We don't need to process them - they're already removed from the stream
                     (next_start, claimed)
