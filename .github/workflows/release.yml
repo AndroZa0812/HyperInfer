@@ -64,7 +64,7 @@ jobs:
           workspaces: crates/hyperinfer-python
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: 'pip'
@@ -74,7 +74,7 @@ jobs:
           chmod +x scripts/build-package.sh
           ./scripts/build-package.sh "${{ matrix.package }}" "$PACKAGE_DIR"
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.package }}-dist
           path: dist/
@@ -91,7 +91,7 @@ jobs:
       id-token: write # required for OIDC trusted publishing
     steps:
       - name: Download all wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
@@ -114,7 +114,7 @@ jobs:
       contents: write # required to create releases
     steps:
       - name: Download all wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
