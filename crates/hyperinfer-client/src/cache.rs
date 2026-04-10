@@ -83,7 +83,7 @@ impl ExactMatchCache {
             Ok(json) => {
                 let mut hasher = Sha256::new();
                 hasher.update(json.as_bytes());
-                let hash = format!("{:x}", hasher.finalize());
+                let hash = hex::encode(hasher.finalize());
                 Some(format!("hyperinfer:cache:{}:{}", self.namespace, hash))
             }
             Err(e) => {

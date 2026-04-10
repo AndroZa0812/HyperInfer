@@ -23,7 +23,7 @@ jobs:
     env:
       TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -32,7 +32,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -68,10 +68,10 @@ jobs:
     env:
       TRUNK_API_TOKEN: ${{ secrets.TRUNK_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check changed files
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         id: changes
         with:
           filters: |
@@ -100,7 +100,7 @@ jobs:
           github.event_name == 'push' && github.ref == 'refs/heads/main' ||
           contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
           steps.changes.outputs.integration == 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

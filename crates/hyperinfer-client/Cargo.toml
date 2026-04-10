@@ -6,26 +6,30 @@ license = "MIT"
 
 [dependencies]
 hyperinfer-core = { path = "../hyperinfer-core" }
-hyperinfer-providers = { path = "../hyperinfer-providers", features = ["openai", "anthropic"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
-tokio = { version = "1.0", features = ["full"] }
+hyperinfer-providers = { path = "../hyperinfer-providers", features = [
+  "openai",
+  "anthropic",
+] }
+reqwest = { version = "0.13.2", features = ["json", "stream"] }
+tokio = { version = "1.51", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tracing = "0.1"
 tracing-opentelemetry = "0.32"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 opentelemetry = "0.31"
-opentelemetry-otlp = { version = "0.31", features = [
-  "http-proto",
-  "reqwest-client",
-] }
+opentelemetry-http = "0.31"
+opentelemetry-otlp = { version = "0.31", features = ["http-proto"] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
-redis = { version = "1.0", features = [
+http = "1"
+bytes = "1"
+async-trait = "0.1"
+redis = { version = "1.2", features = [
   "aio",
   "tokio-comp",
   "connection-manager",
 ] }
-sha2 = "0.10"
+sha2 = "0.11"
 hex = "0.4"
 base64 = "0.22"
 futures = "0.3"
@@ -34,4 +38,4 @@ async-stream = "0.3"
 [dev-dependencies]
 testcontainers = "0.27.2"
 testcontainers-modules = { version = "0.15.0", features = ["redis"] }
-tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.51", features = ["macros", "rt-multi-thread"] }
