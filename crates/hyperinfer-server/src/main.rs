@@ -17,6 +17,7 @@ use hyperinfer_server::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
@@ -38,23 +39,25 @@ pub(crate) async fn admin_auth_middleware(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    let token = req
+    let expected_token = state.admin_token.as_ref();
+
+    let auth_header = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| {
-            let mut parts = s.splitn(2, char::is_whitespace);
-            let scheme = parts.next()?;
-            if scheme.eq_ignore_ascii_case("bearer") {
-                Some(parts.next()?.to_owned())
-            } else {
-                None
-            }
-        });
+        .and_then(|v| v.to_str().ok());
 
-    match token {
-        Some(t) if t == *state.admin_token => Ok(next.run(req).await),
-        _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    match auth_header {
+        Some(header) => {
+            let prefix = "Bearer ";
+            if let Some(provided_token) = header.strip_prefix(prefix) {
+                let eq = provided_token.as_bytes().ct_eq(expected_token.as_bytes());
+                if eq.into() {
+                    return Ok(next.run(req).await);
+                }
+            }
+            Err((StatusCode::UNAUTHORIZED, "Unauthorized"))
+        }
+        None => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
     }
 }
 
