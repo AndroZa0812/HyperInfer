@@ -77,50 +77,91 @@ impl TelemetryConsumer {
         }
     }
 
-    async fn ack_message(
+    async fn ack_messages(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
         consumer_group: &str,
-        msg_id: &str,
+        msg_ids: &[&str],
     ) -> Result<(), redis::RedisError> {
-        redis::cmd("XACK")
-            .arg(stream_key)
-            .arg(consumer_group)
-            .arg(msg_id)
-            .query_async::<()>(conn)
-            .await
+        Self::ack_messages_with_retry(conn, stream_key, consumer_group, msg_ids, 3, 50).await
     }
 
-    async fn process_entry<F, Fut>(
+    async fn ack_messages_with_retry(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
         consumer_group: &str,
-        msg_id: &str,
-        fields: &[(String, String)],
-        handler: &F,
-    ) where
+        msg_ids: &[&str],
+        max_retries: u32,
+        base_delay_ms: u64,
+    ) -> Result<(), redis::RedisError> {
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        let mut last_error = None;
+        for attempt in 0..max_retries {
+            match Self::do_ack_messages(conn, stream_key, consumer_group, msg_ids).await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    last_error = Some(e.clone());
+                    if attempt < max_retries - 1 {
+                        let delay_ms = base_delay_ms * (2_u64.pow(attempt));
+                        warn!(
+                            "XACK failed (attempt {}/{}), retrying in {}ms: {}",
+                            attempt + 1,
+                            max_retries,
+                            delay_ms,
+                            e
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+        Err(last_error.unwrap())
+    }
+
+    async fn do_ack_messages(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        msg_ids: &[&str],
+    ) -> Result<(), redis::RedisError> {
+        let mut cmd = redis::cmd("XACK");
+        cmd.arg(stream_key).arg(consumer_group);
+        for id in msg_ids {
+            cmd.arg(id);
+        }
+        let count: usize = cmd.query_async(conn).await?;
+        if count < msg_ids.len() {
+            let remaining = msg_ids.len() - count;
+            warn!(
+                "XACK only acknowledged {}/{} messages; {} may need recovery on reconnect",
+                count,
+                msg_ids.len(),
+                remaining
+            );
+        }
+        Ok(())
+    }
+
+    async fn process_entry<F, Fut>(msg_id: &str, fields: &[(String, String)], handler: &F) -> bool
+    where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
-        if let Some(record) = Self::parse_entry(fields) {
+        if let Some(record) = Self::parse_entry(Some(msg_id), fields) {
             match handler(record).await {
-                Ok(_) => {
-                    if let Err(e) =
-                        Self::ack_message(conn, stream_key, consumer_group, msg_id).await
-                    {
-                        warn!("Failed to XACK message {}: {}", msg_id, e);
-                    }
-                }
+                Ok(_) => true,
                 Err(e) => {
                     warn!("Failed to process message {}: {:?}", msg_id, e);
+                    false
                 }
             }
         } else {
             warn!("Failed to parse message {}", msg_id);
-            if let Err(e) = Self::ack_message(conn, stream_key, consumer_group, msg_id).await {
-                warn!("Failed to XACK unparseable message {}: {}", msg_id, e);
-            }
+            true
         }
     }
 
@@ -130,7 +171,8 @@ impl TelemetryConsumer {
         consumer_group: &str,
         consumer_name: &str,
         handler: &F,
-    ) where
+    ) -> Result<(), redis::RedisError>
+    where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
@@ -153,17 +195,22 @@ impl TelemetryConsumer {
                 Ok(res) => res,
                 Err(e) => {
                     warn!("XAUTOCLAIM failed: {}", e);
-                    return;
+                    return Err(e);
                 }
             };
 
-            for (msg_id, fields) in claimed {
-                Self::process_entry(conn, stream_key, consumer_group, &msg_id, &fields, handler)
-                    .await;
+            let mut ack_ids = Vec::with_capacity(claimed.len());
+            for (msg_id, fields) in &claimed {
+                if Self::process_entry(msg_id, fields, handler).await {
+                    ack_ids.push(msg_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await?;
             }
 
             if next_start == "0-0" {
-                return;
+                return Ok(());
             }
             start_id = next_start;
         }
@@ -197,16 +244,14 @@ impl TelemetryConsumer {
             .await?;
 
         for (_stream, entries) in results {
-            for (entry_id, fields) in entries {
-                Self::process_entry(
-                    conn,
-                    stream_key,
-                    consumer_group,
-                    &entry_id,
-                    &fields,
-                    handler,
-                )
-                .await;
+            let mut ack_ids = Vec::with_capacity(entries.len());
+            for (entry_id, fields) in &entries {
+                if Self::process_entry(entry_id, fields, handler).await {
+                    ack_ids.push(entry_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await?;
             }
         }
 
@@ -267,14 +312,27 @@ impl TelemetryConsumer {
                     stream_key, consumer_group
                 );
 
-                Self::recover_pending_messages(
+                let recover_result = Self::recover_pending_messages(
                     &mut conn,
                     &stream_key,
                     &consumer_group,
                     &consumer_name,
                     &handler,
                 )
-                .await;
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>);
+
+                let mut do_reconnect = false;
+                if let Err(e) = &recover_result {
+                    warn!("Failed to recover pending messages: {}", e);
+                    do_reconnect = true;
+                }
+
+                if do_reconnect {
+                    error!("Recovery failed, reconnecting to retry on next cycle");
+                    backoff = 1;
+                    continue;
+                }
 
                 loop {
                     if cancellation_token.is_cancelled() {
@@ -316,7 +374,7 @@ impl TelemetryConsumer {
         Ok(handle)
     }
 
-    fn parse_entry(fields: &[(String, String)]) -> Option<UsageRecord> {
+    fn parse_entry(msg_id: Option<&str>, fields: &[(String, String)]) -> Option<UsageRecord> {
         let mut map = std::collections::HashMap::new();
         for (k, v) in fields {
             map.insert(k.clone(), v.clone());
@@ -341,6 +399,7 @@ impl TelemetryConsumer {
             output_tokens,
             response_time_ms,
             timestamp,
+            msg_id: msg_id.map(String::from),
         })
     }
 
@@ -368,7 +427,7 @@ impl TelemetryConsumer {
         let mut records = Vec::new();
         for (_stream, entries) in results {
             for (_entry_id, fields) in entries {
-                if let Some(record) = Self::parse_entry(&fields) {
+                if let Some(record) = Self::parse_entry(None, &fields) {
                     records.push(record);
                 }
             }
@@ -393,7 +452,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key");
@@ -405,13 +464,32 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_entry_with_msg_id() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(Some("1234567890-0"), &fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "test-key");
+        assert_eq!(record.model, "gpt-4");
+        assert_eq!(record.msg_id, Some("1234567890-0".to_string()));
+    }
+
+    #[test]
     fn test_parse_entry_missing_field() {
         let fields = vec![
             ("key".to_string(), "test-key".to_string()),
             ("model".to_string(), "gpt-4".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -426,7 +504,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -462,7 +540,7 @@ mod tests {
             ("extra_field".to_string(), "ignored".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key");
@@ -471,7 +549,7 @@ mod tests {
     #[test]
     fn test_parse_entry_empty() {
         let fields = vec![];
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -483,7 +561,7 @@ mod tests {
             ("input_tokens".to_string(), "100".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -498,7 +576,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -513,7 +591,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -531,7 +609,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -546,7 +624,7 @@ mod tests {
             ("timestamp".to_string(), u64::MAX.to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.input_tokens, u32::MAX);
@@ -566,7 +644,7 @@ mod tests {
             ("timestamp".to_string(), "0".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.input_tokens, 0);
@@ -586,7 +664,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -601,7 +679,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -616,7 +694,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key-!@#$%");
@@ -634,7 +712,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key-🔑");
@@ -653,7 +731,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, long_key);
