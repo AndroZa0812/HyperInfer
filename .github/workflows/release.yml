@@ -91,7 +91,7 @@ jobs:
       id-token: write # required for OIDC trusted publishing
     steps:
       - name: Download all wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
@@ -114,7 +114,7 @@ jobs:
       contents: write # required to create releases
     steps:
       - name: Download all wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist/
           merge-multiple: true
