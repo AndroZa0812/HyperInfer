@@ -56,16 +56,15 @@ impl ProviderRegistry {
         providers.remove(name)
     }
 
-    /// Get a StreamingProvider for the named provider, suitable for calling stream().
+    /// Get a StreamingProvider for the named provider, suitable for calling into_stream().
     /// Returns None if the provider is not registered.
+    /// Clones the Arc (O(1)) rather than deep-cloning the provider internals.
     pub fn get_streaming(&self, name: &str) -> Option<crate::provider_trait::StreamingProvider> {
         let providers = self.providers.read().unwrap();
-        providers.get(name).map(|p| {
-            let inner: &dyn crate::provider_trait::LlmProvider = &**p;
-            let boxed: Box<dyn crate::provider_trait::LlmProvider + Send + 'static> =
-                dyn_clone::clone_box(inner);
-            crate::provider_trait::StreamingProvider::new(boxed)
-        })
+        providers
+            .get(name)
+            .cloned()
+            .map(crate::provider_trait::StreamingProvider::new)
     }
 }
 

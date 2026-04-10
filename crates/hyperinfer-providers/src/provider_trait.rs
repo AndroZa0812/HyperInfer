@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse};
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[async_trait]
 pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
@@ -50,14 +51,14 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
 
 dyn_clone::clone_trait_object!(LlmProvider);
 
-/// Owns a cloned LlmProvider and provides a 'static stream.
-/// This allows streaming without lifetime issues from dynamic dispatch.
+/// Holds a reference-counted LlmProvider and produces a 'static stream.
+/// Cloning the Arc is O(1) — no deep-clone of the provider's HTTP client.
 pub struct StreamingProvider {
-    inner: Box<dyn LlmProvider + Send + 'static>,
+    inner: Arc<dyn LlmProvider>,
 }
 
 impl StreamingProvider {
-    pub fn new(provider: Box<dyn LlmProvider + Send + 'static>) -> Self {
+    pub fn new(provider: Arc<dyn LlmProvider>) -> Self {
         Self { inner: provider }
     }
 
