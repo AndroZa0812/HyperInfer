@@ -416,9 +416,11 @@ impl HyperInferClient {
             })?
         };
 
+        let mut resolved_request = request.clone();
+        resolved_request.model = model.clone();
         let provider_stream: Pin<
             Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = streaming_provider.into_stream(&request, &api_key);
+        > = streaming_provider.into_stream(&resolved_request, &api_key);
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 
