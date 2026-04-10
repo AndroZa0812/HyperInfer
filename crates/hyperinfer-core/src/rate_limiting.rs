@@ -7,6 +7,9 @@ use redis::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
+pub const USAGE_TOKENS_KEY_PREFIX: &str = "hyperinfer:usage:tokens:";
+pub const USAGE_REQUESTS_KEY_PREFIX: &str = "hyperinfer:usage:requests:";
+
 const GCRA_SCRIPT: &str = r#"
 local key = KEYS[1]
 local rate = tonumber(ARGV[1])
@@ -204,10 +207,10 @@ impl RateLimiter {
             redis::pipe()
                 .atomic()
                 .cmd("INCRBY")
-                .arg(format!("hyperinfer:usage:tokens:{}", key))
+                .arg(format!("{}{}", USAGE_TOKENS_KEY_PREFIX, key))
                 .arg(tokens_used)
                 .cmd("INCR")
-                .arg(format!("hyperinfer:usage:requests:{}", key))
+                .arg(format!("{}{}", USAGE_REQUESTS_KEY_PREFIX, key))
                 .query_async::<()>(&mut conn)
                 .await?;
         }
