@@ -34,7 +34,6 @@ hex = "0.4"
 base64 = "0.22"
 futures = "0.3"
 async-stream = "0.3"
-dyn-clone = "1.0.20"
 
 [dev-dependencies]
 testcontainers = "0.27.2"

@@ -55,6 +55,18 @@ impl ProviderRegistry {
         let mut providers = self.providers.write().unwrap();
         providers.remove(name)
     }
+
+    /// Get a StreamingProvider for the named provider, suitable for calling stream().
+    /// Returns None if the provider is not registered.
+    pub fn get_streaming(&self, name: &str) -> Option<crate::provider_trait::StreamingProvider> {
+        let providers = self.providers.read().unwrap();
+        providers.get(name).map(|p| {
+            let inner: &dyn crate::provider_trait::LlmProvider = &**p;
+            let boxed: Box<dyn crate::provider_trait::LlmProvider + Send + 'static> =
+                dyn_clone::clone_box(inner);
+            crate::provider_trait::StreamingProvider::new(boxed)
+        })
+    }
 }
 
 impl Default for ProviderRegistry {

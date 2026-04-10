@@ -152,7 +152,7 @@ impl LlmProvider for OpenAiProvider {
         &self,
         request: &ChatRequest,
         api_key: &str,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + '_>> {
+    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>> {
         let url = format!("{}/v1/chat/completions", self.base_url);
         let mut body = serde_json::Map::new();
         body.insert(

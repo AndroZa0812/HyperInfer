@@ -134,19 +134,6 @@ impl Stream for AccountedStream {
     }
 }
 
-/// Extension trait to get an owned clone from &Arc<dyn LlmProvider>.
-trait OwnedCloneExt {
-    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static>;
-}
-
-impl OwnedCloneExt for std::sync::Arc<dyn hyperinfer_providers::LlmProvider> {
-    fn owned_clone(&self) -> Box<dyn hyperinfer_providers::LlmProvider + Send + 'static> {
-        // Clone the Arc and clone the inner provider
-        let inner: &dyn hyperinfer_providers::LlmProvider = &**self;
-        dyn_clone::clone_box(inner)
-    }
-}
-
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
     http_caller: Arc<HttpCaller>,
@@ -418,10 +405,10 @@ impl HyperInferClient {
             (model, provider_name, api_key)
         };
 
-        // 3. Get provider from registry and create stream
-        let llm_provider = {
+        // 3. Get streaming provider from registry
+        let streaming_provider = {
             let registry = self.provider_registry.read().await;
-            registry.get(&provider_name).ok_or_else(|| {
+            registry.get_streaming(&provider_name).ok_or_else(|| {
                 HyperInferError::Config(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("Provider '{}' not found in registry", provider_name),
@@ -429,17 +416,9 @@ impl HyperInferClient {
             })?
         };
 
-        // Clone the provider to get owned state, allowing 'static lifetime
-        // for the returned stream. All provider state (HTTP client, base_url)
-        // is cheap to clone.
-        let provider_clone = llm_provider.owned_clone();
-
-        // Wrap the dynamic provider into OwnedClone so we can use into_stream
-        let owned_provider = hyperinfer_providers::provider_trait::OwnedClone::new(provider_clone);
-
         let provider_stream: Pin<
             Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = owned_provider.into_stream(&request, &api_key);
+        > = streaming_provider.into_stream(&request, &api_key);
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 

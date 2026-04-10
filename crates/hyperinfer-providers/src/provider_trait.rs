@@ -25,7 +25,11 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
         &self,
         request: &ChatRequest,
         api_key: &str,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + '_>>;
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,
+        >,
+    >;
 
     async fn health_check(&self, api_key: &str) -> Result<(), hyperinfer_core::HyperInferError> {
         let request = ChatRequest {
@@ -46,14 +50,13 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
 
 dyn_clone::clone_trait_object!(LlmProvider);
 
-/// Helper to obtain an owned clone of a boxed trait object.
-/// The returned `Box<dyn LlmProvider>` is `'static` so its `stream()`
-/// method can be called without lifetime issues.
-pub struct OwnedClone {
+/// Owns a cloned LlmProvider and provides a 'static stream.
+/// This allows streaming without lifetime issues from dynamic dispatch.
+pub struct StreamingProvider {
     inner: Box<dyn LlmProvider + Send + 'static>,
 }
 
-impl OwnedClone {
+impl StreamingProvider {
     pub fn new(provider: Box<dyn LlmProvider + Send + 'static>) -> Self {
         Self { inner: provider }
     }
@@ -67,22 +70,6 @@ impl OwnedClone {
             dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,
         >,
     > {
-        use futures::StreamExt;
-
-        let provider = self.inner;
-        let request = request.clone();
-        let api_key = api_key.to_string();
-
-        // Use async_stream to take ownership of `provider`, `request`, and `api_key`.
-        let stream = async_stream::try_stream! {
-            // We can now call provider.stream() here because provider is alive
-            // for the duration of this async block.
-            let mut inner_stream = provider.stream(&request, &api_key);
-            while let Some(chunk) = inner_stream.next().await {
-                yield chunk?;
-            }
-        };
-
-        Box::pin(stream)
+        self.inner.stream(request, api_key)
     }
 }
