@@ -1496,6 +1496,7 @@ dependencies = [
  "async-trait",
  "base64 0.22.1",
  "bytes",
+ "dyn-clone",
  "futures",
  "hex",
  "http",
@@ -1537,6 +1538,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
