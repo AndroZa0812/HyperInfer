@@ -205,24 +205,30 @@ impl TelemetryConsumer {
             return None;
         }
         let msg_id = Self::extract_string(&entry_data[0])?;
-        let fields = Self::extract_fields(&entry_data[1])?;
+        let fields = Self::extract_fields(&entry_data[1]);
         Some((msg_id, fields))
     }
 
-    fn extract_fields(value: &redis::Value) -> Option<Vec<(String, String)>> {
+    fn extract_fields(value: &redis::Value) -> Vec<(String, String)> {
         match value {
             redis::Value::Array(field_pairs) => {
                 let mut pairs = Vec::new();
                 for chunk in field_pairs.chunks(2) {
                     if chunk.len() == 2 {
-                        let key = Self::extract_string(&chunk[0])?;
-                        let value = Self::extract_string(&chunk[1])?;
-                        pairs.push((key, value));
+                        match (
+                            Self::extract_string(&chunk[0]),
+                            Self::extract_string(&chunk[1]),
+                        ) {
+                            (Some(key), Some(value)) => pairs.push((key, value)),
+                            _ => {
+                                warn!("Skipping malformed field pair: {:?}", chunk);
+                            }
+                        }
                     }
                 }
-                Some(pairs)
+                pairs
             }
-            _ => None,
+            _ => Vec::new(),
         }
     }
 
