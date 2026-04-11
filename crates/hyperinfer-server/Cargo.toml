@@ -47,6 +47,11 @@ futures = "0.3"
 async-stream = "0.3"
 axum-extra = { version = "0.12", features = ["typed-header"] }
 headers = "0.4"
+rust-embed = { version = "6.8", optional = true }
+mime_guess = { version = "2.0", optional = true }
+
+[features]
+embedded-frontend = ["rust-embed", "mime_guess"]
 
 [dev-dependencies]
 hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }

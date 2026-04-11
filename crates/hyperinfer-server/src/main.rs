@@ -500,6 +500,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let app = Router::new()
         .merge(v1_router)
         .merge(mcp_router)
+        .fallback(hyperinfer_server::frontend::spa_handler)
         .layer(cors)
         .with_state(state);
 
