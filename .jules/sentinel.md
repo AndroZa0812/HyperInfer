@@ -1,0 +1,4 @@
+## 2025-02-27 - Remove JWT allow_insecure_exp bypass
+**Vulnerability:** The MCP authentication layer contained an `allow_insecure_exp` flag in `McpState` and `validate_jwt` which bypassed mandatory `exp` claim validation in JWT tokens. This could potentially allow expired tokens or incorrectly generated tokens without expiration to bypass security checks if the flag was accidentally toggled or defaulted.
+**Learning:** Hardcoded dev mode bypasses or "insecure" flags left in production-ready authentication middleware pose a significant risk, as they can inadvertently be enabled or create a false sense of security.
+**Prevention:** All authentication and authorization validation logic (like JWT expiration) should enforce strict requirements unconditionally. Remove insecure dev bypasses from the core control plane logic.
