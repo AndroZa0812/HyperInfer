@@ -1,0 +1,4 @@
+## 2025-04-12 - [Strict JWT Expiration Enforcement]
+**Vulnerability:** The application allowed an insecure development mode (`allow_insecure_exp`) that bypassed JWT expiration (`exp` claim) checks, which could inadvertently be enabled in production environments or lead to permanently valid authentication tokens.
+**Learning:** Using optional boolean flags or removing elements from `required_spec_claims` to bypass security checks creates a risky path. If an insecure state is modeled, it can accidentally be activated or exploited.
+**Prevention:** Remove insecure bypass flags entirely. Model strict security requirements directly in the type system (e.g., using `pub exp: u64` rather than `Option<u64>`) so that the application cannot physically represent or validate a token without enforcing mandatory expiration rules.
