@@ -482,15 +482,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let v1_router = Router::new()
         .route("/v1/config/sync", get(config_sync))
-        .route("/v1/teams/:id", get(get_team))
+        .route("/v1/teams/{id}", get(get_team))
         .route("/v1/teams", post(create_team))
-        .route("/v1/users/:id", get(get_user))
+        .route("/v1/users/{id}", get(get_user))
         .route("/v1/users", post(create_user))
-        .route("/v1/api_keys/:id", get(get_api_key))
+        .route("/v1/api_keys/{id}", get(get_api_key))
         .route("/v1/api_keys", post(create_api_key))
-        .route("/v1/model_aliases/:id", get(get_model_alias))
+        .route("/v1/model_aliases/{id}", get(get_model_alias))
         .route("/v1/model_aliases", post(create_model_alias))
-        .route("/v1/quotas/:team_id", get(get_quota))
+        .route("/v1/quotas/{team_id}", get(get_quota))
         .route("/v1/quotas", post(create_quota))
         .layer(middleware::from_fn_with_state(
             state.clone(),
