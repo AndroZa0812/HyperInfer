@@ -179,7 +179,7 @@ impl TelemetryConsumer {
     {
         let mut start_id = "0-0".to_string();
         loop {
-            let result: Result<(String, Vec<StreamEntry>), redis::RedisError> =
+            let result: Result<(String, Vec<StreamEntry>, Vec<redis::Value>), redis::RedisError> =
                 redis::cmd("XAUTOCLAIM")
                     .arg(stream_key)
                     .arg(consumer_group)
@@ -191,7 +191,7 @@ impl TelemetryConsumer {
                     .query_async(conn)
                     .await;
 
-            let (next_start, claimed) = match result {
+            let (next_start, claimed, _) = match result {
                 Ok(res) => res,
                 Err(e) => {
                     warn!("XAUTOCLAIM failed: {}", e);
@@ -282,7 +282,12 @@ impl TelemetryConsumer {
                     return;
                 }
 
-                let conn_result = client.get_multiplexed_async_connection().await;
+                let config = redis::AsyncConnectionConfig::new().set_response_timeout(Some(
+                    std::time::Duration::from_millis((XREADGROUP_BLOCK_MS + 5000) as u64),
+                ));
+                let conn_result = client
+                    .get_multiplexed_async_connection_with_config(&config)
+                    .await;
                 if let Err(e) = &conn_result {
                     error!(
                         "Failed to connect to Redis: {}. Reconnecting in {}s",
@@ -330,7 +335,8 @@ impl TelemetryConsumer {
 
                 if do_reconnect {
                     error!("Recovery failed, reconnecting to retry on next cycle");
-                    backoff = 1;
+                    tokio::time::sleep(tokio::time::Duration::from_secs(backoff)).await;
+                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
                     continue;
                 }
 
@@ -412,7 +418,12 @@ impl TelemetryConsumer {
     pub async fn read_single_batch(
         &self,
     ) -> Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>> {
-        let mut conn = self.client.get_multiplexed_async_connection().await?;
+        let config = redis::AsyncConnectionConfig::new()
+            .set_response_timeout(Some(std::time::Duration::from_millis(10000))); // Generous timeout for single batch
+        let mut conn = self
+            .client
+            .get_multiplexed_async_connection_with_config(&config)
+            .await?;
 
         #[allow(clippy::type_complexity)]
         let results: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREAD")

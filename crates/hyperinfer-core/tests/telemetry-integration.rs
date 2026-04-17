@@ -62,8 +62,10 @@ async fn test_telemetry_consumer_read_records() {
 
     // Push some test data to the stream
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
@@ -137,8 +139,10 @@ async fn test_telemetry_consumer_with_custom_stream() {
     let (redis_url, _container) = setup_redis().await;
 
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
@@ -186,8 +190,10 @@ async fn test_telemetry_consumer_start_consuming() {
     let (redis_url, _container) = setup_redis().await;
 
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
@@ -261,8 +267,10 @@ async fn test_telemetry_consumer_handles_malformed_data() {
     let (redis_url, _container) = setup_redis().await;
 
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
@@ -318,8 +326,10 @@ async fn test_telemetry_consumer_large_batch() {
     let (redis_url, _container) = setup_redis().await;
 
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
@@ -362,8 +372,10 @@ async fn test_telemetry_consumer_zero_tokens() {
     let (redis_url, _container) = setup_redis().await;
 
     let client = redis::Client::open(redis_url.as_str()).expect("Failed to create client");
+    let config = redis::AsyncConnectionConfig::new()
+        .set_response_timeout(Some(std::time::Duration::from_millis(10000)));
     let mut conn = client
-        .get_multiplexed_async_connection()
+        .get_multiplexed_async_connection_with_config(&config)
         .await
         .expect("Failed to connect");
 
