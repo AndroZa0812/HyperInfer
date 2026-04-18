@@ -2,12 +2,8 @@
     import { onMount, onDestroy } from 'svelte';
     import * as echarts from 'echarts';
 
-    interface Props {
-        data: { date: string; tokens: number; cost: number; latency_ms: number }[];
-        type: 'line' | 'bar' | 'donut' = 'line';
-    }
-
-    let { data = [], type = 'line' }: Props = $props();
+    let data = $bindable<{ date: string; tokens: number; cost: number; latency_ms: number }[]>([]);
+    let type = $bindable<'line' | 'bar' | 'donut'>('line');
 
     let chartEl: HTMLElement;
     let chart: echarts.ECharts;
