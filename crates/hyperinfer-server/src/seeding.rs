@@ -72,6 +72,11 @@ pub async fn run_seeding<D: Database>(db: &D) -> Result<(), DbError> {
 
     // Hash password and create admin user
     let password_hash = hash_password(&admin_password)?;
+    tracing::debug!(
+        email = %admin_email,
+        hash_preview = %&password_hash[..20.min(password_hash.len())],
+        "Hashed admin password"
+    );
 
     db.create_user(&team.id, &admin_email, "admin", Some(&password_hash))
         .await?;

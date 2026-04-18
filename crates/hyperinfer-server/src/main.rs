@@ -293,10 +293,11 @@ async fn login_handler(
     let user = match state.db.get_user_by_email(&req.email).await {
         Ok(Some(user)) => user,
         Ok(None) => {
+            tracing::warn!(email = %req.email, "Login failed: user not found");
             return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
         }
         Err(e) => {
-            tracing::error!("Database error during login: {:?}", e);
+            tracing::error!(error = ?e, "Database error during login");
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error",
@@ -309,11 +310,13 @@ async fn login_handler(
     let password_hash = match &user.password_hash {
         Some(hash) => hash,
         None => {
+            tracing::warn!(email = %req.email, "Login failed: user has no password_hash set");
             return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
         }
     };
 
     if !verify_password(&req.password, password_hash) {
+        tracing::warn!(email = %req.email, "Login failed: password verification failed");
         return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
     }
 
