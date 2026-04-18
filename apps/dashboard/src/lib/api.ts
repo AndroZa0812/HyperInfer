@@ -30,8 +30,7 @@ export const api = {
             body: JSON.stringify({ email, password }),
         }),
 
-    logout: () =>
-        fetchApi<void>('/auth/logout', { method: 'POST' }),
+    logout: () => fetchApi<void>('/auth/logout', { method: 'POST' }),
 
     me: () => fetchApi<User>('/auth/me'),
 

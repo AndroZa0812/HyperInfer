@@ -3,7 +3,7 @@
 use axum::{
     body::Body,
     extract::{Extension, Json, Path, State},
-    http::{Request, StatusCode},
+    http::{header::SET_COOKIE, Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -11,9 +11,11 @@ use axum::{
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{
-    auth::{auth_middleware, AuthClaims, create_auth_token, LoginRequest, LoginResponse, MeResponse},
-    mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
+    auth::{
+        auth_middleware, create_auth_token, AuthClaims, LoginRequest, LoginResponse, MeResponse,
+    },
     db::verify_password,
+    mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
     RedisConfigStore, SqlxDb,
 };
 use serde::Deserialize;
@@ -298,11 +300,7 @@ async fn login_handler(
         }
         Err(e) => {
             tracing::error!(error = ?e, "Database error during login");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal server error",
-            )
-                .into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
         }
     };
 
@@ -324,11 +322,7 @@ async fn login_handler(
     let jwt_secret = std::env::var("MCP_JWT_SECRET").unwrap_or_default();
     if jwt_secret.is_empty() {
         tracing::error!("MCP_JWT_SECRET not set");
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Internal server error",
-        )
-            .into_response();
+        return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
     }
 
     // Generate JWT token (24 hours expiry)
@@ -336,11 +330,7 @@ async fn login_handler(
         Ok(token) => token,
         Err(e) => {
             tracing::error!("Failed to create JWT: {:?}", e);
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Internal server error",
-            )
-                .into_response();
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
         }
     };
 
@@ -349,15 +339,16 @@ async fn login_handler(
         email: user.email,
         role: user.role,
         team_id: user.team_id,
-        token,
     };
 
-    Json(response).into_response()
+    (
+        [(SET_COOKIE, hyperinfer_server::auth::auth_cookie(&token))],
+        Json(response),
+    )
+        .into_response()
 }
 
-async fn me_handler(
-    Extension(claims): Extension<AuthClaims>,
-) -> impl IntoResponse {
+async fn me_handler(Extension(claims): Extension<AuthClaims>) -> impl IntoResponse {
     let response = MeResponse {
         id: claims.sub,
         email: claims.email,
@@ -369,7 +360,10 @@ async fn me_handler(
 }
 
 async fn logout_handler() -> impl IntoResponse {
-    StatusCode::NO_CONTENT
+    (
+        [(SET_COOKIE, hyperinfer_server::auth::clear_auth_cookie())],
+        StatusCode::NO_CONTENT,
+    )
 }
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
@@ -604,8 +598,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Auth routes for user/password authentication
     let jwt_secret_arc = Arc::new(jwt_secret);
-    let auth_public_routes = Router::new()
-        .route("/v1/auth/login", post(login_handler));
+    let auth_public_routes = Router::new().route("/v1/auth/login", post(login_handler));
 
     let auth_protected_routes = Router::new()
         .route("/v1/auth/me", get(me_handler))

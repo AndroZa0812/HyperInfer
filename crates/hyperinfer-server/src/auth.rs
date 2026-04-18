@@ -47,7 +47,6 @@ pub struct LoginResponse {
     pub email: String,
     pub role: String,
     pub team_id: String,
-    pub token: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -56,6 +55,19 @@ pub struct MeResponse {
     pub email: String,
     pub role: String,
     pub team_id: String,
+}
+
+/// Build a Set-Cookie header value for the auth token.
+pub fn auth_cookie(token: &str) -> String {
+    format!(
+        "auth_token={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400",
+        token
+    )
+}
+
+/// Build a Set-Cookie header value that clears the auth cookie.
+pub fn clear_auth_cookie() -> String {
+    "auth_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0".to_string()
 }
 
 // ── JWT Token Generation ────────────────────────────────────────────────────
@@ -103,14 +115,16 @@ pub fn validate_auth_token(
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 
-/// Extract JWT from Authorization header and validate it.
+/// Extract JWT from Authorization header or auth_token cookie and validate it.
 /// On success, adds AuthClaims to request extensions.
 pub async fn auth_middleware(
     State(jwt_secret): State<Arc<String>>,
     mut req: Request<Body>,
     next: Next,
 ) -> Response {
-    let token = match extract_bearer_token(req.headers()) {
+    let token = extract_bearer_token(req.headers()).or_else(|| extract_cookie_token(req.headers()));
+
+    let token = match token {
         Some(token) => token,
         None => {
             return (
@@ -143,6 +157,19 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
     } else {
         None
     }
+}
+
+fn extract_cookie_token(headers: &HeaderMap) -> Option<String> {
+    let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    for cookie in cookie_header.split(';') {
+        let cookie = cookie.trim();
+        if let Some(value) = cookie.strip_prefix("auth_token=") {
+            if !value.is_empty() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

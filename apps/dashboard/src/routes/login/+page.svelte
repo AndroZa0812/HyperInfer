@@ -32,8 +32,8 @@
                 on:click={() => theme.toggle()}
             >
                 {#if $theme === 'light'}
-                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.75 9.75 0 0012 21.75 9.75 9.75 0 0015.354 15.354z" />
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 12c0 5.385 4.365 9.75 9.75 9.75.721 0 1.42-.078 2.092-.227A9.72 9.72 0 0 0 21.752 15.002z" />
                     </svg>
                 {:else}
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
