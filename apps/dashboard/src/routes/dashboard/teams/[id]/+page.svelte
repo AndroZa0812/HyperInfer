@@ -2,28 +2,35 @@
     import { page } from '$app/stores';
     import { api } from '$lib/api';
     import type { Team } from '$lib/types';
-    import { onMount } from 'svelte';
 
     let team: Team | null = null;
     let loading = true;
+    let error: string | null = null;
 
     $: teamId = $page.params.id;
 
-    onMount(async () => {
+    $: {
         if (teamId) {
-            try {
-                team = await api.getTeam(teamId);
-            } catch (e) {
-                console.error('Failed to load team', e);
-            } finally {
-                loading = false;
-            }
+            loading = true;
+            error = null;
+            api.getTeam(teamId)
+                .then((t) => {
+                    team = t;
+                    loading = false;
+                })
+                .catch((e) => {
+                    console.error('Failed to load team', e);
+                    error = 'Failed to load team';
+                    loading = false;
+                });
         }
-    });
+    }
 </script>
 
 {#if loading}
     <p>Loading...</p>
+{:else if error}
+    <p class="text-red-500">{error}</p>
 {:else if team}
     <div class="space-y-6">
         <div class="flex items-center justify-between">
