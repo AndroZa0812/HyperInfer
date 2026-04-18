@@ -1,7 +1,7 @@
 <script lang="ts">
     import VirtualList from 'svelte-virtual-list';
 
-    let { items = $bindable([]), children }: { items: any[], children: any } = $props();
+    let { items = [], children }: { items: any[], children: any } = $props();
 </script>
 
 <div class="h-full overflow-auto">
