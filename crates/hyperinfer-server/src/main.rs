@@ -401,7 +401,13 @@ async fn resolve_api_key<D: Database>(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    tracing_subscriber::fmt::init();
+    // Initialize tracing with log level from RUST_LOG env var (defaults to INFO)
+    use tracing_subscriber::EnvFilter;
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
+        .init();
 
     let database_url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/hyperinfer".to_string());
@@ -596,11 +602,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Auth routes for user/password authentication
     let jwt_secret_arc = Arc::new(jwt_secret);
     let auth_public_routes = Router::new()
-        .route("/auth/login", post(login_handler));
+        .route("/v1/auth/login", post(login_handler));
 
     let auth_protected_routes = Router::new()
-        .route("/auth/me", get(me_handler))
-        .route("/auth/logout", post(logout_handler))
+        .route("/v1/auth/me", get(me_handler))
+        .route("/v1/auth/logout", post(logout_handler))
         .layer(middleware::from_fn_with_state(
             jwt_secret_arc.clone(),
             auth_middleware,
