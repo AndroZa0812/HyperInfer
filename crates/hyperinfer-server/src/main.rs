@@ -2,7 +2,7 @@
 
 use axum::{
     body::Body,
-    extract::{Json, Path, State},
+    extract::{Extension, Json, Path, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -11,7 +11,9 @@ use axum::{
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
 use hyperinfer_server::{
+    auth::{auth_middleware, AuthClaims, create_auth_token, LoginRequest, LoginResponse, MeResponse},
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
+    db::verify_password,
     RedisConfigStore, SqlxDb,
 };
 use serde::Deserialize;
@@ -130,7 +132,7 @@ async fn create_user<D: Database, C: ConfigStore>(
 ) -> impl IntoResponse {
     match state
         .db
-        .create_user(&req.team_id, &req.email, &req.role)
+        .create_user(&req.team_id, &req.email, &req.role, None) // Pass None as no password provided for API-created users
         .await
     {
         Ok(user) => Json(user).into_response(),
@@ -281,6 +283,94 @@ struct CreateQuotaRequest {
     tpm_limit: i32,
 }
 
+// ── Auth Handlers ────────────────────────────────────────────────────────────
+
+async fn login_handler(
+    State(state): State<ProdState>,
+    Json(req): Json<LoginRequest>,
+) -> impl IntoResponse {
+    // Find user by email
+    let user = match state.db.get_user_by_email(&req.email).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+        }
+        Err(e) => {
+            tracing::error!("Database error during login: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error",
+            )
+                .into_response();
+        }
+    };
+
+    // Verify password
+    let password_hash = match &user.password_hash {
+        Some(hash) => hash,
+        None => {
+            return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+        }
+    };
+
+    if !verify_password(&req.password, password_hash) {
+        return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
+    }
+
+    // Get JWT secret from environment
+    let jwt_secret = std::env::var("MCP_JWT_SECRET").unwrap_or_default();
+    if jwt_secret.is_empty() {
+        tracing::error!("MCP_JWT_SECRET not set");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal server error",
+        )
+            .into_response();
+    }
+
+    // Generate JWT token (24 hours expiry)
+    let token = match create_auth_token(&user, &jwt_secret, 24 * 3600) {
+        Ok(token) => token,
+        Err(e) => {
+            tracing::error!("Failed to create JWT: {:?}", e);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error",
+            )
+                .into_response();
+        }
+    };
+
+    let response = LoginResponse {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        team_id: user.team_id,
+        token,
+    };
+
+    Json(response).into_response()
+}
+
+async fn me_handler(
+    Extension(claims): Extension<AuthClaims>,
+) -> impl IntoResponse {
+    let response = MeResponse {
+        id: claims.sub,
+        email: claims.email,
+        role: claims.role,
+        team_id: claims.team_id,
+    };
+
+    Json(response).into_response()
+}
+
+async fn logout_handler() -> impl IntoResponse {
+    StatusCode::NO_CONTENT
+}
+
+// ── Helper Functions ─────────────────────────────────────────────────────────
+
 fn hash_key(key: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(key.as_bytes());
@@ -327,6 +417,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     let db = SqlxDb::new(pool);
+
+    // Run seeding logic
+    if let Err(e) = hyperinfer_server::seeding::run_seeding(&db).await {
+        tracing::error!("Failed to run seeding: {:?}", e);
+    }
+
     let config_manager = RedisConfigStore::new(&redis_url).await?;
     let config = config_manager.fetch_config().await.unwrap_or_else(|e| {
         tracing::warn!(
@@ -431,7 +527,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let state: ProdState = AppState {
         config,
-        db,
+        db: db.clone(),
         config_manager,
         admin_token: Arc::new(admin_token),
     };
@@ -497,9 +593,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             admin_auth_middleware,
         ));
 
+    // Auth routes for user/password authentication
+    let jwt_secret_arc = Arc::new(jwt_secret);
+    let auth_public_routes = Router::new()
+        .route("/auth/login", post(login_handler));
+
+    let auth_protected_routes = Router::new()
+        .route("/auth/me", get(me_handler))
+        .route("/auth/logout", post(logout_handler))
+        .layer(middleware::from_fn_with_state(
+            jwt_secret_arc.clone(),
+            auth_middleware,
+        ));
+
     let app = Router::new()
         .merge(v1_router)
         .merge(mcp_router)
+        .merge(auth_public_routes)
+        .merge(auth_protected_routes)
         .fallback(hyperinfer_server::frontend::spa_handler)
         .layer(cors)
         .with_state(state);
@@ -535,7 +646,8 @@ mod tests {
             async fn get_team(&self, id: &str) -> Result<Option<Team>, DbError>;
             async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError>;
             async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
-            async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError>;
+            async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbError>;
+            async fn create_user(&self, team_id: &str, email: &str, role: &str, password_hash: Option<&str>) -> Result<User, DbError>;
             async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
             async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
             async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<String>) -> Result<ApiKey, DbError>;
@@ -544,6 +656,7 @@ mod tests {
             async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError>;
             async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32) -> Result<Quota, DbError>;
             async fn record_usage(&self, team_id: &str, api_key_id: &str, model: &str, input_tokens: i32, output_tokens: i32, response_time_ms: i64) -> Result<UsageLog, DbError>;
+            async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
         }
     }
 
@@ -947,12 +1060,18 @@ mod tests {
             team_id: "team-id".to_string(),
             email: "new@example.com".to_string(),
             role: "member".to_string(),
+            password_hash: None,
             created_at: now,
         };
         db.expect_create_user()
-            .with(eq("team-id"), eq("new@example.com"), eq("member"))
+            .with(
+                eq("team-id"),
+                eq("new@example.com"),
+                eq("member"),
+                eq(None::<String>),
+            )
             .times(1)
-            .returning(move |_, _, _| Ok(user.clone()));
+            .returning(move |_, _, _, _| Ok(user.clone()));
 
         let config = Config {
             api_keys: std::collections::HashMap::new(),

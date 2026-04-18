@@ -1,3 +1,7 @@
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString},
+    Argon2, PasswordVerifier,
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use hyperinfer_core::{
@@ -5,6 +9,27 @@ use hyperinfer_core::{
 };
 use serde::Serialize;
 use sqlx::PgPool;
+
+pub fn hash_password(password: &str) -> Result<String, DbError> {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2
+        .hash_password(password.as_bytes(), &salt)
+        .map_err(|e| DbError::Sqlx(sqlx::Error::Protocol(e.to_string())))?
+        .to_string();
+    Ok(password_hash)
+}
+
+pub fn verify_password(password: &str, hash: &str) -> bool {
+    let parsed_hash = PasswordHash::new(hash).ok();
+    if let Some(ph) = parsed_hash {
+        Argon2::default()
+            .verify_password(password.as_bytes(), &ph)
+            .is_ok()
+    } else {
+        false
+    }
+}
 
 #[derive(Clone)]
 pub struct SqlxDb {
@@ -57,24 +82,43 @@ impl Database for SqlxDb {
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
-        let result: Option<UserRow> =
-            sqlx::query_as("SELECT id, team_id, email, role, created_at FROM users WHERE id = $1")
-                .bind(uuid)
-                .fetch_optional(&self.pool)
-                .await?;
+        let result: Option<UserRow> = sqlx::query_as(
+            "SELECT id, team_id, email, role, password_hash, created_at FROM users WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await?;
 
         Ok(result.map(User::from))
     }
 
-    async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError> {
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbError> {
+        let result: Option<UserRow> = sqlx::query_as(
+            "SELECT id, team_id, email, role, password_hash, created_at FROM users WHERE email = $1",
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(User::from))
+    }
+
+    async fn create_user(
+        &self,
+        team_id: &str,
+        email: &str,
+        role: &str,
+        password_hash: Option<&str>,
+    ) -> Result<User, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id)
             .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
         let result: UserRow = sqlx::query_as(
-            "INSERT INTO users (team_id, email, role) VALUES ($1, $2, $3) RETURNING id, team_id, email, role, created_at"
+            "INSERT INTO users (team_id, email, role, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, team_id, email, role, password_hash, created_at"
         )
         .bind(team_uuid)
         .bind(email)
         .bind(role)
+        .bind(password_hash)
         .fetch_one(&self.pool)
         .await?;
 
@@ -223,6 +267,14 @@ impl Database for SqlxDb {
 
         Ok(UsageLog::from(result))
     }
+
+    async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError> {
+        let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users WHERE role = $1")
+            .bind(role)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count.0)
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -252,6 +304,7 @@ struct UserRow {
     team_id: uuid::Uuid,
     email: String,
     role: String,
+    password_hash: Option<String>,
     created_at: DateTime<Utc>,
 }
 
@@ -262,6 +315,7 @@ impl From<UserRow> for User {
             team_id: row.team_id.to_string(),
             email: row.email,
             role: row.role,
+            password_hash: row.password_hash,
             created_at: row.created_at,
         }
     }
