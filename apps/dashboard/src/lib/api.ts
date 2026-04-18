@@ -1,6 +1,6 @@
 import type { User, Team, ApiKey, UsageData } from './types';
 
-const API_BASE = '/api/v1';
+const API_BASE = '/v1';
 
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
