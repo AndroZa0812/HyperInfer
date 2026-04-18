@@ -32,6 +32,12 @@ export const api = {
 
     logout: () => fetchApi<void>('/auth/logout', { method: 'POST' }),
 
+    changePassword: (currentPassword: string, newPassword: string) =>
+        fetchApi<void>('/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+        }),
+
     me: () => fetchApi<User>('/auth/me'),
 
     getTeams: () => fetchApi<Team[]>('/teams'),

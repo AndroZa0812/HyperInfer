@@ -275,6 +275,21 @@ impl Database for SqlxDb {
             .await?;
         Ok(count.0)
     }
+
+    async fn update_password_hash(
+        &self,
+        user_id: &str,
+        password_hash: &str,
+    ) -> Result<(), DbError> {
+        let user_uuid = uuid::Uuid::parse_str(user_id)
+            .map_err(|_| DbError::InvalidUuid(user_id.to_string()))?;
+        sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
+            .bind(password_hash)
+            .bind(user_uuid)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]

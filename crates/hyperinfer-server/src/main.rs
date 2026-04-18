@@ -14,7 +14,7 @@ use hyperinfer_server::{
     auth::{
         auth_middleware, create_auth_token, AuthClaims, LoginRequest, LoginResponse, MeResponse,
     },
-    db::verify_password,
+    db::{hash_password, verify_password},
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
     RedisConfigStore, SqlxDb,
 };
@@ -366,6 +366,64 @@ async fn logout_handler() -> impl IntoResponse {
     )
 }
 
+#[derive(Deserialize)]
+struct ChangePasswordRequest {
+    current_password: String,
+    new_password: String,
+}
+
+async fn change_password_handler(
+    State(state): State<ProdState>,
+    Extension(claims): Extension<AuthClaims>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> impl IntoResponse {
+    if req.new_password.len() < 8 {
+        return (
+            StatusCode::BAD_REQUEST,
+            "New password must be at least 8 characters",
+        )
+            .into_response();
+    }
+
+    let user = match state.db.get_user_by_email(&claims.email).await {
+        Ok(Some(user)) => user,
+        Ok(None) => {
+            return (StatusCode::UNAUTHORIZED, "User not found").into_response();
+        }
+        Err(e) => {
+            tracing::error!(error = ?e, "Database error during password change");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
+        }
+    };
+
+    let current_hash = match &user.password_hash {
+        Some(hash) => hash,
+        None => {
+            return (StatusCode::UNAUTHORIZED, "No password set").into_response();
+        }
+    };
+
+    if !verify_password(&req.current_password, current_hash) {
+        return (StatusCode::UNAUTHORIZED, "Current password is incorrect").into_response();
+    }
+
+    let new_hash = match hash_password(&req.new_password) {
+        Ok(hash) => hash,
+        Err(e) => {
+            tracing::error!(error = ?e, "Failed to hash new password");
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
+        }
+    };
+
+    match state.db.update_password_hash(&user.id, &new_hash).await {
+        Ok(_) => (StatusCode::NO_CONTENT, "").into_response(),
+        Err(e) => {
+            tracing::error!(error = ?e, "Failed to update password");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
+        }
+    }
+}
+
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
 fn hash_key(key: &str) -> String {
@@ -603,6 +661,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let auth_protected_routes = Router::new()
         .route("/v1/auth/me", get(me_handler))
         .route("/v1/auth/logout", post(logout_handler))
+        .route("/v1/auth/change-password", post(change_password_handler))
         .layer(middleware::from_fn_with_state(
             jwt_secret_arc.clone(),
             auth_middleware,
@@ -659,6 +718,7 @@ mod tests {
             async fn create_quota(&self, team_id: &str, rpm_limit: i32, tpm_limit: i32) -> Result<Quota, DbError>;
             async fn record_usage(&self, team_id: &str, api_key_id: &str, model: &str, input_tokens: i32, output_tokens: i32, response_time_ms: i64) -> Result<UsageLog, DbError>;
             async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
+            async fn update_password_hash(&self, user_id: &str, password_hash: &str) -> Result<(), DbError>;
         }
     }
 

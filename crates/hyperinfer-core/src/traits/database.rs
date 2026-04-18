@@ -17,6 +17,8 @@ pub trait Database: Clone + Send + Sync + 'static {
         role: &str,
         password_hash: Option<String>,
     ) -> Result<User, DbError>;
+    async fn update_password_hash(&self, user_id: &str, password_hash: &str)
+        -> Result<(), DbError>;
     async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
     async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
