@@ -52,68 +52,73 @@
 <div class="space-y-6 max-w-2xl">
     <h1 class="text-2xl font-bold">Settings</h1>
 
-    <div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
-        <h2 class="text-lg font-medium">Profile</h2>
-        <div>
-            <label class="block text-sm font-medium mb-1">Email</label>
-            <input
-                type="email"
-                value={$auth.user?.email || ''}
-                disabled
-                class="w-full px-4 py-2 border rounded-lg opacity-60"
-            />
-        </div>
-        <div>
-            <label class="block text-sm font-medium mb-1">Role</label>
-            <input
-                type="text"
-                value={$auth.user?.role || ''}
-                disabled
-                class="w-full px-4 py-2 border rounded-lg opacity-60"
-            />
-        </div>
-    </div>
+<div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
+	<h2 class="text-lg font-medium">Profile</h2>
+	<div>
+		<label for="email" class="block text-sm font-medium mb-1">Email</label>
+		<input
+			id="email"
+			type="email"
+			value={$auth.user?.email || ''}
+			disabled
+			class="w-full px-4 py-2 border rounded-lg opacity-60"
+		/>
+	</div>
+	<div>
+		<label for="role" class="block text-sm font-medium mb-1">Role</label>
+		<input
+			id="role"
+			type="text"
+			value={$auth.user?.role || ''}
+			disabled
+			class="w-full px-4 py-2 border rounded-lg opacity-60"
+		/>
+	</div>
+</div>
 
-    <div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
-        <h2 class="text-lg font-medium">Appearance</h2>
-        <div class="flex items-center gap-4">
-            <span>Theme:</span>
-            <button
-                onclick={() => theme.toggle()}
-                class="px-4 py-2 border rounded-lg"
-            >
-                {$theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}
-            </button>
-        </div>
-    </div>
+<div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
+	<h2 class="text-lg font-medium">Appearance</h2>
+	<div class="flex items-center gap-4">
+		<span>Theme:</span>
+		<button
+			onclick={() => theme.toggle()}
+			class="px-4 py-2 border rounded-lg"
+		>
+			{$theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}
+		</button>
+	</div>
+</div>
 
-    <div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
-        <h2 class="text-lg font-medium">Change Password</h2>
-        <form onsubmit={handleChangePassword} class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium mb-1">Current Password</label>
-                <input
-                    type="password"
-                    bind:value={currentPassword}
-                    class="w-full px-4 py-2 border rounded-lg"
-                />
-            </div>
-            <div>
-                <label class="block text-sm font-medium mb-1">New Password</label>
-                <input
-                    type="password"
-                    bind:value={newPassword}
-                    class="w-full px-4 py-2 border rounded-lg"
-                />
-            </div>
-            <div>
-                <label class="block text-sm font-medium mb-1">Confirm Password</label>
-                <input
-                    type="password"
-                    bind:value={confirmPassword}
-                    class="w-full px-4 py-2 border rounded-lg"
-                />
-            </div>
+<div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
+	<h2 class="text-lg font-medium">Change Password</h2>
+	<form onsubmit={handleChangePassword} class="space-y-4">
+		<div>
+			<label for="current-password" class="block text-sm font-medium mb-1">Current Password</label>
+			<input
+				id="current-password"
+				type="password"
+				bind:value={currentPassword}
+				class="w-full px-4 py-2 border rounded-lg"
+			/>
+		</div>
+		<div>
+			<label for="new-password" class="block text-sm font-medium mb-1">New Password</label>
+			<input
+				id="new-password"
+				type="password"
+				bind:value={newPassword}
+				class="w-full px-4 py-2 border rounded-lg"
+			/>
+		</div>
+		<div>
+			<label for="confirm-password" class="block text-sm font-medium mb-1">Confirm Password</label>
+			<input
+				id="confirm-password"
+				type="password"
+				bind:value={confirmPassword}
+				class="w-full px-4 py-2 border rounded-lg"
+			/>
+		</div>
             {#if error}
                 <p class="text-red-500 text-sm">{error}</p>
             {/if}

@@ -9,15 +9,19 @@
 
     let keyId = $derived($page.params.id);
 
-    onMount(async () => {
-        try {
-            keyData = await api.getKey(keyId);
-        } catch (e) {
-            console.error('Failed to load key metrics', e);
-        } finally {
-            loading = false;
-        }
-    });
+onMount(async () => {
+	if (!keyId) {
+		loading = false;
+		return;
+	}
+	try {
+		keyData = await api.getKey(keyId);
+	} catch (e) {
+		console.error('Failed to load key metrics', e);
+	} finally {
+		loading = false;
+	}
+});
 </script>
 
 {#if loading}

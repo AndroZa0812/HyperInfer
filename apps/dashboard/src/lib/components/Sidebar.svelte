@@ -1,9 +1,16 @@
 <script lang="ts">
-    import { page } from '$app/stores';
-    import { auth } from '$lib/stores/auth';
-    import { theme } from '$lib/stores/theme';
+	import { page } from '$app/stores';
+	import { auth } from '$lib/stores/auth';
+	import { theme } from '$lib/stores/theme';
+	import type { Snippet } from 'svelte';
 
-    const navItems = [
+	interface Props {
+		children: Snippet;
+	}
+
+	let { children }: Props = $props();
+
+	const navItems = [
         { path: '/dashboard/teams', label: 'Teams', icon: 'users', admin: true },
         { path: '/dashboard/keys', label: 'Keys', icon: 'key' },
         { path: '/dashboard/conversations', label: 'Conversations', icon: 'chat' },

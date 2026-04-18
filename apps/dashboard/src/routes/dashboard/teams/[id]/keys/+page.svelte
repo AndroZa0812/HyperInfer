@@ -23,25 +23,27 @@
         }
     });
 
-    async function createKey() {
-        try {
-            const key = await api.createKey(teamId, newKeyName);
-            keys = [...keys, key];
-            showCreate = false;
-            newKeyName = '';
-        } catch (e) {
-            console.error('Failed to create key', e);
-        }
-    }
+async function createKey() {
+	if (!teamId) return;
+	try {
+		const key = await api.createKey(teamId, newKeyName);
+		keys = [...keys, key];
+		showCreate = false;
+		newKeyName = '';
+	} catch (e) {
+		console.error('Failed to create key', e);
+	}
+}
 
-    async function revokeKey(keyId: string) {
-        try {
-            await api.revokeKey(teamId, keyId);
-            keys = keys.filter(k => k.id !== keyId);
-        } catch (e) {
-            console.error('Failed to revoke key', e);
-        }
-    }
+async function revokeKey(keyId: string) {
+	if (!teamId) return;
+	try {
+		await api.revokeKey(teamId, keyId);
+		keys = keys.filter(k => k.id !== keyId);
+	} catch (e) {
+		console.error('Failed to revoke key', e);
+	}
+}
 </script>
 
 <div class="space-y-6">
