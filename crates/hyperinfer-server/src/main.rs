@@ -649,7 +649,7 @@ mod tests {
             async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError>;
             async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
             async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbError>;
-            async fn create_user(&self, team_id: &str, email: &str, role: &str, password_hash: Option<&str>) -> Result<User, DbError>;
+            async fn create_user(&self, team_id: &str, email: &str, role: &str, password_hash: Option<String>) -> Result<User, DbError>;
             async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
             async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
             async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<String>) -> Result<ApiKey, DbError>;

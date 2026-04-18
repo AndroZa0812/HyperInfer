@@ -15,7 +15,7 @@ pub trait Database: Clone + Send + Sync + 'static {
         team_id: &str,
         email: &str,
         role: &str,
-        password_hash: Option<&str>,
+        password_hash: Option<String>,
     ) -> Result<User, DbError>;
     async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
@@ -68,6 +68,7 @@ pub struct User {
     pub team_id: String,
     pub email: String,
     pub role: String,
+    #[serde(skip_serializing)]
     pub password_hash: Option<String>,
     pub created_at: DateTime<Utc>,
 }

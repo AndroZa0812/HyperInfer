@@ -92,7 +92,7 @@
             />
             <div class="flex gap-2 justify-end">
                 <button class="px-4 py-2" on:click={() => showCreate = false}>Cancel</button>
-                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" on:click={createKey}>
+                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" on:click={createTeam}>
                     Create
                 </button>
             </div>

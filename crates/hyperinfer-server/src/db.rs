@@ -108,7 +108,7 @@ impl Database for SqlxDb {
         team_id: &str,
         email: &str,
         role: &str,
-        password_hash: Option<&str>,
+        password_hash: Option<String>,
     ) -> Result<User, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id)
             .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;

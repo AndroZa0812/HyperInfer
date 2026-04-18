@@ -75,7 +75,7 @@ async fn test_database_create_and_get_user() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
     assert_eq!(user.email, "test@example.com");
@@ -100,7 +100,7 @@ async fn test_database_create_and_get_api_key() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -262,12 +262,12 @@ async fn test_duplicate_user_email() {
         .await
         .expect("Failed to create team");
 
-    db.create_user(&team.id, "unique@example.com", "admin")
+    db.create_user(&team.id, "unique@example.com", "admin", None)
         .await
         .expect("Failed to create first user");
 
     let result = db
-        .create_user(&team.id, "unique@example.com", "member")
+        .create_user(&team.id, "unique@example.com", "member", None)
         .await;
     assert!(result.is_err(), "Should fail on duplicate user email");
 }
@@ -282,7 +282,7 @@ async fn test_duplicate_api_key_hash() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -352,6 +352,7 @@ async fn test_create_user_invalid_team_fk() {
             "00000000-0000-0000-0000-000000000000",
             "test@example.com",
             "admin",
+            None,
         )
         .await;
     assert!(result.is_err(), "Should fail on invalid team foreign key");
@@ -387,7 +388,7 @@ async fn test_create_api_key_invalid_team_fk() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -439,7 +440,7 @@ async fn test_record_usage_success() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -471,7 +472,7 @@ async fn test_record_usage_zero_tokens() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -500,7 +501,7 @@ async fn test_record_usage_large_values() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -529,7 +530,7 @@ async fn test_record_usage_multiple_logs() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -566,7 +567,7 @@ async fn test_record_usage_invalid_team_id() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -636,7 +637,7 @@ async fn test_record_usage_different_models() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -666,7 +667,7 @@ async fn test_get_api_key_by_hash() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -696,7 +697,7 @@ async fn test_get_api_key_by_hash_inactive() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -781,7 +782,7 @@ async fn test_create_user_with_password_hash() {
 
     let password_hash = hash_password("secure_password_123").expect("Failed to hash password");
     let user = db
-        .create_user(&team.id, "user@example.com", "admin", Some(&password_hash))
+        .create_user(&team.id, "user@example.com", "admin", Some(password_hash))
         .await
         .expect("Failed to create user with password");
 
