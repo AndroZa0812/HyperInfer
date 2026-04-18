@@ -4,11 +4,16 @@
     import { auth } from '$lib/stores/auth';
 
     onMount(() => {
-        if ($auth.user?.role === 'admin') {
-            goto('/dashboard/teams');
-        } else {
-            goto('/dashboard/keys');
-        }
+        const unsubscribe = auth.subscribe(({ user, loading }) => {
+            if (!loading) {
+                unsubscribe();
+                if (user?.role === 'admin') {
+                    goto('/dashboard/teams');
+                } else {
+                    goto('/dashboard/keys');
+                }
+            }
+        });
     });
 </script>
 
