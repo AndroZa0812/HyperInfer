@@ -5,11 +5,15 @@
     import UsageChart from '$lib/components/UsageChart.svelte';
     import { onMount } from 'svelte';
 
-    let data: UsageData[] = [];
-    let loading = true;
-    let period = '30d';
+    let data = $state<UsageData[]>([]);
+    let loading = $state(true);
+    let period = $state('30d');
 
-    $: teamId = $page.params.id;
+    let teamId = $derived($page.params.id);
+
+    let totalTokens = $derived(data.reduce((sum, d) => sum + d.tokens, 0));
+    let totalCost = $derived(data.reduce((sum, d) => sum + d.cost, 0));
+    let avgLatency = $derived(data.length ? data.reduce((sum, d) => sum + d.latency_ms, 0) / data.length : 0);
 
     async function loadData() {
         if (!teamId) return;
@@ -25,11 +29,9 @@
 
     onMount(loadData);
 
-    $: if (period) loadData();
-
-    $: totalTokens = data.reduce((sum, d) => sum + d.tokens, 0);
-    $: totalCost = data.reduce((sum, d) => sum + d.cost, 0);
-    $: avgLatency = data.length ? data.reduce((sum, d) => sum + d.latency_ms, 0) / data.length : 0;
+    $effect(() => {
+        if (period) loadData();
+    });
 </script>
 
 <div class="space-y-6">

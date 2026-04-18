@@ -4,10 +4,10 @@
     import { onMount } from 'svelte';
     import VirtualList from '$lib/components/VirtualList.svelte';
 
-    let conversation: any = null;
-    let loading = true;
+    let conversation = $state<any>(null);
+    let loading = $state(true);
 
-    $: conversationId = $page.params.id;
+    let conversationId = $derived($page.params.id);
 
     onMount(async () => {
         if (conversationId) {

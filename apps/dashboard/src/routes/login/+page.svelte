@@ -3,12 +3,13 @@
     import { auth } from '$lib/stores/auth';
     import { theme } from '$lib/stores/theme';
 
-    let email = '';
-    let password = '';
-    let error = '';
-    let loading = false;
+    let email = $state('');
+    let password = $state('');
+    let error = $state('');
+    let loading = $state(false);
 
-    async function handleSubmit() {
+    async function handleSubmit(e: Event) {
+        e.preventDefault();
         loading = true;
         error = '';
 
@@ -29,7 +30,7 @@
             <h1 class="text-2xl font-bold text-[var(--text-primary)]">HyperInfer</h1>
             <button
                 class="p-2 rounded-lg hover:bg-[var(--bg-secondary)]"
-                on:click={() => theme.toggle()}
+                onclick={() => theme.toggle()}
             >
                 {#if $theme === 'light'}
                     <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -43,7 +44,7 @@
             </button>
         </div>
 
-        <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+        <form onsubmit={handleSubmit} class="space-y-4">
             <div>
                 <label class="block text-sm font-medium mb-1" for="email">Email</label>
                 <input

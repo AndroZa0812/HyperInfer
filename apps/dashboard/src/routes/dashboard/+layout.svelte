@@ -2,14 +2,23 @@
     import { goto } from '$app/navigation';
     import { auth } from '$lib/stores/auth';
     import Sidebar from '$lib/components/Sidebar.svelte';
+    import type { Snippet } from 'svelte';
 
-    $: if (!$auth.loading && !$auth.user) {
-        goto('/login');
+    interface Props {
+        children: Snippet;
     }
+
+    let { children } = $props<Props>();
+
+    $effect(() => {
+        if (!$auth.loading && !$auth.user) {
+            goto('/login');
+        }
+    });
 </script>
 
 {#if $auth.user}
     <Sidebar>
-        <slot />
+        {@render children()}
     </Sidebar>
 {/if}

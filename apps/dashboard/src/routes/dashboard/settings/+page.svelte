@@ -3,14 +3,15 @@
     import { theme } from '$lib/stores/theme';
     import { api } from '$lib/api';
 
-    let currentPassword = '';
-    let newPassword = '';
-    let confirmPassword = '';
-    let saving = false;
-    let success = '';
-    let error = '';
+    let currentPassword = $state('');
+    let newPassword = $state('');
+    let confirmPassword = $state('');
+    let saving = $state(false);
+    let success = $state('');
+    let error = $state('');
 
-    async function handleChangePassword() {
+    async function handleChangePassword(e: Event) {
+        e.preventDefault();
         error = '';
         success = '';
 
@@ -78,7 +79,7 @@
         <div class="flex items-center gap-4">
             <span>Theme:</span>
             <button
-                on:click={() => theme.toggle()}
+                onclick={() => theme.toggle()}
                 class="px-4 py-2 border rounded-lg"
             >
                 {$theme === 'light' ? 'Switch to Dark' : 'Switch to Light'}
@@ -88,7 +89,7 @@
 
     <div class="bg-[var(--bg-primary)] rounded-xl p-6 space-y-6">
         <h2 class="text-lg font-medium">Change Password</h2>
-        <form on:submit|preventDefault={handleChangePassword} class="space-y-4">
+        <form onsubmit={handleChangePassword} class="space-y-4">
             <div>
                 <label class="block text-sm font-medium mb-1">Current Password</label>
                 <input

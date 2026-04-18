@@ -4,10 +4,10 @@
     import type { ApiKey } from '$lib/types';
     import { onMount } from 'svelte';
 
-    let keyData: ApiKey | null = null;
-    let loading = true;
+    let keyData = $state<ApiKey | null>(null);
+    let loading = $state(true);
 
-    $: keyId = $page.params.id;
+    let keyId = $derived($page.params.id);
 
     onMount(async () => {
         try {

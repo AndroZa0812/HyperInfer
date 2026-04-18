@@ -3,11 +3,11 @@
     import type { Team } from '$lib/types';
     import { onMount } from 'svelte';
 
-    let teams: Team[] = [];
-    let loading = true;
-    let showCreate = false;
-    let newName = '';
-    let newBudget = 10000;
+    let teams = $state<Team[]>([]);
+    let loading = $state(true);
+    let showCreate = $state(false);
+    let newName = $state('');
+    let newBudget = $state(10000);
 
     onMount(async () => {
         try {
@@ -37,7 +37,7 @@
         <h1 class="text-2xl font-bold">Teams</h1>
         <button
             class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg"
-            on:click={() => showCreate = true}
+            onclick={() => showCreate = true}
         >
             Create Team
         </button>
@@ -91,8 +91,8 @@
                 class="w-full px-4 py-2 border rounded-lg mb-4"
             />
             <div class="flex gap-2 justify-end">
-                <button class="px-4 py-2" on:click={() => showCreate = false}>Cancel</button>
-                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" on:click={createTeam}>
+                <button class="px-4 py-2" onclick={() => showCreate = false}>Cancel</button>
+                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" onclick={createTeam}>
                     Create
                 </button>
             </div>

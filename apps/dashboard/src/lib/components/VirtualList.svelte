@@ -1,11 +1,17 @@
-<script>
+<script lang="ts">
     import VirtualList from 'svelte-virtual-list';
+    import type { Snippet } from 'svelte';
 
-    export let items = [];
+    interface Props {
+        items: any[];
+        children: Snippet<[{ item: any }];
+    }
+
+    let { items = [], children }: Props = $props();
 </script>
 
 <div class="h-full overflow-auto">
     <VirtualList {items} let:item>
-        <slot {item} />
+        {@render children({ item })}
     </VirtualList>
 </div>

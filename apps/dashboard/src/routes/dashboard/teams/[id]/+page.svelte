@@ -3,13 +3,13 @@
     import { api } from '$lib/api';
     import type { Team } from '$lib/types';
 
-    let team: Team | null = null;
-    let loading = true;
-    let error: string | null = null;
+    let team = $state<Team | null>(null);
+    let loading = $state(true);
+    let error = $state<string | null>(null);
 
-    $: teamId = $page.params.id;
+    let teamId = $derived($page.params.id);
 
-    $: {
+    $effect(() => {
         if (teamId) {
             loading = true;
             error = null;
@@ -24,7 +24,7 @@
                     loading = false;
                 });
         }
-    }
+    });
 </script>
 
 {#if loading}

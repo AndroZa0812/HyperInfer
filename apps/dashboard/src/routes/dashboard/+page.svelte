@@ -2,16 +2,18 @@
     import { goto } from '$app/navigation';
     import { auth } from '$lib/stores/auth';
 
-    let redirected = false;
+    let redirected = $state(false);
 
-    $: if (!$auth.loading && $auth.user && !redirected) {
-        redirected = true;
-        if ($auth.user.role === 'admin') {
-            goto('/dashboard/teams');
-        } else {
-            goto('/dashboard/keys');
+    $effect(() => {
+        if (!$auth.loading && $auth.user && !redirected) {
+            redirected = true;
+            if ($auth.user.role === 'admin') {
+                goto('/dashboard/teams');
+            } else {
+                goto('/dashboard/keys');
+            }
         }
-    }
+    });
 </script>
 
 <p>Redirecting...</p>

@@ -10,9 +10,9 @@
         { path: '/dashboard/settings', label: 'Settings', icon: 'settings' },
     ];
 
-    $: filteredItems = navItems.filter(item =>
+    let filteredItems = $derived(navItems.filter(item =>
         $auth.user?.role === 'admin' || !item.admin
-    );
+    ));
 
     function isActive(path: string): boolean {
         const currentPath = $page.url.pathname;
@@ -62,13 +62,13 @@
             <div class="flex gap-2">
                 <button
                     class="text-sm text-[var(--accent)]"
-                    on:click={() => theme.toggle()}
+                    onclick={() => theme.toggle()}
                 >
                     {$theme === 'light' ? 'Dark' : 'Light'}
                 </button>
                 <button
                     class="text-sm text-red-500"
-                    on:click={async () => { try { await auth.logout(); } finally { window.location.href = '/login'; } }}
+                    onclick={async () => { try { await auth.logout(); } finally { window.location.href = '/login'; } }}
                 >
                     Logout
                 </button>
@@ -77,6 +77,6 @@
     </aside>
 
     <main class="flex-1 overflow-auto p-6">
-        <slot />
+        {@render children()}
     </main>
 </div>

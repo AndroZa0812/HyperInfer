@@ -4,12 +4,12 @@
     import type { ApiKey } from '$lib/types';
     import { onMount } from 'svelte';
 
-    let keys: ApiKey[] = [];
-    let loading = true;
-    let showCreate = false;
-    let newKeyName = '';
+    let keys = $state<ApiKey[]>([]);
+    let loading = $state(true);
+    let showCreate = $state(false);
+    let newKeyName = $state('');
 
-    $: teamId = $page.params.id;
+    let teamId = $derived($page.params.id);
 
     onMount(async () => {
         if (teamId) {
@@ -49,7 +49,7 @@
         <h1 class="text-2xl font-bold">API Keys</h1>
         <button
             class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg"
-            on:click={() => showCreate = true}
+            onclick={() => showCreate = true}
         >
             Create Key
         </button>
@@ -85,7 +85,7 @@
                             <td class="px-4 py-3">
                                 <button
                                     class="text-red-500 text-sm"
-                                    on:click={() => revokeKey(key.id)}
+                                    onclick={() => revokeKey(key.id)}
                                 >
                                     Revoke
                                 </button>
@@ -108,8 +108,8 @@
                 class="w-full px-4 py-2 border rounded-lg mb-4"
             />
             <div class="flex gap-2 justify-end">
-                <button class="px-4 py-2" on:click={() => showCreate = false}>Cancel</button>
-                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" on:click={createKey}>
+                <button class="px-4 py-2" onclick={() => showCreate = false}>Cancel</button>
+                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" onclick={createKey}>
                     Create
                 </button>
             </div>

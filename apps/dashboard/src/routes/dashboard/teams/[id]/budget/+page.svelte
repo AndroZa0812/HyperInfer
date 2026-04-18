@@ -3,13 +3,16 @@
     import { api } from '$lib/api';
     import type { Team, UsageData } from '$lib/types';
 
-    let team: Team | null = null;
-    let usageData: UsageData[] = [];
-    let loading = true;
+    let team = $state<Team | null>(null);
+    let usageData = $state<UsageData[]>([]);
+    let loading = $state(true);
 
-    $: teamId = $page.params.id;
+    let teamId = $derived($page.params.id);
 
-    $: {
+    let usedCents = $derived(usageData.reduce((sum, d) => sum + d.cost, 0));
+    let usedPercent = $derived(team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0);
+
+    $effect(() => {
         if (teamId) {
             loading = true;
             Promise.all([api.getTeam(teamId), api.getUsage(teamId, '30d').catch(() => [])])
@@ -23,10 +26,7 @@
                     loading = false;
                 });
         }
-    }
-
-    $: usedCents = usageData.reduce((sum, d) => sum + d.cost, 0);
-    $: usedPercent = team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0;
+    });
 </script>
 
 {#if loading}
