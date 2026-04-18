@@ -14,9 +14,8 @@
         $auth.user?.role === 'admin' || !item.admin
     );
 
-    $: currentPath = $page.url.pathname;
-
     function isActive(path: string): boolean {
+        const currentPath = $page.url.pathname;
         if (path === '/dashboard/teams') {
             return currentPath === path || currentPath.startsWith('/dashboard/teams/');
         }
