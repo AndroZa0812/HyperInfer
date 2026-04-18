@@ -51,9 +51,23 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD}
+      RUST_LOG: ${LOG_LEVEL:-info}
     ports:
       - "${SERVER_PORT:-3000}:3000"
     restart: unless-stopped
+
+  pgweb:
+    image: sosedoff/pgweb
+    container_name: hyperinfer-pgweb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-hyperinfer}}
+    ports:
+      - "${PGWEB_PORT:-8081}:8081"
+    profiles:
+      - debug
 
 volumes:
   postgres_data:
