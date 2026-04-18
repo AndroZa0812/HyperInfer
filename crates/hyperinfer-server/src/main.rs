@@ -540,7 +540,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             return Err("MCP_JWT_SECRET must be set to a non-empty value.".into());
         }
     };
-    let mcp_state = McpState::new(jwt_secret);
+    let mcp_state = McpState::new(jwt_secret.clone());
 
     let cors = {
         let allowed_origins = std::env::var("ALLOWED_ORIGINS")
