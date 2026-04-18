@@ -1,25 +1,32 @@
 <script lang="ts">
     import { page } from '$app/stores';
     import { api } from '$lib/api';
-    import type { Team } from '$lib/types';
-    import { onMount } from 'svelte';
+    import type { Team, UsageData } from '$lib/types';
 
     let team: Team | null = null;
+    let usageData: UsageData[] = [];
     let loading = true;
 
     $: teamId = $page.params.id;
 
-    onMount(async () => {
+    $: {
         if (teamId) {
-            try {
-                team = await api.getTeam(teamId);
-            } catch (e) {
-                console.error('Failed to load team', e);
-            } finally {
-                loading = false;
-            }
+            loading = true;
+            Promise.all([api.getTeam(teamId), api.getUsage(teamId, '30d').catch(() => [])])
+                .then(([t, u]) => {
+                    team = t;
+                    usageData = u;
+                    loading = false;
+                })
+                .catch((e) => {
+                    console.error('Failed to load team budget', e);
+                    loading = false;
+                });
         }
-    });
+    }
+
+    $: usedCents = usageData.reduce((sum, d) => sum + d.cost, 0);
+    $: usedPercent = team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0;
 </script>
 
 {#if loading}
@@ -31,9 +38,9 @@
         <div class="bg-[var(--bg-primary)] p-4 rounded-xl">
             <h2 class="text-lg font-semibold mb-4">Budget Progress</h2>
             <div class="h-4 bg-gray-200 rounded-full overflow-hidden">
-                <div class="h-full bg-[var(--accent)]" style="width: 34%"></div>
+                <div class="h-full bg-[var(--accent)]" style="width: {usedPercent * 100}%"></div>
             </div>
-            <p class="text-sm text-gray-500 mt-2">${(team.budget_cents / 100 * 0.34).toFixed(2)} of ${(team.budget_cents / 100).toFixed(2)} used (34%)</p>
+            <p class="text-sm text-gray-500 mt-2">${(usedCents / 100).toFixed(2)} of ${(team.budget_cents / 100).toFixed(2)} used ({(usedPercent * 100).toFixed(1)}%)</p>
         </div>
     </div>
 {:else}
