@@ -3,8 +3,6 @@
     import { auth } from '$lib/stores/auth';
     import { theme } from '$lib/stores/theme';
 
-    $: currentPath = $page.url.pathname;
-
     const navItems = [
         { path: '/dashboard/teams', label: 'Teams', icon: 'users', admin: true },
         { path: '/dashboard/keys', label: 'Keys', icon: 'key' },
@@ -16,8 +14,13 @@
         $auth.user?.role === 'admin' || !item.admin
     );
 
-    function isActive(path: string) {
-        return currentPath === path || (path !== '/dashboard' && currentPath.startsWith(path));
+    $: currentPath = $page.url.pathname;
+
+    function isActive(path: string): boolean {
+        if (path === '/dashboard/teams') {
+            return currentPath === path || currentPath.startsWith('/dashboard/teams/');
+        }
+        return currentPath === path || currentPath.startsWith(path + '/');
     }
 </script>
 
