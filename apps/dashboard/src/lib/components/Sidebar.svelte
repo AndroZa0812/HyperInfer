@@ -66,7 +66,7 @@
                 </button>
                 <button
                     class="text-sm text-red-500"
-                    on:click={() => { auth.logout(); window.location.href = '/login'; }}
+                    on:click={async () => { try { await auth.logout(); } finally { window.location.href = '/login'; } }}
                 >
                     Logout
                 </button>
