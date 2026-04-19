@@ -6,8 +6,7 @@
     let teams = $state<Team[]>([]);
     let loading = $state(true);
     let showCreate = $state(false);
-    let newName = $state('');
-    let newBudget = $state(10000);
+    
 
     onMount(async () => {
         try {
@@ -80,13 +79,15 @@
         <div class="bg-[var(--bg-primary)] p-6 rounded-xl w-96">
             <h2 class="text-lg font-semibold mb-4">Create Team</h2>
             <input
-                bind:value={newName}
+                value={newName}
+                oninput={(e) => newName = e.currentTarget.value}
                 placeholder="Team name"
                 class="w-full px-4 py-2 border rounded-lg mb-4"
             />
             <input
                 type="number"
-                bind:value={newBudget}
+                value={newBudget}
+                oninput={(e) => newBudget = Number(e.currentTarget.value)}
                 placeholder="Budget (cents)"
                 class="w-full px-4 py-2 border rounded-lg mb-4"
             />
