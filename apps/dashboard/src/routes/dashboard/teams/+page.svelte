@@ -6,7 +6,9 @@
     let teams = $state<Team[]>([]);
     let loading = $state(true);
     let showCreate = $state(false);
-    
+    let newName = $state('');
+    let newBudget = $state(10000);
+    let createError = $state('');
 
     onMount(async () => {
         try {
@@ -18,15 +20,32 @@
         }
     });
 
+    function validateBudget(value: number): number {
+        if (!Number.isFinite(value) || value < 0) return 0;
+        return Math.round(value);
+    }
+
     async function createTeam() {
+        const name = newName.trim();
+        if (!name) {
+            createError = 'Team name is required';
+            return;
+        }
+        const budget = validateBudget(newBudget);
+        if (budget < 0) {
+            createError = 'Budget must be a non-negative number';
+            return;
+        }
+        createError = '';
         try {
-            const team = await api.createTeam(newName, newBudget);
+            const team = await api.createTeam(name, budget);
             teams = [...teams, team];
             showCreate = false;
             newName = '';
             newBudget = 10000;
         } catch (e) {
             console.error('Failed to create team', e);
+            createError = 'Failed to create team';
         }
     }
 </script>
@@ -76,27 +95,40 @@
 
 {#if showCreate}
     <div class="fixed inset-0 bg-black/50 flex items-center justify-center">
-        <div class="bg-[var(--bg-primary)] p-6 rounded-xl w-96">
+        <form
+            class="bg-[var(--bg-primary)] p-6 rounded-xl w-96"
+            onsubmit={(e) => { e.preventDefault(); createTeam(); }}
+        >
             <h2 class="text-lg font-semibold mb-4">Create Team</h2>
-            <input
-                value={newName}
-                oninput={(e) => newName = e.currentTarget.value}
-                placeholder="Team name"
-                class="w-full px-4 py-2 border rounded-lg mb-4"
-            />
-            <input
-                type="number"
-                value={newBudget}
-                oninput={(e) => newBudget = Number(e.currentTarget.value)}
-                placeholder="Budget (cents)"
-                class="w-full px-4 py-2 border rounded-lg mb-4"
-            />
+            <label class="block mb-4">
+                <span class="text-sm font-medium mb-1 block">Team name</span>
+                <input
+                    bind:value={newName}
+                    placeholder="Team name"
+                    autocomplete="off"
+                    class="w-full px-4 py-2 border rounded-lg"
+                />
+            </label>
+            <label class="block mb-4">
+                <span class="text-sm font-medium mb-1 block">Budget (cents)</span>
+                <input
+                    type="number"
+                    bind:value={newBudget}
+                    placeholder="Budget in cents"
+                    min="0"
+                    autocomplete="off"
+                    class="w-full px-4 py-2 border rounded-lg"
+                />
+            </label>
+            {#if createError}
+                <p role="alert" class="text-red-500 text-sm mb-4">{createError}</p>
+            {/if}
             <div class="flex gap-2 justify-end">
-                <button class="px-4 py-2" onclick={() => showCreate = false}>Cancel</button>
-                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" onclick={createTeam}>
+                <button type="button" class="px-4 py-2" onclick={() => { showCreate = false; createError = ''; }}>Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg">
                     Create
                 </button>
             </div>
-        </div>
+        </form>
     </div>
 {/if}

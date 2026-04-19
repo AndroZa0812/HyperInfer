@@ -52,18 +52,28 @@ export const api = {
     }),
 
   getKey: (id: string) => fetchApi<ApiKey>(`/api_keys/${id}`),
-  getKeys: (teamId: string) => fetchApi<ApiKey[]>(`/teams/${teamId}/keys`),
-  createKey: (teamId: string, name: string) =>
-    fetchApi<ApiKey>(`/teams/${teamId}/keys`, {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    }),
-  revokeKey: (teamId: string, keyId: string) =>
-    fetchApi<void>(`/teams/${teamId}/keys/${keyId}`, { method: "DELETE" }),
+  revokeKey: (id: string) =>
+    fetchApi<ApiKey>(`/api_keys/${id}/revoke`, { method: "POST" }),
+  getKeys: async (teamId: string) => {
+    console.warn('getKeys not implemented - returning empty array');
+    return [];
+  },
+  createKey: async (teamId: string, name: string) => {
+    console.warn('createKey not implemented');
+    throw new Error('Not implemented');
+  },
 
-  getUsage: (teamId: string, period: string) =>
-    fetchApi<UsageData[]>(`/teams/${teamId}/usage?period=${period}`),
+  getUsage: async (teamId: string, period: string) => {
+    console.warn('getUsage not implemented - returning empty array');
+    return [];
+  },
 
-  getConversations: () => fetchApi<any[]>("/conversations"),
-  getConversation: (id: string) => fetchApi<any>(`/conversations/${id}`),
+  getConversations: async () => {
+    console.warn('getConversations not implemented - returning empty array');
+    return [];
+  },
+  getConversation: async (id: string) => {
+    console.warn('getConversation not implemented');
+    throw new Error('Not implemented');
+  },
 };

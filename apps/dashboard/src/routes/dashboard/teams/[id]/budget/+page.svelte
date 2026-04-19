@@ -13,19 +13,24 @@
     let usedPercent = $derived(team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0);
 
     $effect(() => {
-        if (teamId) {
-            loading = true;
-            Promise.all([api.getTeam(teamId), api.getUsage(teamId, '30d').catch(() => [])])
-                .then(([t, u]) => {
-                    team = t;
-                    usageData = u;
-                    loading = false;
-                })
-                .catch((e) => {
-                    console.error('Failed to load team budget', e);
-                    loading = false;
-                });
-        }
+        if (!teamId) return;
+        let cancelled = false;
+        loading = true;
+        Promise.all([api.getTeam(teamId), api.getUsage(teamId, '30d').catch(() => [])])
+            .then(([t, u]) => {
+                if (cancelled) return;
+                team = t;
+                usageData = u;
+                loading = false;
+            })
+            .catch((e) => {
+                if (cancelled) return;
+                console.error('Failed to load team budget', e);
+                team = null;
+                usageData = [];
+                loading = false;
+            });
+        return () => { cancelled = true; };
     });
 </script>
 

@@ -1,9 +1,8 @@
 <script lang="ts">
     import { page } from '$app/stores';
-    import { api } from '$lib/api';
+import { api } from '$lib/api';
     import type { UsageData } from '$lib/types';
     import UsageChart from '$lib/components/UsageChart.svelte';
-    import { onMount } from 'svelte';
 
     let data = $state<UsageData[]>([]);
     let loading = $state(true);
@@ -15,22 +14,28 @@
     let totalCost = $derived(data.reduce((sum, d) => sum + d.cost, 0));
     let avgLatency = $derived(data.length ? data.reduce((sum, d) => sum + d.latency_ms, 0) / data.length : 0);
 
+    let requestId = 0;
+
     async function loadData() {
         if (!teamId) return;
+        const currentRequestId = ++requestId;
         loading = true;
         try {
-            data = await api.getUsage(teamId, period);
+            const result = await api.getUsage(teamId, period);
+            if (currentRequestId === requestId) {
+                data = result;
+            }
         } catch (e) {
             console.error('Failed to load usage', e);
         } finally {
-            loading = false;
+            if (currentRequestId === requestId) {
+                loading = false;
+            }
         }
     }
 
-    onMount(loadData);
-
     $effect(() => {
-        if (period) loadData();
+        if (teamId && period) loadData();
     });
 </script>
 

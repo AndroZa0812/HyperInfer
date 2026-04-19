@@ -21,6 +21,11 @@ pub async fn spa_handler(uri: Uri) -> impl IntoResponse {
         return ([(header::CONTENT_TYPE, mime.as_ref())], content.data).into_response();
     }
 
+    let api_prefixes = ["/v1", "/mcp", "/health"];
+    if api_prefixes.iter().any(|prefix| path.starts_with(prefix)) {
+        return (axum::http::StatusCode::NOT_FOUND, "Not Found").into_response();
+    }
+
     if let Some(index) = Frontend::get("index.html") {
         return ([(header::CONTENT_TYPE, "text/html")], index.data).into_response();
     }

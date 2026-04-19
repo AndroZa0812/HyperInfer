@@ -57,17 +57,22 @@ pub struct MeResponse {
     pub team_id: String,
 }
 
+fn cookie_secure() -> bool {
+    std::env::var("AUTH_COOKIE_SECURE")
+        .map(|v| v != "false" && v != "0")
+        .unwrap_or(true)
+}
+
 /// Build a Set-Cookie header value for the auth token.
 pub fn auth_cookie(token: &str) -> String {
-    format!(
-        "auth_token={}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=86400",
-        token
-    )
+    let secure_flag = if cookie_secure() { " Secure;" } else { "" };
+    format!("auth_token={token};{secure_flag} HttpOnly; SameSite=Strict; Path=/; Max-Age=86400")
 }
 
 /// Build a Set-Cookie header value that clears the auth cookie.
 pub fn clear_auth_cookie() -> String {
-    "auth_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0".to_string()
+    let secure_flag = if cookie_secure() { " Secure;" } else { "" };
+    format!("auth_token=;{secure_flag} HttpOnly; SameSite=Strict; Path=/; Max-Age=0")
 }
 
 // ── JWT Token Generation ────────────────────────────────────────────────────

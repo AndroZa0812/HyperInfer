@@ -27,12 +27,17 @@ FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --gid 1000 app \
+    && useradd --uid 1000 --gid app --shell /bin/false --create-home app
 
 WORKDIR /app
 
 COPY --from=builder /app/target/release/hyperinfer-server /app/hyperinfer-server
-COPY --from=builder /app/crates/hyperinfer-server/migrations /app/crates/hyperinfer-server/migrations
+
+RUN chown -R app:app /app
+
+USER app
 
 EXPOSE 3000
 

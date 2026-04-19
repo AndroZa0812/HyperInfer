@@ -172,6 +172,18 @@ impl Database for SqlxDb {
         Ok(ApiKey::from(result))
     }
 
+    async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let result: ApiKeyRow = sqlx::query_as(
+            "UPDATE api_keys SET is_active = false WHERE id = $1 RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
+        )
+        .bind(uuid)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(ApiKey::from(result))
+    }
+
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
         let result: Option<ModelAliasRow> = sqlx::query_as(

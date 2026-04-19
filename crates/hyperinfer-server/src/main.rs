@@ -34,6 +34,7 @@ struct AppState<D: Database, C: ConfigStore> {
     #[allow(dead_code)]
     config_manager: C,
     admin_token: Arc<String>,
+    jwt_secret: Arc<String>,
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
@@ -181,6 +182,24 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     }
 }
 
+async fn revoke_api_key<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Path(key_id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.deactivate_api_key(&key_id).await {
+        Ok(key) => Json(key).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "API key not found").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to revoke API key",
+            )
+                .into_response(),
+        },
+    }
+}
+
 async fn get_model_alias<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(alias_id): Path<String>,
@@ -295,7 +314,7 @@ async fn login_handler(
     let user = match state.db.get_user_by_email(&req.email).await {
         Ok(Some(user)) => user,
         Ok(None) => {
-            tracing::warn!(email = %req.email, "Login failed: user not found");
+            tracing::warn!("Login failed: user not found");
             return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
         }
         Err(e) => {
@@ -308,25 +327,18 @@ async fn login_handler(
     let password_hash = match &user.password_hash {
         Some(hash) => hash,
         None => {
-            tracing::warn!(email = %req.email, "Login failed: user has no password_hash set");
+            tracing::warn!(user_id = %user.id, "Login failed: user has no password");
             return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
         }
     };
 
     if !verify_password(&req.password, password_hash) {
-        tracing::warn!(email = %req.email, "Login failed: password verification failed");
+        tracing::warn!(user_id = %user.id, "Login failed: password verification failed");
         return (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response();
     }
 
-    // Get JWT secret from environment
-    let jwt_secret = std::env::var("MCP_JWT_SECRET").unwrap_or_default();
-    if jwt_secret.is_empty() {
-        tracing::error!("MCP_JWT_SECRET not set");
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response();
-    }
-
     // Generate JWT token (24 hours expiry)
-    let token = match create_auth_token(&user, &jwt_secret, 24 * 3600) {
+    let token = match create_auth_token(&user, &state.jwt_secret, 24 * 3600) {
         Ok(token) => token,
         Err(e) => {
             tracing::error!("Failed to create JWT: {:?}", e);
@@ -479,10 +491,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let db = SqlxDb::new(pool);
 
-    // Run seeding logic
-    if let Err(e) = hyperinfer_server::seeding::run_seeding(&db).await {
-        tracing::error!("Failed to run seeding: {:?}", e);
-    }
+    // Run seeding logic - fail fast if seeding fails
+    hyperinfer_server::seeding::run_seeding(&db).await?;
 
     let config_manager = RedisConfigStore::new(&redis_url).await?;
     let config = config_manager.fetch_config().await.unwrap_or_else(|e| {
@@ -586,22 +596,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         _ => return Err("ADMIN_TOKEN must be set to a non-empty value.".into()),
     };
 
-    let state: ProdState = AppState {
-        config,
-        db: db.clone(),
-        config_manager,
-        admin_token: Arc::new(admin_token),
-    };
-
-    // MCP state: JWT secret must be set explicitly.
-    // Set MCP_JWT_SECRET to a long random value in the environment.
+    // JWT secret must be set explicitly.
     let jwt_secret = match std::env::var("MCP_JWT_SECRET") {
         Ok(s) if !s.is_empty() => s,
         _ => {
             return Err("MCP_JWT_SECRET must be set to a non-empty value.".into());
         }
     };
-    let mcp_state = McpState::new(jwt_secret.clone());
+    let jwt_secret_arc = Arc::new(jwt_secret.clone());
+
+    let state: ProdState = AppState {
+        config,
+        db: db.clone(),
+        config_manager,
+        admin_token: Arc::new(admin_token),
+        jwt_secret: jwt_secret_arc.clone(),
+    };
+
+    let mcp_state = McpState::new(jwt_secret);
 
     let cors = {
         let allowed_origins = std::env::var("ALLOWED_ORIGINS")
@@ -644,6 +656,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/users/{id}", get(get_user))
         .route("/v1/users", post(create_user))
         .route("/v1/api_keys/{id}", get(get_api_key))
+        .route("/v1/api_keys/{id}/revoke", post(revoke_api_key))
         .route("/v1/api_keys", post(create_api_key))
         .route("/v1/model_aliases/{id}", get(get_model_alias))
         .route("/v1/model_aliases", post(create_model_alias))
@@ -655,7 +668,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ));
 
     // Auth routes for user/password authentication
-    let jwt_secret_arc = Arc::new(jwt_secret);
     let auth_public_routes = Router::new().route("/v1/auth/login", post(login_handler));
 
     let auth_protected_routes = Router::new()
@@ -663,7 +675,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/auth/logout", post(logout_handler))
         .route("/v1/auth/change-password", post(change_password_handler))
         .layer(middleware::from_fn_with_state(
-            jwt_secret_arc.clone(),
+            state.jwt_secret.clone(),
             auth_middleware,
         ));
 

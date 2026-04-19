@@ -98,6 +98,7 @@
 				id="current-password"
 				type="password"
 				bind:value={currentPassword}
+				autocomplete="current-password"
 				class="w-full px-4 py-2 border rounded-lg"
 			/>
 		</div>
@@ -107,6 +108,7 @@
 				id="new-password"
 				type="password"
 				bind:value={newPassword}
+				autocomplete="new-password"
 				class="w-full px-4 py-2 border rounded-lg"
 			/>
 		</div>
@@ -116,14 +118,15 @@
 				id="confirm-password"
 				type="password"
 				bind:value={confirmPassword}
+				autocomplete="new-password"
 				class="w-full px-4 py-2 border rounded-lg"
 			/>
 		</div>
             {#if error}
-                <p class="text-red-500 text-sm">{error}</p>
+                <p role="alert" aria-live="assertive" class="text-red-500 text-sm">{error}</p>
             {/if}
             {#if success}
-                <p class="text-green-600 text-sm">{success}</p>
+                <p role="status" aria-live="polite" class="text-green-600 text-sm">{success}</p>
             {/if}
             <button
                 type="submit"

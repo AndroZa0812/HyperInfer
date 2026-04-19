@@ -2,14 +2,22 @@
     import { api } from '$lib/api';
     import { onMount } from 'svelte';
 
-    let conversations = $state<any[]>([]);
+    interface Conversation {
+        id: string;
+        title: string | null;
+        updated_at: string;
+        created_at: string;
+    }
+
+    let conversations = $state<Conversation[]>([]);
     let loading = $state(true);
+    let error = $state<string | null>(null);
 
     onMount(async () => {
         try {
-            conversations = await api.getConversations();
+            conversations = await api.getConversations() as Conversation[];
         } catch (e) {
-            console.error('Failed to load conversations', e);
+            error = e instanceof Error ? e.message : 'Failed to load conversations';
         } finally {
             loading = false;
         }
@@ -21,6 +29,8 @@
 
     {#if loading}
         <p>Loading...</p>
+    {:else if error}
+        <p class="text-red-500">{error}</p>
     {:else if conversations.length === 0}
         <p class="text-gray-500">No conversations yet</p>
     {:else}

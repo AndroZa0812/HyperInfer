@@ -32,6 +32,15 @@
             console.error('Failed to create key', e);
         }
     }
+
+    async function revokeKey(keyId: string) {
+        try {
+            const updated = await api.revokeKey(keyId);
+            keys = keys.map(k => k.id === keyId ? updated : k);
+        } catch (e) {
+            console.error('Failed to revoke key', e);
+        }
+    }
 </script>
 
 <div class="space-y-6">
@@ -58,6 +67,7 @@
                         <th class="px-4 py-3 text-left">Key</th>
                         <th class="px-4 py-3 text-left">Created</th>
                         <th class="px-4 py-3 text-left">Status</th>
+                        <th class="px-4 py-3 text-left">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -71,6 +81,16 @@
                                     {key.is_active ? 'Active' : 'Revoked'}
                                 </span>
                             </td>
+                            <td class="px-4 py-3">
+                                {#if key.is_active}
+                                    <button
+                                        class="text-red-500 text-sm hover:underline"
+                                        onclick={() => revokeKey(key.id)}
+                                    >
+                                        Revoke
+                                    </button>
+                                {/if}
+                            </td>
                         </tr>
                     {/each}
                 </tbody>
@@ -81,19 +101,25 @@
 
 {#if showCreate}
     <div class="fixed inset-0 bg-black/50 flex items-center justify-center">
-        <div class="bg-[var(--bg-primary)] p-6 rounded-xl w-96">
+        <form
+            class="bg-[var(--bg-primary)] p-6 rounded-xl w-96"
+            onsubmit={(e) => { e.preventDefault(); createKey(); }}
+        >
             <h2 class="text-lg font-semibold mb-4">Create API Key</h2>
-            <input
-                bind:value={newKeyName}
-                placeholder="Key name"
-                class="w-full px-4 py-2 border rounded-lg mb-4"
-            />
+            <label class="block mb-4">
+                <span class="text-sm font-medium mb-1 block">Key name</span>
+                <input
+                    bind:value={newKeyName}
+                    placeholder="Key name"
+                    class="w-full px-4 py-2 border rounded-lg"
+                />
+            </label>
             <div class="flex gap-2 justify-end">
-                <button class="px-4 py-2" onclick={() => showCreate = false}>Cancel</button>
-                <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" onclick={createKey}>
+                <button type="button" class="px-4 py-2" onclick={() => showCreate = false}>Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg">
                     Create
                 </button>
             </div>
-        </div>
+        </form>
     </div>
 {/if}

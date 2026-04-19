@@ -29,6 +29,7 @@ pub trait Database: Clone + Send + Sync + 'static {
         team_id: &str,
         name: Option<String>,
     ) -> Result<ApiKey, DbError>;
+    async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError>;
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError>;
     async fn create_model_alias(
         &self,
