@@ -75,7 +75,7 @@ async fn test_database_create_and_get_user() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
     assert_eq!(user.email, "test@example.com");
@@ -100,7 +100,7 @@ async fn test_database_create_and_get_api_key() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -262,12 +262,12 @@ async fn test_duplicate_user_email() {
         .await
         .expect("Failed to create team");
 
-    db.create_user(&team.id, "unique@example.com", "admin")
+    db.create_user(&team.id, "unique@example.com", "admin", None)
         .await
         .expect("Failed to create first user");
 
     let result = db
-        .create_user(&team.id, "unique@example.com", "member")
+        .create_user(&team.id, "unique@example.com", "member", None)
         .await;
     assert!(result.is_err(), "Should fail on duplicate user email");
 }
@@ -282,7 +282,7 @@ async fn test_duplicate_api_key_hash() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -352,6 +352,7 @@ async fn test_create_user_invalid_team_fk() {
             "00000000-0000-0000-0000-000000000000",
             "test@example.com",
             "admin",
+            None,
         )
         .await;
     assert!(result.is_err(), "Should fail on invalid team foreign key");
@@ -387,7 +388,7 @@ async fn test_create_api_key_invalid_team_fk() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -439,7 +440,7 @@ async fn test_record_usage_success() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -471,7 +472,7 @@ async fn test_record_usage_zero_tokens() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -500,7 +501,7 @@ async fn test_record_usage_large_values() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -529,7 +530,7 @@ async fn test_record_usage_multiple_logs() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -566,7 +567,7 @@ async fn test_record_usage_invalid_team_id() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -636,7 +637,7 @@ async fn test_record_usage_different_models() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -666,7 +667,7 @@ async fn test_get_api_key_by_hash() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -696,7 +697,7 @@ async fn test_get_api_key_by_hash_inactive() {
         .expect("Failed to create team");
 
     let user = db
-        .create_user(&team.id, "test@example.com", "admin")
+        .create_user(&team.id, "test@example.com", "admin", None)
         .await
         .expect("Failed to create user");
 
@@ -725,4 +726,119 @@ async fn test_get_api_key_by_hash_not_found() {
         .expect("Query failed");
 
     assert!(result.is_none(), "Should return None for nonexistent hash");
+}
+
+// ── Auth/Seeding Tests ─────────────────────────────────────────────────────────
+
+use hyperinfer_server::db::hash_password;
+
+#[tokio::test]
+async fn test_count_users_by_role() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    // Initially should have 0 admins
+    let admin_count = db
+        .count_users_by_role("admin")
+        .await
+        .expect("Failed to count admins");
+    assert_eq!(admin_count, 0);
+
+    // Create an admin user
+    db.create_user(&team.id, "admin@example.com", "admin", None)
+        .await
+        .expect("Failed to create admin user");
+
+    let admin_count = db
+        .count_users_by_role("admin")
+        .await
+        .expect("Failed to count admins");
+    assert_eq!(admin_count, 1);
+
+    // Create a member user
+    db.create_user(&team.id, "member@example.com", "member", None)
+        .await
+        .expect("Failed to create member user");
+
+    let member_count = db
+        .count_users_by_role("member")
+        .await
+        .expect("Failed to count members");
+    assert_eq!(member_count, 1);
+}
+
+#[tokio::test]
+async fn test_create_user_with_password_hash() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    let password_hash = hash_password("secure_password_123").expect("Failed to hash password");
+    let user = db
+        .create_user(&team.id, "user@example.com", "admin", Some(password_hash))
+        .await
+        .expect("Failed to create user with password");
+
+    assert_eq!(user.email, "user@example.com");
+    assert!(user.password_hash.is_some());
+    assert_ne!(user.password_hash.unwrap(), "secure_password_123"); // Should be hashed
+}
+
+#[tokio::test]
+async fn test_get_user_by_email() {
+    let (db, _container) = setup_test_db().await;
+
+    let team = db
+        .create_team("Test Team", 10000)
+        .await
+        .expect("Failed to create team");
+
+    // Create user
+    let user = db
+        .create_user(&team.id, "test@example.com", "admin", None)
+        .await
+        .expect("Failed to create user");
+
+    // Fetch by email
+    let fetched = db
+        .get_user_by_email("test@example.com")
+        .await
+        .expect("Failed to get user by email")
+        .expect("User not found");
+
+    assert_eq!(fetched.id, user.id);
+    assert_eq!(fetched.email, "test@example.com");
+
+    // Non-existent email
+    let not_found = db
+        .get_user_by_email("nonexistent@example.com")
+        .await
+        .expect("Query failed");
+    assert!(not_found.is_none());
+}
+
+#[tokio::test]
+async fn test_password_hashing() {
+    // Test that password hashing produces different results each time (due to salt)
+    let hash1 = hash_password("password123").expect("Failed to hash password");
+    let hash2 = hash_password("password123").expect("Failed to hash password");
+
+    // Different hashes due to random salt
+    assert_ne!(hash1, hash2);
+
+    // Both should verify correctly
+    use hyperinfer_server::db::verify_password;
+    assert!(verify_password("password123", &hash1));
+    assert!(verify_password("password123", &hash2));
+
+    // Wrong password should not verify
+    assert!(!verify_password("wrongpassword", &hash1));
+    assert!(!verify_password("wrongpassword", &hash2));
 }

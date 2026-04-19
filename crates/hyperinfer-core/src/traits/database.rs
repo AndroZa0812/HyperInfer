@@ -9,7 +9,17 @@ pub trait Database: Clone + Send + Sync + 'static {
     async fn get_team(&self, id: &str) -> Result<Option<Team>, DbError>;
     async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError>;
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError>;
-    async fn create_user(&self, team_id: &str, email: &str, role: &str) -> Result<User, DbError>;
+    async fn get_user_by_email(&self, email: &str) -> Result<Option<User>, DbError>;
+    async fn create_user(
+        &self,
+        team_id: &str,
+        email: &str,
+        role: &str,
+        password_hash: Option<String>,
+    ) -> Result<User, DbError>;
+    async fn update_password_hash(&self, user_id: &str, password_hash: &str)
+        -> Result<(), DbError>;
+    async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
     async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
     async fn create_api_key(
@@ -19,6 +29,7 @@ pub trait Database: Clone + Send + Sync + 'static {
         team_id: &str,
         name: Option<String>,
     ) -> Result<ApiKey, DbError>;
+    async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError>;
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError>;
     async fn create_model_alias(
         &self,
@@ -60,6 +71,8 @@ pub struct User {
     pub team_id: String,
     pub email: String,
     pub role: String,
+    #[serde(skip_serializing)]
+    pub password_hash: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 

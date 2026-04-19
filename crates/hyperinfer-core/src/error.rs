@@ -42,6 +42,8 @@ pub enum DbError {
     NotFound,
     #[error("Unique constraint violation: {0}")]
     UniqueViolation(String),
+    #[error("Validation error: {0}")]
+    ValidationError(String),
 }
 
 #[derive(Debug, Error)]

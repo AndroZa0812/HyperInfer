@@ -1,0 +1,134 @@
+<script lang="ts">
+    import { api } from '$lib/api';
+    import type { Team } from '$lib/types';
+    import { onMount } from 'svelte';
+
+    let teams = $state<Team[]>([]);
+    let loading = $state(true);
+    let showCreate = $state(false);
+    let newName = $state('');
+    let newBudget = $state(10000);
+    let createError = $state('');
+
+    onMount(async () => {
+        try {
+            teams = await api.getTeams();
+        } catch (e) {
+            console.error('Failed to load teams', e);
+        } finally {
+            loading = false;
+        }
+    });
+
+    function validateBudget(value: number): number {
+        if (!Number.isFinite(value) || value < 0) return 0;
+        return Math.round(value);
+    }
+
+    async function createTeam() {
+        const name = newName.trim();
+        if (!name) {
+            createError = 'Team name is required';
+            return;
+        }
+        const budget = validateBudget(newBudget);
+        if (budget < 0) {
+            createError = 'Budget must be a non-negative number';
+            return;
+        }
+        createError = '';
+        try {
+            const team = await api.createTeam(name, budget);
+            teams = [...teams, team];
+            showCreate = false;
+            newName = '';
+            newBudget = 10000;
+        } catch (e) {
+            console.error('Failed to create team', e);
+            createError = 'Failed to create team';
+        }
+    }
+</script>
+
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Teams</h1>
+        <button
+            class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg"
+            onclick={() => showCreate = true}
+        >
+            Create Team
+        </button>
+    </div>
+
+    {#if loading}
+        <p>Loading...</p>
+    {:else if teams.length === 0}
+        <p class="text-gray-500">No teams yet</p>
+    {:else}
+        <div class="bg-[var(--bg-primary)] rounded-xl overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-[var(--bg-secondary)]">
+                    <tr>
+                        <th class="px-4 py-3 text-left">Name</th>
+                        <th class="px-4 py-3 text-left">Budget</th>
+                        <th class="px-4 py-3 text-left">Created</th>
+                        <th class="px-4 py-3"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {#each teams as team}
+                        <tr class="border-t border-[var(--bg-secondary)]">
+                            <td class="px-4 py-3">{team.name}</td>
+                            <td class="px-4 py-3">${(team.budget_cents / 100).toFixed(2)}</td>
+                            <td class="px-4 py-3">{new Date(team.created_at).toLocaleDateString()}</td>
+                            <td class="px-4 py-3">
+                                <a href="/dashboard/teams/{team.id}" class="text-[var(--accent)] hover:underline">View</a>
+                            </td>
+                        </tr>
+                    {/each}
+                </tbody>
+            </table>
+        </div>
+    {/if}
+</div>
+
+{#if showCreate}
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center">
+        <form
+            class="bg-[var(--bg-primary)] p-6 rounded-xl w-96"
+            onsubmit={(e) => { e.preventDefault(); createTeam(); }}
+        >
+            <h2 class="text-lg font-semibold mb-4">Create Team</h2>
+            <label class="block mb-4">
+                <span class="text-sm font-medium mb-1 block">Team name</span>
+                <input
+                    bind:value={newName}
+                    placeholder="Team name"
+                    autocomplete="off"
+                    class="w-full px-4 py-2 border rounded-lg"
+                />
+            </label>
+            <label class="block mb-4">
+                <span class="text-sm font-medium mb-1 block">Budget (cents)</span>
+                <input
+                    type="number"
+                    bind:value={newBudget}
+                    placeholder="Budget in cents"
+                    min="0"
+                    autocomplete="off"
+                    class="w-full px-4 py-2 border rounded-lg"
+                />
+            </label>
+            {#if createError}
+                <p role="alert" class="text-red-500 text-sm mb-4">{createError}</p>
+            {/if}
+            <div class="flex gap-2 justify-end">
+                <button type="button" class="px-4 py-2" onclick={() => { showCreate = false; createError = ''; }}>Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg">
+                    Create
+                </button>
+            </div>
+        </form>
+    </div>
+{/if}
