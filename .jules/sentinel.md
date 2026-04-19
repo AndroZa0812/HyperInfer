@@ -1,0 +1,4 @@
+## 2025-02-28 - [Enforce JWT Expiration and Remove Insecure Mode]
+**Vulnerability:** The MCP server allowed JSON Web Tokens (JWTs) without an expiration (`exp`) claim, making them valid indefinitely. An `allow_insecure_exp` flag conditionally bypassed standard JWT validation logic, creating a risk for long-lived, unrevocable tokens.
+**Learning:** Even internal or development-only overrides for critical security validations (like expiration) can inadvertently reduce security in production deployments if accidentally left enabled or misconfigured. Token lifetimes should always be strictly enforced at the application level.
+**Prevention:** Remove configurations that permit bypassing expiration checks. Always use standard security libraries with mandatory expiration enforcement to ensure tokens have a finite lifetime.
