@@ -1,0 +1,4 @@
+## 2025-02-28 - [Insecure JWT Expiration Toggle]
+**Vulnerability:** The MCP state implementation included a boolean toggle `allow_insecure_exp` that could dynamically disable JWT expiration validation. This toggle was passed directly to the token validation logic, allowing tokens without an `exp` claim to be accepted if enabled.
+**Learning:** Development "bypass" toggles that alter security validation logic (like JWT claims verification) should never be merged into production code paths, even if they are meant for local testing. They risk being accidentally activated or exploited.
+**Prevention:** Remove insecure bypass flags entirely from configuration states. Enforce strict, mandatory validation of required security claims (like `exp`) at the struct level (`u64` instead of `Option<u64>`) and in the validation library configuration, without any fallback or override options.
