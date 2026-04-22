@@ -49,7 +49,7 @@ pub struct McpClaims {
     /// Expiry (Unix timestamp seconds).  Validated automatically by
     /// `jsonwebtoken` when present.
     #[allow(dead_code)]
-    pub exp: Option<u64>,
+    pub exp: u64,
 }
 
 /// Axum middleware that validates `Authorization: Bearer <jwt>`.
@@ -69,7 +69,7 @@ pub async fn jwt_auth_middleware(
         }
     };
 
-    let claims = match validate_jwt(&token, &state.jwt_secret, state.allow_insecure_exp) {
+    let claims = match validate_jwt(&token, &state.jwt_secret) {
         Ok(c) => c,
         Err(_) => {
             return (StatusCode::UNAUTHORIZED, "Invalid or expired JWT").into_response();
@@ -94,13 +94,9 @@ fn extract_bearer(headers: &HeaderMap) -> Option<String> {
 pub fn validate_jwt(
     token: &str,
     secret: &str,
-    allow_insecure_exp: bool,
 ) -> Result<McpClaims, jsonwebtoken::errors::Error> {
     let key = DecodingKey::from_secret(secret.as_bytes());
-    let mut validation = Validation::new(Algorithm::HS256);
-    if allow_insecure_exp {
-        validation.required_spec_claims.remove("exp");
-    }
+    let validation = Validation::new(Algorithm::HS256);
     let data = decode::<McpClaims>(token, &key, &validation)?;
     Ok(data.claims)
 }
@@ -185,8 +181,6 @@ pub type SessionRegistry = Arc<RwLock<HashMap<String, McpSession>>>;
 pub struct McpState {
     pub sessions: SessionRegistry,
     pub jwt_secret: Arc<String>,
-    /// If true, JWTs without the "exp" claim are accepted (insecure, for dev only).
-    pub allow_insecure_exp: bool,
 }
 
 impl McpState {
@@ -194,15 +188,6 @@ impl McpState {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             jwt_secret: Arc::new(jwt_secret.into()),
-            allow_insecure_exp: false,
-        }
-    }
-
-    pub fn new_with_insecure_exp(jwt_secret: impl Into<String>, allow_insecure: bool) -> Self {
-        Self {
-            sessions: Arc::new(RwLock::new(HashMap::new())),
-            jwt_secret: Arc::new(jwt_secret.into()),
-            allow_insecure_exp: allow_insecure,
         }
     }
 }
@@ -634,19 +619,19 @@ mod tests {
     fn test_validate_jwt_valid() {
         let secret = "my-secret";
         let token = create_jwt("alice", secret);
-        let claims = validate_jwt(&token, secret, false).unwrap();
+        let claims = validate_jwt(&token, secret).unwrap();
         assert_eq!(claims.sub, "alice");
     }
 
     #[test]
     fn test_validate_jwt_wrong_secret() {
         let token = create_jwt("alice", "correct");
-        assert!(validate_jwt(&token, "wrong", false).is_err());
+        assert!(validate_jwt(&token, "wrong").is_err());
     }
 
     #[test]
     fn test_validate_jwt_malformed() {
-        assert!(validate_jwt("not.a.jwt", "secret", false).is_err());
+        assert!(validate_jwt("not.a.jwt", "secret").is_err());
     }
 
     // ── dispatch_method ─────────────────────────────────────────────────────
