@@ -37,6 +37,6 @@ async-stream = "0.3"
 dyn-clone = "1.0.20"
 
 [dev-dependencies]
-testcontainers = "0.27.2"
+testcontainers = "0.27.3"
 testcontainers-modules = { version = "0.15.0", features = ["redis"] }
 tokio = { version = "1.51", features = ["macros", "rt-multi-thread"] }
