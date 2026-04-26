@@ -90,10 +90,7 @@ fn extract_bearer(headers: &HeaderMap) -> Option<String> {
     None
 }
 
-pub fn validate_jwt(
-    token: &str,
-    secret: &str,
-) -> Result<McpClaims, jsonwebtoken::errors::Error> {
+pub fn validate_jwt(token: &str, secret: &str) -> Result<McpClaims, jsonwebtoken::errors::Error> {
     let key = DecodingKey::from_secret(secret.as_bytes());
     let validation = Validation::new(Algorithm::HS256);
     let data = decode::<McpClaims>(token, &key, &validation)?;
