@@ -115,6 +115,14 @@ pub fn init_langfuse_telemetry(
     langfuse_host: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
+
+    if host.starts_with("http://")
+        && !host.starts_with("http://localhost")
+        && !host.starts_with("http://127.0.0.1")
+    {
+        return Err("Insecure transmission: Basic Auth credentials must be sent over HTTPS unless using localhost.".into());
+    }
+
     let endpoint = format!("{}/api/public/otel/v1/traces", host);
 
     // Langfuse uses HTTP Basic Auth: Base64("public_key:secret_key")
@@ -236,5 +244,46 @@ mod tests {
         let endpoint = "http://\0invalid";
         let res = init_telemetry_with_headers(endpoint, vec![]);
         assert!(res.is_err());
+    }
+}
+
+#[cfg(test)]
+mod tests_security {
+    use super::*;
+
+    #[test]
+    fn test_init_langfuse_telemetry_https_allowed() {
+        // Needs a valid tracer otherwise initialization might fail differently,
+        // but we can check if it returns our specific error.
+        let result = init_langfuse_telemetry("pk", "sk", Some("https://example.com"));
+        // Since OTLP config validation might fail with a different error without full setup,
+        // we just assert it's NOT our security error
+        if let Err(e) = result {
+            assert!(!e.to_string().contains("Insecure transmission"));
+        }
+    }
+
+    #[test]
+    fn test_init_langfuse_telemetry_http_localhost_allowed() {
+        let result = init_langfuse_telemetry("pk", "sk", Some("http://localhost:8080"));
+        if let Err(e) = result {
+            assert!(!e.to_string().contains("Insecure transmission"));
+        }
+    }
+
+    #[test]
+    fn test_init_langfuse_telemetry_http_127_0_0_1_allowed() {
+        let result = init_langfuse_telemetry("pk", "sk", Some("http://127.0.0.1:8080"));
+        if let Err(e) = result {
+            assert!(!e.to_string().contains("Insecure transmission"));
+        }
+    }
+
+    #[test]
+    fn test_init_langfuse_telemetry_http_blocked() {
+        let result = init_langfuse_telemetry("pk", "sk", Some("http://example.com"));
+        assert!(result.is_err());
+        let e = result.unwrap_err();
+        assert!(e.to_string().contains("Insecure transmission"));
     }
 }
