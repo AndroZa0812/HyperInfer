@@ -115,6 +115,15 @@ pub fn init_langfuse_telemetry(
     langfuse_host: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
+
+    // Prevent leaking credentials over unencrypted HTTP
+    if host.starts_with("http://")
+        && !host.starts_with("http://localhost")
+        && !host.starts_with("http://127.0.0.1")
+    {
+        return Err("Langfuse host must use HTTPS to protect basic auth credentials, or be a local development host.".into());
+    }
+
     let endpoint = format!("{}/api/public/otel/v1/traces", host);
 
     // Langfuse uses HTTP Basic Auth: Base64("public_key:secret_key")
@@ -236,5 +245,37 @@ mod tests {
         let endpoint = "http://\0invalid";
         let res = init_telemetry_with_headers(endpoint, vec![]);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_init_langfuse_telemetry_enforces_https() {
+        let pk = "pk";
+        let sk = "sk";
+
+        // HTTPS should be allowed
+        let res = init_langfuse_telemetry(pk, sk, Some("https://example.com"));
+        // We only care that it doesn't fail due to the HTTPS check
+        // It might fail later due to network/build errors depending on env,
+        // but it shouldn't return our custom string error
+        if let Err(e) = res {
+            assert!(!e.to_string().contains("must use HTTPS"));
+        }
+
+        // Localhost HTTP should be allowed
+        let res = init_langfuse_telemetry(pk, sk, Some("http://localhost:3000"));
+        if let Err(e) = res {
+            assert!(!e.to_string().contains("must use HTTPS"));
+        }
+
+        // 127.0.0.1 HTTP should be allowed
+        let res = init_langfuse_telemetry(pk, sk, Some("http://127.0.0.1:3000"));
+        if let Err(e) = res {
+            assert!(!e.to_string().contains("must use HTTPS"));
+        }
+
+        // Remote HTTP should be blocked
+        let res = init_langfuse_telemetry(pk, sk, Some("http://example.com"));
+        assert!(res.is_err());
+        assert!(res.unwrap_err().to_string().contains("must use HTTPS"));
     }
 }
