@@ -93,7 +93,7 @@ async fn get_team<D: Database, C: ConfigStore>(
         Ok(Some(team)) => Json(team).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "Team not found").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
         },
@@ -107,7 +107,7 @@ async fn create_team<D: Database, C: ConfigStore>(
     match state.db.create_team(&req.name, req.budget_cents).await {
         Ok(team) => Json(team).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
         },
@@ -122,7 +122,7 @@ async fn get_user<D: Database, C: ConfigStore>(
         Ok(Some(user)) => Json(user).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "User not found").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
         },
@@ -140,7 +140,7 @@ async fn create_user<D: Database, C: ConfigStore>(
     {
         Ok(user) => Json(user).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
         },
     }
@@ -154,7 +154,7 @@ async fn get_api_key<D: Database, C: ConfigStore>(
         Ok(Some(key)) => Json(key).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "API key not found").into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "API key not found").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
         },
@@ -173,7 +173,7 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     {
         Ok(key) => Json(key).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create API key",
@@ -190,7 +190,7 @@ async fn revoke_api_key<D: Database, C: ConfigStore>(
     match state.db.deactivate_api_key(&key_id).await {
         Ok(key) => Json(key).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "API key not found").into_response(),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -209,7 +209,7 @@ async fn get_model_alias<D: Database, C: ConfigStore>(
         Ok(Some(alias)) => Json(alias).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
         },
@@ -227,7 +227,7 @@ async fn create_model_alias<D: Database, C: ConfigStore>(
     {
         Ok(alias) => Json(alias).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create model alias",
@@ -245,7 +245,7 @@ async fn get_quota<D: Database, C: ConfigStore>(
         Ok(Some(quota)) => Json(quota).into_response(),
         Ok(None) => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             DbError::NotFound => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
         },
@@ -263,7 +263,7 @@ async fn create_quota<D: Database, C: ConfigStore>(
     {
         Ok(quota) => Json(quota).into_response(),
         Err(e) => match e {
-            DbError::InvalidUuid(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
         },
     }
