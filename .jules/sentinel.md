@@ -1,0 +1,4 @@
+## 2025-03-03 - [CRITICAL] Client-provided API key hash vulnerability
+**Vulnerability:** The server accepted a client-provided API key hash (`key_hash`) instead of the raw API key when creating a new API key. This meant the server implicitly trusted the client's hashing process. An attacker could potentially submit a maliciously crafted or pre-computed hash or bypass hashing entirely if they control the client software.
+**Learning:** Security-critical functions like password or API key hashing must always be performed on the server side in a controlled environment to ensure integrity and prevent client-side manipulation. Trusting client inputs for security guarantees is a fundamental flaw.
+**Prevention:** Always accept the raw secret on the server and perform cryptographic operations (hashing, encryption) internally before storing or verifying against a database.
