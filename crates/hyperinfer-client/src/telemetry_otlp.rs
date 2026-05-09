@@ -115,6 +115,16 @@ pub fn init_langfuse_telemetry(
     langfuse_host: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
+
+    if host.starts_with("http://")
+        && !host.starts_with("http://localhost")
+        && !host.starts_with("http://127.0.0.1")
+    {
+        return Err(
+            "Langfuse telemetry requires HTTPS for remote hosts to protect credentials".into(),
+        );
+    }
+
     let endpoint = format!("{}/api/public/otel/v1/traces", host);
 
     // Langfuse uses HTTP Basic Auth: Base64("public_key:secret_key")
