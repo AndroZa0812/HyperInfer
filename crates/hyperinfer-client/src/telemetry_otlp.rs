@@ -123,7 +123,8 @@ pub fn init_langfuse_telemetry(
         && !host.starts_with("http://127.0.0.1:")
         && host != "http://localhost"
         && host != "http://127.0.0.1"
-        && std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP").unwrap_or_else(|_| "false".to_string()) != "true"
+        && std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP").unwrap_or_else(|_| "false".to_string())
+            != "true"
     {
         return Err("Insecure connection: HTTPS is required when transmitting HTTP Basic Auth credentials to a remote host. Set ALLOW_INSECURE_LANGFUSE_HTTP=true to override.".into());
     }
@@ -255,30 +256,60 @@ mod tests {
     fn test_langfuse_telemetry_enforces_https() {
         // Should succeed (or at least not fail due to protocol check) for HTTPS
         let res_https = init_langfuse_telemetry("pk", "sk", Some("https://example.com"));
-        assert!(res_https.is_ok() || !res_https.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(
+            res_https.is_ok()
+                || !res_https
+                    .unwrap_err()
+                    .to_string()
+                    .contains("HTTPS is required")
+        );
 
         // Should succeed for localhost HTTP
         let res_localhost = init_langfuse_telemetry("pk", "sk", Some("http://localhost:8080"));
-        assert!(res_localhost.is_ok() || !res_localhost.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(
+            res_localhost.is_ok()
+                || !res_localhost
+                    .unwrap_err()
+                    .to_string()
+                    .contains("HTTPS is required")
+        );
 
         // Should succeed for 127.0.0.1 HTTP
         let res_loopback = init_langfuse_telemetry("pk", "sk", Some("http://127.0.0.1:8080"));
-        assert!(res_loopback.is_ok() || !res_loopback.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(
+            res_loopback.is_ok()
+                || !res_loopback
+                    .unwrap_err()
+                    .to_string()
+                    .contains("HTTPS is required")
+        );
 
         // Should fail for remote HTTP
         let res_http = init_langfuse_telemetry("pk", "sk", Some("http://example.com"));
         assert!(res_http.is_err());
-        assert!(res_http.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(res_http
+            .unwrap_err()
+            .to_string()
+            .contains("HTTPS is required"));
 
         // Should fail for localhost domain mimicking
         let res_http = init_langfuse_telemetry("pk", "sk", Some("http://localhost.evil.com"));
         assert!(res_http.is_err());
-        assert!(res_http.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(res_http
+            .unwrap_err()
+            .to_string()
+            .contains("HTTPS is required"));
 
         // Should succeed when explicitly overridden via env
         std::env::set_var("ALLOW_INSECURE_LANGFUSE_HTTP", "true");
         let res_http_override = init_langfuse_telemetry("pk", "sk", Some("http://example.com"));
         std::env::remove_var("ALLOW_INSECURE_LANGFUSE_HTTP");
-        assert!(res_http_override.is_ok() || !res_http_override.unwrap_err().to_string().contains("HTTPS is required"));
+        assert!(
+            res_http_override.is_ok()
+                || !res_http_override
+                    .unwrap_err()
+                    .to_string()
+                    .contains("HTTPS is required")
+        );
     }
 }
