@@ -1,0 +1,4 @@
+## 2025-02-27 - [Enforce HTTPS for Remote Hosts Transmitting Basic Auth Credentials]
+**Vulnerability:** The Langfuse telemetry initialization function `init_langfuse_telemetry` allowed the transmission of HTTP Basic Auth credentials (encoded in Base64) over unencrypted HTTP connections to remote hosts.
+**Learning:** Security credentials like Basic Auth should never be sent over plain HTTP to remote endpoints as they can be easily intercepted. However, local development environments (e.g., `localhost`, `127.0.0.1`) often require HTTP for testing. It is crucial to enforce protocol security based on the destination.
+**Prevention:** Implement validation checks that mandate HTTPS for remote URLs but provide specific, explicit exceptions for loopback addresses to maintain developer velocity without compromising security.
