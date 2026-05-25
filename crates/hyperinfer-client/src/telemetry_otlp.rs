@@ -115,6 +115,18 @@ pub fn init_langfuse_telemetry(
     langfuse_host: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
+
+    if host.starts_with("http://") {
+        let is_localhost =
+            host.starts_with("http://localhost") || host.starts_with("http://127.0.0.1");
+        let allow_insecure = std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
+        if !is_localhost && !allow_insecure {
+            return Err("Langfuse host must use HTTPS to secure Basic Auth credentials. To override, set ALLOW_INSECURE_LANGFUSE_HTTP=true".into());
+        }
+    }
+
     let endpoint = format!("{}/api/public/otel/v1/traces", host);
 
     // Langfuse uses HTTP Basic Auth: Base64("public_key:secret_key")
@@ -236,5 +248,33 @@ mod tests {
         let endpoint = "http://\0invalid";
         let res = init_telemetry_with_headers(endpoint, vec![]);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_langfuse_insecure_http_rejected() {
+        let result =
+            init_langfuse_telemetry("pk-123", "sk-123", Some("http://insecure-example.com"));
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert_eq!(err_msg, "Langfuse host must use HTTPS to secure Basic Auth credentials. To override, set ALLOW_INSECURE_LANGFUSE_HTTP=true");
+    }
+
+    #[test]
+    fn test_langfuse_insecure_http_allowed_for_localhost() {
+        // Localhost should be allowed. We expect an Ok or an error from the actual telemetry builder if no endpoint, but it shouldn't fail the HTTPS check.
+        let result = init_langfuse_telemetry("pk-123", "sk-123", Some("http://localhost:3000"));
+        // The actual OpenTelemetry init might fail or succeed depending on globals, but it should not return the HTTPS error.
+        if let Err(e) = result {
+            assert_ne!(e.to_string(), "Langfuse host must use HTTPS to secure Basic Auth credentials. To override, set ALLOW_INSECURE_LANGFUSE_HTTP=true");
+        }
+    }
+
+    #[test]
+    fn test_langfuse_https_allowed() {
+        let result =
+            init_langfuse_telemetry("pk-123", "sk-123", Some("https://secure-example.com"));
+        if let Err(e) = result {
+            assert_ne!(e.to_string(), "Langfuse host must use HTTPS to secure Basic Auth credentials. To override, set ALLOW_INSECURE_LANGFUSE_HTTP=true");
+        }
     }
 }
