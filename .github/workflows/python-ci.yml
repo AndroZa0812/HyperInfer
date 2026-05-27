@@ -137,7 +137,7 @@ jobs:
       - name: Upload Test Results to Trunk.io
         if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@v2.0.8
+        uses: trunk-io/analytics-uploader@v2.0.9
         with:
           junit-paths: "**/junit.xml"
           org-slug: androza-corp
@@ -199,7 +199,7 @@ jobs:
       - name: Upload Test Results to Trunk.io
         if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@v2.0.8
+        uses: trunk-io/analytics-uploader@v2.0.9
         with:
           junit-paths: "**/junit.xml"
           org-slug: androza-corp
