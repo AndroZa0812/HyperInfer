@@ -1,0 +1,4 @@
+## 2024-05-27 - [Enforce HTTPS for Langfuse Telemetry Basic Auth]
+**Vulnerability:** The `init_langfuse_telemetry` function allowed passing basic authentication credentials (public and secret API keys) in cleartext over unencrypted HTTP connections by default, leaving them susceptible to network interception.
+**Learning:** Functions that accept sensitive credentials and establish connections to external endpoints must strictly validate that the chosen transport protocol is secure (e.g., HTTPS). If insecure local testing is required, it must be explicitly allowlisted (e.g., `localhost`) or require an explicit opt-in via environment variables, rather than silently downgrading security.
+**Prevention:** Always mandate HTTPS and strictly validate URLs before initializing network clients or transmitting basic authentication headers.

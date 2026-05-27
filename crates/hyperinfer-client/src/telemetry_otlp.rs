@@ -109,12 +109,28 @@ pub fn init_telemetry_with_headers(
 ///
 /// Langfuse's OTLP endpoint requires HTTP Basic Authentication where
 /// `public_key` is the username and `secret_key` is the password.
+fn is_langfuse_insecure(host: &str) -> bool {
+    host.starts_with("http://")
+        && !host.contains("localhost")
+        && !host.contains("127.0.0.1")
+        && std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP").is_err()
+}
+
 pub fn init_langfuse_telemetry(
     public_key: &str,
     secret_key: &str,
     langfuse_host: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
+
+    if is_langfuse_insecure(host) {
+        return Err(
+            "Langfuse OTLP endpoint uses Basic Authentication, which requires HTTPS. \
+             Use an https:// URL, or set ALLOW_INSECURE_LANGFUSE_HTTP=1 to override."
+                .into(),
+        );
+    }
+
     let endpoint = format!("{}/api/public/otel/v1/traces", host);
 
     // Langfuse uses HTTP Basic Auth: Base64("public_key:secret_key")
@@ -236,5 +252,23 @@ mod tests {
         let endpoint = "http://\0invalid";
         let res = init_telemetry_with_headers(endpoint, vec![]);
         assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_is_langfuse_insecure() {
+        // Clear any environment variable that might interfere.
+        std::env::remove_var("ALLOW_INSECURE_LANGFUSE_HTTP");
+
+        assert!(!super::is_langfuse_insecure("https://example.com"));
+        assert!(super::is_langfuse_insecure("http://example.com"));
+        assert!(!super::is_langfuse_insecure("http://localhost:8080"));
+        assert!(!super::is_langfuse_insecure("http://127.0.0.1:8080"));
+
+        // When explicitly allowed
+        std::env::set_var("ALLOW_INSECURE_LANGFUSE_HTTP", "1");
+        assert!(!super::is_langfuse_insecure("http://example.com"));
+
+        // Cleanup
+        std::env::remove_var("ALLOW_INSECURE_LANGFUSE_HTTP");
     }
 }
