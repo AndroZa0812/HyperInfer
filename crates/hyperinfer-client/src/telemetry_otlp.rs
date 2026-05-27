@@ -105,15 +105,26 @@ pub fn init_telemetry_with_headers(
     Ok(())
 }
 
-/// Initialise telemetry pointing at a Langfuse instance.
+/// Returns `true` if the given Langfuse host URL would transmit
+/// credentials over an unencrypted HTTP connection.
 ///
-/// Langfuse's OTLP endpoint requires HTTP Basic Authentication where
-/// `public_key` is the username and `secret_key` is the password.
-fn is_langfuse_insecure(host: &str) -> bool {
-    host.starts_with("http://")
-        && !host.contains("localhost")
-        && !host.contains("127.0.0.1")
-        && std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP").is_err()
+/// Local addresses (`localhost`, `127.0.0.1`, `::1`) are exempt.
+/// Set `ALLOW_INSECURE_LANGFUSE_HTTP=1` to override for testing.
+fn is_insecure_langfuse_url(host: &str) -> bool {
+    if std::env::var("ALLOW_INSECURE_LANGFUSE_HTTP").is_ok() {
+        return false;
+    }
+
+    let Ok(url) = reqwest::Url::parse(host) else {
+        return true;
+    };
+
+    if url.scheme() != "http" {
+        return false;
+    }
+
+    let host_str = url.host_str().unwrap_or("");
+    !matches!(host_str, "localhost" | "127.0.0.1" | "::1" | "[::1]")
 }
 
 pub fn init_langfuse_telemetry(
@@ -123,7 +134,7 @@ pub fn init_langfuse_telemetry(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let host = langfuse_host.unwrap_or("https://cloud.langfuse.com");
 
-    if is_langfuse_insecure(host) {
+    if is_insecure_langfuse_url(host) {
         return Err(
             "Langfuse OTLP endpoint uses Basic Authentication, which requires HTTPS. \
              Use an https:// URL, or set ALLOW_INSECURE_LANGFUSE_HTTP=1 to override."
@@ -255,20 +266,24 @@ mod tests {
     }
 
     #[test]
-    fn test_is_langfuse_insecure() {
-        // Clear any environment variable that might interfere.
+    fn test_is_insecure_langfuse_url() {
         std::env::remove_var("ALLOW_INSECURE_LANGFUSE_HTTP");
 
-        assert!(!super::is_langfuse_insecure("https://example.com"));
-        assert!(super::is_langfuse_insecure("http://example.com"));
-        assert!(!super::is_langfuse_insecure("http://localhost:8080"));
-        assert!(!super::is_langfuse_insecure("http://127.0.0.1:8080"));
+        assert!(!super::is_insecure_langfuse_url("https://example.com"));
+        assert!(!super::is_insecure_langfuse_url(
+            "https://cloud.langfuse.com"
+        ));
+        assert!(super::is_insecure_langfuse_url("http://example.com"));
+        assert!(super::is_insecure_langfuse_url("http://evil-localhost.com"));
+        assert!(super::is_insecure_langfuse_url("http://127.0.0.1.evil.com"));
+        assert!(!super::is_insecure_langfuse_url("http://localhost:8080"));
+        assert!(!super::is_insecure_langfuse_url("http://127.0.0.1:8080"));
+        assert!(!super::is_insecure_langfuse_url("http://[::1]:8080"));
+        assert!(super::is_insecure_langfuse_url("not-a-url"));
 
-        // When explicitly allowed
         std::env::set_var("ALLOW_INSECURE_LANGFUSE_HTTP", "1");
-        assert!(!super::is_langfuse_insecure("http://example.com"));
+        assert!(!super::is_insecure_langfuse_url("http://example.com"));
 
-        // Cleanup
         std::env::remove_var("ALLOW_INSECURE_LANGFUSE_HTTP");
     }
 }
