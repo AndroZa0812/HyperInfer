@@ -631,6 +631,25 @@ mod tests {
         assert!(validate_jwt("not.a.jwt", "secret").is_err());
     }
 
+    #[test]
+    fn test_validate_jwt_missing_exp_rejected() {
+        use jsonwebtoken::{encode, EncodingKey, Header};
+
+        #[derive(Serialize)]
+        struct ClaimsNoExp<'a> {
+            sub: &'a str,
+        }
+
+        let token = encode(
+            &Header::default(),
+            &ClaimsNoExp { sub: "alice" },
+            &EncodingKey::from_secret(b"secret"),
+        )
+        .unwrap();
+
+        assert!(validate_jwt(&token, "secret").is_err());
+    }
+
     // ── dispatch_method ─────────────────────────────────────────────────────
 
     #[test]
