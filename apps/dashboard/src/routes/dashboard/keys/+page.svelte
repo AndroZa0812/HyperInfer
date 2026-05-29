@@ -2,22 +2,25 @@
     import { api } from '$lib/api';
     import { auth } from '$lib/stores/auth';
     import type { ApiKey } from '$lib/types';
-    import { onMount } from 'svelte';
 
     let keys = $state<ApiKey[]>([]);
     let loading = $state(true);
     let showCreate = $state(false);
     let newKeyName = $state('');
 
-    onMount(async () => {
-        try {
-            if ($auth.user?.team_id) {
-                keys = await api.getKeys($auth.user.team_id);
-            }
-        } catch (e) {
-            console.error('Failed to load keys', e);
-        } finally {
-            loading = false;
+    $effect(() => {
+        if (!$auth.loading && $auth.user?.team_id) {
+            loading = true;
+            api.getKeys($auth.user!.team_id)
+                .then((k) => {
+                    keys = k;
+                })
+                .catch((e) => {
+                    console.error('Failed to load keys', e);
+                })
+                .finally(() => {
+                    loading = false;
+                });
         }
     });
 
