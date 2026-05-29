@@ -165,9 +165,10 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
+    let key_hash = hash_key(&req.key);
     match state
         .db
-        .create_api_key(&req.key_hash, &req.user_id, &req.team_id, req.name)
+        .create_api_key(&key_hash, &req.user_id, &req.team_id, req.name)
         .await
     {
         Ok(key) => Json(key).into_response(),
@@ -283,7 +284,7 @@ struct CreateUserRequest {
 
 #[derive(Deserialize)]
 struct CreateApiKeyRequest {
-    key_hash: String,
+    key: String,
     user_id: String,
     team_id: String,
     name: Option<String>,
@@ -1180,9 +1181,12 @@ mod tests {
 
         let mut db = MockDatabase::new();
         let now = Utc::now();
+
+        let expected_hash = hash_key("test-secret-key");
+
         let api_key = ApiKey {
             id: "new-key-id".to_string(),
-            key_hash: "hash123".to_string(),
+            key_hash: expected_hash.clone(),
             user_id: "user-id".to_string(),
             team_id: "team-id".to_string(),
             name: Some("Test Key".to_string()),
@@ -1192,7 +1196,7 @@ mod tests {
         };
         db.expect_create_api_key()
             .with(
-                eq("hash123"),
+                eq(expected_hash),
                 eq("user-id"),
                 eq("team-id"),
                 eq(Some("Test Key".to_string())),
@@ -1217,7 +1221,7 @@ mod tests {
         let response = create_api_key(
             State(state),
             Json(CreateApiKeyRequest {
-                key_hash: "hash123".to_string(),
+                key: "test-secret-key".to_string(),
                 user_id: "user-id".to_string(),
                 team_id: "team-id".to_string(),
                 name: Some("Test Key".to_string()),
