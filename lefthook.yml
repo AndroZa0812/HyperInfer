@@ -1,0 +1,38 @@
+pre-commit:
+  parallel: true
+  commands:
+    cargo-fmt:
+      run: cargo fmt -- --check
+      glob: "*.rs"
+
+    cargo-clippy:
+      run: cargo clippy -- -D warnings
+      glob: "*.rs"
+
+    cargo-test:
+      run: cargo test --workspace --lib --no-default-features
+      glob: "*.rs"
+
+    ruff-lint:
+      run: uv run ruff check --fix {staged_files}
+      glob: "*.py"
+      stage_fixed: true
+
+    ruff-format:
+      run: uv run ruff format {staged_files}
+      glob: "*.py"
+      stage_fixed: true
+
+    mypy:
+      run: uv run mypy crates/hyperinfer-python/python bindings/hyperinfer-langchain/src bindings/hyperinfer-llamaindex/src
+      glob: "*.py"
+
+    bandit:
+      run: uv run bandit {staged_files}
+      glob: "*.py"
+      exclude:
+        - "tests/**"
+
+    pytest-unit:
+      run: uv sync --all-packages --quiet && uv run pytest -m "not integration" --tb=short -q
+      glob: "*.py"
