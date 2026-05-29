@@ -1,0 +1,48 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - npm
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: cargo
+    directories:
+      - /
+      - /crates/hyperinfer-client
+      - /crates/hyperinfer-core
+      - /crates/hyperinfer-providers
+      - /crates/hyperinfer-python
+      - /crates/hyperinfer-server
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - rust
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: pip
+    directories:
+      - /
+      - /bindings/hyperinfer-langchain
+      - /bindings/hyperinfer-llamaindex
+      - /crates/hyperinfer-python
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - python
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - github-actions
+    open-pull-requests-limit: 10

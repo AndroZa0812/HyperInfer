@@ -17,6 +17,7 @@ use hyperinfer_server::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
+use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
@@ -38,23 +39,37 @@ pub(crate) async fn admin_auth_middleware(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, (StatusCode, &'static str)> {
-    let token = req
+    let expected_token = state.admin_token.as_ref();
+
+    let auth_header = req
         .headers()
         .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .and_then(|s| {
-            let mut parts = s.splitn(2, char::is_whitespace);
-            let scheme = parts.next()?;
-            if scheme.eq_ignore_ascii_case("bearer") {
-                Some(parts.next()?.to_owned())
-            } else {
-                None
-            }
-        });
+        .and_then(|v| v.to_str().ok());
 
-    match token {
-        Some(t) if t == *state.admin_token => Ok(next.run(req).await),
-        _ => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    match auth_header {
+        Some(header) => {
+            let provided_token = parse_bearer_token(header);
+            if let Some(token) = provided_token {
+                let digest_provided = sha2::Sha256::digest(token.as_bytes());
+                let digest_expected = sha2::Sha256::digest(expected_token.as_bytes());
+                let eq = digest_provided.ct_eq(&digest_expected);
+                if eq.into() {
+                    return Ok(next.run(req).await);
+                }
+            }
+            Err((StatusCode::UNAUTHORIZED, "Unauthorized"))
+        }
+        None => Err((StatusCode::UNAUTHORIZED, "Unauthorized")),
+    }
+}
+
+fn parse_bearer_token(header: &str) -> Option<String> {
+    let mut parts = header.splitn(2, char::is_whitespace);
+    let scheme = parts.next()?;
+    if scheme.eq_ignore_ascii_case("bearer") {
+        parts.next()?.trim().to_owned().into()
+    } else {
+        None
     }
 }
 
@@ -145,9 +160,10 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
+    let key_hash = hash_key(&req.key);
     match state
         .db
-        .create_api_key(&req.key_hash, &req.user_id, &req.team_id, req.name)
+        .create_api_key(&key_hash, &req.user_id, &req.team_id, req.name)
         .await
     {
         Ok(key) => Json(key).into_response(),
@@ -245,7 +261,7 @@ struct CreateUserRequest {
 
 #[derive(Deserialize)]
 struct CreateApiKeyRequest {
-    key_hash: String,
+    key: String,
     user_id: String,
     team_id: String,
     name: Option<String>,
@@ -269,7 +285,7 @@ struct CreateQuotaRequest {
 fn hash_key(key: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(key.as_bytes());
-    format!("{:x}", hasher.finalize())
+    hex::encode(hasher.finalize())
 }
 
 fn key_id(key: &str) -> String {
@@ -411,19 +427,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let admin_token = match std::env::var("ADMIN_TOKEN") {
         Ok(s) if !s.is_empty() => s,
-        _ => {
-            if std::env::var("MCP_INSECURE_DEV_MODE").as_deref() == Ok("1") {
-                tracing::warn!(
-                    "ADMIN_TOKEN not set — using insecure dev secret. \
-                     NEVER use MCP_INSECURE_DEV_MODE=1 in production!"
-                );
-                "hyperinfer-admin-dev".to_string()
-            } else {
-                return Err("ADMIN_TOKEN must be set to a non-empty value. \
-                     For local dev only, set MCP_INSECURE_DEV_MODE=1 to bypass."
-                    .into());
-            }
-        }
+        _ => return Err("ADMIN_TOKEN must be set to a non-empty value.".into()),
     };
 
     let state: ProdState = AppState {
@@ -983,9 +987,12 @@ mod tests {
 
         let mut db = MockDatabase::new();
         let now = Utc::now();
+
+        let expected_hash = hash_key("test-secret-key");
+
         let api_key = ApiKey {
             id: "new-key-id".to_string(),
-            key_hash: "hash123".to_string(),
+            key_hash: expected_hash.clone(),
             user_id: "user-id".to_string(),
             team_id: "team-id".to_string(),
             name: Some("Test Key".to_string()),
@@ -995,7 +1002,7 @@ mod tests {
         };
         db.expect_create_api_key()
             .with(
-                eq("hash123"),
+                eq(expected_hash),
                 eq("user-id"),
                 eq("team-id"),
                 eq(Some("Test Key".to_string())),
@@ -1020,7 +1027,7 @@ mod tests {
         let response = create_api_key(
             State(state),
             Json(CreateApiKeyRequest {
-                key_hash: "hash123".to_string(),
+                key: "test-secret-key".to_string(),
                 user_id: "user-id".to_string(),
                 team_id: "team-id".to_string(),
                 name: Some("Test Key".to_string()),

@@ -2,9 +2,10 @@ use async_trait::async_trait;
 use futures::Stream;
 use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse};
 use std::pin::Pin;
+use std::sync::Arc;
 
 #[async_trait]
-pub trait LlmProvider: Send + Sync {
+pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
     fn name(&self) -> &str;
 
     fn base_url(&self) -> &str {
@@ -21,17 +22,15 @@ pub trait LlmProvider: Send + Sync {
         api_key: &str,
     ) -> Result<ChatResponse, hyperinfer_core::HyperInferError>;
 
-    // TODO: stream() and supports_streaming() are currently dead code because
-    // chat_stream() in hyperinfer-client routes streaming through HttpCaller
-    // directly (http_caller.stream_openai() / http_caller.stream_anthropic())
-    // instead of through the provider registry. In future, routing streaming
-    // through LlmProvider::stream() would allow custom providers to implement
-    // their own streaming logic.
     fn stream(
         &self,
         request: &ChatRequest,
         api_key: &str,
-    ) -> Pin<Box<dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + '_>>;
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,
+        >,
+    >;
 
     async fn health_check(&self, api_key: &str) -> Result<(), hyperinfer_core::HyperInferError> {
         let request = ChatRequest {
@@ -47,5 +46,31 @@ pub trait LlmProvider: Send + Sync {
         };
         self.chat(&request, api_key).await?;
         Ok(())
+    }
+}
+
+dyn_clone::clone_trait_object!(LlmProvider);
+
+/// Holds a reference-counted LlmProvider and produces a 'static stream.
+/// Cloning the Arc is O(1) — no deep-clone of the provider's HTTP client.
+pub struct StreamingProvider {
+    inner: Arc<dyn LlmProvider>,
+}
+
+impl StreamingProvider {
+    pub fn new(provider: Arc<dyn LlmProvider>) -> Self {
+        Self { inner: provider }
+    }
+
+    pub fn into_stream(
+        self,
+        request: &ChatRequest,
+        api_key: &str,
+    ) -> Pin<
+        Box<
+            dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,
+        >,
+    > {
+        self.inner.stream(request, api_key)
     }
 }

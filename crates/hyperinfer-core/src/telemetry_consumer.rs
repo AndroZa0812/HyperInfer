@@ -56,6 +56,10 @@ impl TelemetryConsumer {
         stream_key: &str,
         consumer_group: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!(
+            "Creating consumer group {} for stream {}",
+            consumer_group, stream_key
+        );
         let result: Result<(), redis::RedisError> = redis::cmd("XGROUP")
             .arg("CREATE")
             .arg(stream_key)
@@ -66,9 +70,13 @@ impl TelemetryConsumer {
             .await;
 
         match result {
-            Ok(_) => Ok(()),
+            Ok(_) => {
+                info!("Consumer group created successfully");
+                Ok(())
+            }
             Err(e) => {
                 if e.to_string().contains("BUSYGROUP") {
+                    info!("Consumer group already exists");
                     Ok(())
                 } else {
                     Err(e.into())
@@ -77,50 +85,171 @@ impl TelemetryConsumer {
         }
     }
 
-    async fn ack_message(
+    async fn ack_messages(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
         consumer_group: &str,
-        msg_id: &str,
+        msg_ids: &[&str],
     ) -> Result<(), redis::RedisError> {
-        redis::cmd("XACK")
-            .arg(stream_key)
-            .arg(consumer_group)
-            .arg(msg_id)
-            .query_async::<()>(conn)
-            .await
+        Self::ack_messages_with_retry(conn, stream_key, consumer_group, msg_ids, 3, 50).await
     }
 
-    async fn process_entry<F, Fut>(
+    async fn ack_messages_with_retry(
         conn: &mut MultiplexedConnection,
         stream_key: &str,
         consumer_group: &str,
-        msg_id: &str,
-        fields: &[(String, String)],
-        handler: &F,
-    ) where
+        msg_ids: &[&str],
+        max_retries: u32,
+        base_delay_ms: u64,
+    ) -> Result<(), redis::RedisError> {
+        if msg_ids.is_empty() {
+            return Ok(());
+        }
+
+        let mut last_error = None;
+        for attempt in 0..max_retries {
+            match Self::do_ack_messages(conn, stream_key, consumer_group, msg_ids).await {
+                Ok(_) => return Ok(()),
+                Err(e) => {
+                    last_error = Some(e.clone());
+                    if attempt < max_retries - 1 {
+                        let delay_ms = base_delay_ms * (2_u64.pow(attempt));
+                        warn!(
+                            "XACK failed (attempt {}/{}), retrying in {}ms: {}",
+                            attempt + 1,
+                            max_retries,
+                            delay_ms,
+                            e
+                        );
+                        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
+                    }
+                }
+            }
+        }
+        Err(last_error.unwrap())
+    }
+
+    async fn do_ack_messages(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        msg_ids: &[&str],
+    ) -> Result<(), redis::RedisError> {
+        let mut cmd = redis::cmd("XACK");
+        cmd.arg(stream_key).arg(consumer_group);
+        for id in msg_ids {
+            cmd.arg(id);
+        }
+        let count: usize = cmd.query_async(conn).await?;
+        if count < msg_ids.len() {
+            let remaining = msg_ids.len() - count;
+            warn!(
+                "XACK only acknowledged {}/{} messages; {} may need recovery on reconnect",
+                count,
+                msg_ids.len(),
+                remaining
+            );
+        }
+        Ok(())
+    }
+
+    async fn process_entry<F, Fut>(msg_id: &str, fields: &[(String, String)], handler: &F) -> bool
+    where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
-        if let Some(record) = Self::parse_entry(fields) {
+        if let Some(record) = Self::parse_entry(Some(msg_id), fields) {
             match handler(record).await {
-                Ok(_) => {
-                    if let Err(e) =
-                        Self::ack_message(conn, stream_key, consumer_group, msg_id).await
-                    {
-                        warn!("Failed to XACK message {}: {}", msg_id, e);
-                    }
-                }
+                Ok(_) => true,
                 Err(e) => {
                     warn!("Failed to process message {}: {:?}", msg_id, e);
+                    false
                 }
             }
         } else {
             warn!("Failed to parse message {}", msg_id);
-            if let Err(e) = Self::ack_message(conn, stream_key, consumer_group, msg_id).await {
-                warn!("Failed to XACK unparseable message {}: {}", msg_id, e);
+            true
+        }
+    }
+
+    fn extract_string(value: &redis::Value) -> Option<String> {
+        match value {
+            redis::Value::BulkString(bytes) => Some(String::from_utf8_lossy(bytes).to_string()),
+            redis::Value::SimpleString(s) => Some(s.clone()),
+            _ => None,
+        }
+    }
+
+    fn extract_stream_entries(value: &redis::Value) -> Result<Vec<StreamEntry>, redis::RedisError> {
+        match value {
+            redis::Value::Array(entries) => {
+                let mut result = Vec::new();
+                for (i, entry) in entries.iter().enumerate() {
+                    match entry {
+                        redis::Value::Array(entry_data) => {
+                            result.push(Self::extract_stream_entry(entry_data)?);
+                        }
+                        other => {
+                            return Err(redis::RedisError::from((
+                                redis::ErrorKind::UnexpectedReturnType,
+                                "XAUTOCLAIM entry is not an array",
+                                format!("entry {}: {:?}", i, other),
+                            )));
+                        }
+                    }
+                }
+                Ok(result)
             }
+            other => Err(redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM claimed_messages is not an array",
+                format!("{:?}", other),
+            ))),
+        }
+    }
+
+    fn extract_stream_entry(
+        entry_data: &[redis::Value],
+    ) -> Result<(String, Vec<(String, String)>), redis::RedisError> {
+        if entry_data.len() < 2 {
+            return Err(redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM entry has insufficient elements",
+                format!("expected >= 2, got {}", entry_data.len()),
+            )));
+        }
+        let msg_id = Self::extract_string(&entry_data[0]).ok_or_else(|| {
+            redis::RedisError::from((
+                redis::ErrorKind::UnexpectedReturnType,
+                "XAUTOCLAIM entry ID is not a valid string",
+                String::new(),
+            ))
+        })?;
+        let fields = Self::extract_fields(&entry_data[1]);
+        Ok((msg_id, fields))
+    }
+
+    fn extract_fields(value: &redis::Value) -> Vec<(String, String)> {
+        match value {
+            redis::Value::Array(field_pairs) => {
+                let mut pairs = Vec::new();
+                for chunk in field_pairs.chunks(2) {
+                    if chunk.len() == 2 {
+                        match (
+                            Self::extract_string(&chunk[0]),
+                            Self::extract_string(&chunk[1]),
+                        ) {
+                            (Some(key), Some(value)) => pairs.push((key, value)),
+                            _ => {
+                                warn!("Skipping malformed field pair: {:?}", chunk);
+                            }
+                        }
+                    }
+                }
+                pairs
+            }
+            _ => Vec::new(),
         }
     }
 
@@ -130,40 +259,83 @@ impl TelemetryConsumer {
         consumer_group: &str,
         consumer_name: &str,
         handler: &F,
-    ) where
+    ) -> Result<(), redis::RedisError>
+    where
         F: Fn(UsageRecord) -> Fut + Send + Sync + 'static,
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
         let mut start_id = "0-0".to_string();
         loop {
-            let result: Result<(String, Vec<StreamEntry>), redis::RedisError> =
-                redis::cmd("XAUTOCLAIM")
-                    .arg(stream_key)
-                    .arg(consumer_group)
-                    .arg(consumer_name)
-                    .arg(XAUTOCLAIM_IDLE_MS)
-                    .arg(&start_id)
-                    .arg("COUNT")
-                    .arg(XAUTOCLAIM_COUNT)
-                    .query_async(conn)
-                    .await;
+            info!(
+                "XAUTOCLAIM: group={}, consumer={}, start={}",
+                consumer_group, consumer_name, start_id
+            );
+            let result: Result<redis::Value, redis::RedisError> = redis::cmd("XAUTOCLAIM")
+                .arg(stream_key)
+                .arg(consumer_group)
+                .arg(consumer_name)
+                .arg(XAUTOCLAIM_IDLE_MS)
+                .arg(&start_id)
+                .arg("COUNT")
+                .arg(XAUTOCLAIM_COUNT)
+                .query_async(conn)
+                .await;
 
             let (next_start, claimed) = match result {
-                Ok(res) => res,
+                Ok(redis::Value::Array(arr)) => {
+                    // XAUTOCLAIM returns [cursor, claimed_messages, deleted_ids]
+                    // Validate expected 3-element structure
+                    if arr.len() != 3 {
+                        return Err(redis::RedisError::from((
+                            redis::ErrorKind::UnexpectedReturnType,
+                            "XAUTOCLAIM returned unexpected array length",
+                            format!("expected 3 elements, got {}", arr.len()),
+                        )));
+                    }
+                    let next_start = Self::extract_string(&arr[0]).ok_or_else(|| {
+                        redis::RedisError::from((
+                            redis::ErrorKind::UnexpectedReturnType,
+                            "XAUTOCLAIM cursor is not a valid string",
+                            String::new(),
+                        ))
+                    })?;
+                    let claimed = Self::extract_stream_entries(&arr[1])?;
+                    // arr[2] contains deleted message IDs that were claimed but no longer exist
+                    // We don't need to process them - they're already removed from the stream
+                    (next_start, claimed)
+                }
+                Ok(other) => {
+                    return Err(redis::RedisError::from((
+                        redis::ErrorKind::UnexpectedReturnType,
+                        "XAUTOCLAIM returned unexpected type",
+                        format!("{:?}", other),
+                    )));
+                }
                 Err(e) => {
                     warn!("XAUTOCLAIM failed: {}", e);
-                    return;
+                    return Err(e);
                 }
             };
 
-            for (msg_id, fields) in claimed {
-                Self::process_entry(conn, stream_key, consumer_group, &msg_id, &fields, handler)
-                    .await;
+            info!(
+                "XAUTOCLAIM returned {} entries, next_start={}",
+                claimed.len(),
+                next_start
+            );
+
+            let mut ack_ids = Vec::with_capacity(claimed.len());
+            for (msg_id, fields) in &claimed {
+                if Self::process_entry(msg_id, fields, handler).await {
+                    ack_ids.push(msg_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await?;
             }
 
             if next_start == "0-0" {
-                return;
+                return Ok(());
             }
             start_id = next_start;
         }
@@ -181,6 +353,10 @@ impl TelemetryConsumer {
         Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
             + Send,
     {
+        info!(
+            "XREADGROUP: group={}, consumer={}, stream={}",
+            consumer_group, consumer_name, stream_key
+        );
         #[allow(clippy::type_complexity)]
         let results: Vec<(String, Vec<(String, Vec<(String, String)>)>)> = redis::cmd("XREADGROUP")
             .arg("GROUP")
@@ -195,18 +371,17 @@ impl TelemetryConsumer {
             .arg(">")
             .query_async(conn)
             .await?;
+        info!("XREADGROUP returned {} streams", results.len());
 
         for (_stream, entries) in results {
-            for (entry_id, fields) in entries {
-                Self::process_entry(
-                    conn,
-                    stream_key,
-                    consumer_group,
-                    &entry_id,
-                    &fields,
-                    handler,
-                )
-                .await;
+            let mut ack_ids = Vec::with_capacity(entries.len());
+            for (entry_id, fields) in &entries {
+                if Self::process_entry(entry_id, fields, handler).await {
+                    ack_ids.push(entry_id.as_str());
+                }
+            }
+            if !ack_ids.is_empty() {
+                Self::ack_messages(conn, stream_key, consumer_group, &ack_ids).await?;
             }
         }
 
@@ -267,14 +442,27 @@ impl TelemetryConsumer {
                     stream_key, consumer_group
                 );
 
-                Self::recover_pending_messages(
+                let recover_result = Self::recover_pending_messages(
                     &mut conn,
                     &stream_key,
                     &consumer_group,
                     &consumer_name,
                     &handler,
                 )
-                .await;
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>);
+
+                let mut do_reconnect = false;
+                if let Err(e) = &recover_result {
+                    warn!("Failed to recover pending messages: {}", e);
+                    do_reconnect = true;
+                }
+
+                if do_reconnect {
+                    error!("Recovery failed, reconnecting to retry on next cycle");
+                    backoff = 1;
+                    continue;
+                }
 
                 loop {
                     if cancellation_token.is_cancelled() {
@@ -316,7 +504,7 @@ impl TelemetryConsumer {
         Ok(handle)
     }
 
-    fn parse_entry(fields: &[(String, String)]) -> Option<UsageRecord> {
+    fn parse_entry(msg_id: Option<&str>, fields: &[(String, String)]) -> Option<UsageRecord> {
         let mut key = None;
         let mut model = None;
         let mut input_tokens = None;
@@ -336,12 +524,15 @@ impl TelemetryConsumer {
             }
         }
 
-        let key = key?.clone();
-        let model = model?.clone();
+        let key_val = key?;
+        let model_val = model?;
 
-        if key.trim().is_empty() || model.trim().is_empty() {
+        if key_val.trim().is_empty() || model_val.trim().is_empty() {
             return None;
         }
+
+        let key = key_val.clone();
+        let model = model_val.clone();
 
         Some(UsageRecord {
             key,
@@ -350,6 +541,7 @@ impl TelemetryConsumer {
             output_tokens: output_tokens?.parse().ok()?,
             response_time_ms: response_time_ms?.parse().ok()?,
             timestamp: timestamp?.parse().ok()?,
+            msg_id: msg_id.map(String::from),
         })
     }
 
@@ -377,7 +569,7 @@ impl TelemetryConsumer {
         let mut records = Vec::new();
         for (_stream, entries) in results {
             for (_entry_id, fields) in entries {
-                if let Some(record) = Self::parse_entry(&fields) {
+                if let Some(record) = Self::parse_entry(None, &fields) {
                     records.push(record);
                 }
             }
@@ -402,7 +594,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key");
@@ -414,13 +606,32 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_entry_with_msg_id() {
+        let fields = vec![
+            ("key".to_string(), "test-key".to_string()),
+            ("model".to_string(), "gpt-4".to_string()),
+            ("input_tokens".to_string(), "100".to_string()),
+            ("output_tokens".to_string(), "50".to_string()),
+            ("response_time_ms".to_string(), "250".to_string()),
+            ("timestamp".to_string(), "1700000000000".to_string()),
+        ];
+
+        let record = TelemetryConsumer::parse_entry(Some("1234567890-0"), &fields);
+        assert!(record.is_some());
+        let record = record.unwrap();
+        assert_eq!(record.key, "test-key");
+        assert_eq!(record.model, "gpt-4");
+        assert_eq!(record.msg_id, Some("1234567890-0".to_string()));
+    }
+
+    #[test]
     fn test_parse_entry_missing_field() {
         let fields = vec![
             ("key".to_string(), "test-key".to_string()),
             ("model".to_string(), "gpt-4".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -435,7 +646,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -471,7 +682,7 @@ mod tests {
             ("extra_field".to_string(), "ignored".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key");
@@ -480,7 +691,7 @@ mod tests {
     #[test]
     fn test_parse_entry_empty() {
         let fields = vec![];
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -492,7 +703,7 @@ mod tests {
             ("input_tokens".to_string(), "100".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -507,7 +718,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -522,7 +733,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -540,7 +751,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -555,7 +766,7 @@ mod tests {
             ("timestamp".to_string(), u64::MAX.to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.input_tokens, u32::MAX);
@@ -575,7 +786,7 @@ mod tests {
             ("timestamp".to_string(), "0".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.input_tokens, 0);
@@ -595,7 +806,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -610,7 +821,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_none());
     }
 
@@ -625,7 +836,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key-!@#$%");
@@ -643,7 +854,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, "test-key-🔑");
@@ -662,7 +873,7 @@ mod tests {
             ("timestamp".to_string(), "1700000000000".to_string()),
         ];
 
-        let record = TelemetryConsumer::parse_entry(&fields);
+        let record = TelemetryConsumer::parse_entry(None, &fields);
         assert!(record.is_some());
         let record = record.unwrap();
         assert_eq!(record.key, long_key);

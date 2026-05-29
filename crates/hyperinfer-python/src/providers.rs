@@ -218,7 +218,7 @@ impl hyperinfer_providers::LlmProvider for PythonProvider {
             dyn futures::Stream<
                     Item = Result<hyperinfer_core::ChatChunk, hyperinfer_core::HyperInferError>,
                 > + Send
-                + '_,
+                + 'static,
         >,
     > {
         unimplemented!("Python provider streaming not implemented yet")

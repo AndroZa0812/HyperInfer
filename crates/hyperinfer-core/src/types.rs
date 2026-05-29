@@ -153,6 +153,8 @@ pub struct UsageRecord {
     pub output_tokens: u32,
     pub response_time_ms: u64,
     pub timestamp: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msg_id: Option<String>,
 }
 
 /// A choice in a chat response
@@ -361,6 +363,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         assert_eq!(record.key, "test-key");
@@ -380,6 +383,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         let json = serde_json::to_string(&record).unwrap();
@@ -397,6 +401,7 @@ mod tests {
             output_tokens: 0,
             response_time_ms: 0,
             timestamp: 0,
+            msg_id: None,
         };
 
         assert_eq!(record.input_tokens, 0);
@@ -414,6 +419,7 @@ mod tests {
             output_tokens: u32::MAX,
             response_time_ms: u64::MAX,
             timestamp: u64::MAX,
+            msg_id: None,
         };
 
         assert_eq!(record.input_tokens, u32::MAX);
@@ -431,6 +437,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         assert_eq!(record.key, "");
@@ -446,6 +453,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         assert_eq!(record.key, "test-key-!@#$%");
@@ -461,6 +469,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         assert_eq!(record.key, "test-key-🔑");
@@ -481,6 +490,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         assert_eq!(record.key.len(), 10000);
@@ -496,6 +506,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         let cloned = record.clone();
@@ -511,6 +522,7 @@ mod tests {
             output_tokens: 50,
             response_time_ms: 250,
             timestamp: 1700000000000,
+            msg_id: None,
         };
 
         let debug_str = format!("{:?}", record);
