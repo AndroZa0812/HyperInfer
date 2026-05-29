@@ -285,8 +285,7 @@ impl Database for SqlxDb {
         user_id: &str,
         password_hash: &str,
     ) -> Result<(), DbError> {
-        let user_uuid = uuid::Uuid::parse_str(user_id)
-            .map_err(|_| DbError::InvalidUuid)?;
+        let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| DbError::InvalidUuid)?;
         sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
             .bind(password_hash)
             .bind(user_uuid)
