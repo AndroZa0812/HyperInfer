@@ -45,7 +45,7 @@ impl SqlxDb {
 #[async_trait]
 impl Database for SqlxDb {
     async fn get_team(&self, id: &str) -> Result<Option<Team>, DbError> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<TeamRow> = sqlx::query_as(
             "SELECT id, name, budget_cents, created_at, updated_at FROM teams WHERE id = $1",
         )
@@ -81,7 +81,7 @@ impl Database for SqlxDb {
     }
 
     async fn get_user(&self, id: &str) -> Result<Option<User>, DbError> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<UserRow> = sqlx::query_as(
             "SELECT id, team_id, email, role, password_hash, created_at FROM users WHERE id = $1",
         )
@@ -110,8 +110,7 @@ impl Database for SqlxDb {
         role: &str,
         password_hash: Option<String>,
     ) -> Result<User, DbError> {
-        let team_uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: UserRow = sqlx::query_as(
             "INSERT INTO users (team_id, email, role, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, team_id, email, role, password_hash, created_at"
         )
@@ -126,7 +125,7 @@ impl Database for SqlxDb {
     }
 
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<ApiKeyRow> = sqlx::query_as(
             "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE id = $1"
         )
@@ -155,10 +154,8 @@ impl Database for SqlxDb {
         team_id: &str,
         name: Option<String>,
     ) -> Result<ApiKey, DbError> {
-        let user_uuid = uuid::Uuid::parse_str(user_id)
-            .map_err(|_| DbError::InvalidUuid(user_id.to_string()))?;
-        let team_uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| DbError::InvalidUuid)?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: ApiKeyRow = sqlx::query_as(
             "INSERT INTO api_keys (key_hash, user_id, team_id, name) VALUES ($1, $2, $3, $4) RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
         )
@@ -173,7 +170,7 @@ impl Database for SqlxDb {
     }
 
     async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: ApiKeyRow = sqlx::query_as(
             "UPDATE api_keys SET is_active = false WHERE id = $1 RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
         )
@@ -185,7 +182,7 @@ impl Database for SqlxDb {
     }
 
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError> {
-        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid(id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<ModelAliasRow> = sqlx::query_as(
             "SELECT id, team_id, alias, target_model, provider, created_at FROM model_aliases WHERE id = $1"
         )
@@ -203,8 +200,7 @@ impl Database for SqlxDb {
         target_model: &str,
         provider: &str,
     ) -> Result<ModelAlias, DbError> {
-        let team_uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: ModelAliasRow = sqlx::query_as(
             "INSERT INTO model_aliases (team_id, alias, target_model, provider) VALUES ($1, $2, $3, $4) RETURNING id, team_id, alias, target_model, provider, created_at"
         )
@@ -219,8 +215,7 @@ impl Database for SqlxDb {
     }
 
     async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError> {
-        let uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<QuotaRow> = sqlx::query_as(
             "SELECT id, team_id, rpm_limit, tpm_limit, updated_at FROM quotas WHERE team_id = $1",
         )
@@ -237,8 +232,7 @@ impl Database for SqlxDb {
         rpm_limit: i32,
         tpm_limit: i32,
     ) -> Result<Quota, DbError> {
-        let team_uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: QuotaRow = sqlx::query_as(
             "INSERT INTO quotas (team_id, rpm_limit, tpm_limit) VALUES ($1, $2, $3) RETURNING id, team_id, rpm_limit, tpm_limit, updated_at"
         )
@@ -260,10 +254,8 @@ impl Database for SqlxDb {
         output_tokens: i32,
         response_time_ms: i64,
     ) -> Result<UsageLog, DbError> {
-        let team_uuid = uuid::Uuid::parse_str(team_id)
-            .map_err(|_| DbError::InvalidUuid(team_id.to_string()))?;
-        let api_key_uuid = uuid::Uuid::parse_str(api_key_id)
-            .map_err(|_| DbError::InvalidUuid(api_key_id.to_string()))?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
+        let api_key_uuid = uuid::Uuid::parse_str(api_key_id).map_err(|_| DbError::InvalidUuid)?;
 
         let result: UsageLogRow = sqlx::query_as(
             "INSERT INTO usage_logs (team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms, recorded_at"
@@ -293,8 +285,7 @@ impl Database for SqlxDb {
         user_id: &str,
         password_hash: &str,
     ) -> Result<(), DbError> {
-        let user_uuid = uuid::Uuid::parse_str(user_id)
-            .map_err(|_| DbError::InvalidUuid(user_id.to_string()))?;
+        let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| DbError::InvalidUuid)?;
         sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")
             .bind(password_hash)
             .bind(user_uuid)
