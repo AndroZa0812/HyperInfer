@@ -455,6 +455,35 @@ fn key_id(key: &str) -> String {
     }
 }
 
+pub(crate) fn build_cors_layer_from_string(
+    origins_str: Option<&str>,
+) -> Result<CorsLayer, &'static str> {
+    let allowed_origins = origins_str.ok_or("ALLOWED_ORIGINS must be set to a non-empty value.")?;
+
+    if allowed_origins.trim().is_empty() {
+        return Err("ALLOWED_ORIGINS must contain at least one valid origin.");
+    }
+
+    let origins: Vec<_> = allowed_origins
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .filter_map(|s| s.parse::<axum::http::HeaderValue>().ok())
+        .collect();
+
+    if origins.is_empty() {
+        return Err("ALLOWED_ORIGINS must contain at least one valid origin.");
+    }
+
+    Ok(CorsLayer::new()
+        .allow_origin(origins)
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]))
+}
+
 async fn resolve_api_key<D: Database>(
     db: &D,
     key: &str,
@@ -616,29 +645,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let mcp_state = McpState::new(jwt_secret);
 
-    let cors = {
-        let allowed_origins = std::env::var("ALLOWED_ORIGINS")
-            .unwrap_or_else(|_| "http://localhost:3000".to_string());
-        let origins: Vec<_> = allowed_origins
-            .split(',')
-            .filter_map(|s| s.trim().parse().ok())
-            .collect();
-        if origins.is_empty() {
-            tracing::warn!("No valid CORS origins configured, defaulting to localhost:3000");
-            CorsLayer::new().allow_origin(
-                "http://localhost:3000"
-                    .parse::<axum::http::HeaderValue>()
-                    .unwrap(),
-            )
-        } else {
-            CorsLayer::new().allow_origin(origins)
-        }
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([
-            axum::http::header::CONTENT_TYPE,
-            axum::http::header::AUTHORIZATION,
-        ])
-    };
+    let cors = build_cors_layer_from_string(std::env::var("ALLOWED_ORIGINS").ok().as_deref())?;
 
     // MCP routes protected by JWT auth middleware.
     let mcp_router = Router::new()
@@ -1378,5 +1385,37 @@ mod tests {
         .await;
         let resp = response.into_response();
         assert_eq!(resp.status(), StatusCode::CONFLICT);
+    }
+
+    #[test]
+    fn test_build_cors_layer_from_string() {
+        // Test valid origins
+        let valid_cors =
+            build_cors_layer_from_string(Some("http://localhost:3000,https://example.com"));
+        assert!(valid_cors.is_ok());
+
+        // Test None
+        let none_cors = build_cors_layer_from_string(None);
+        assert!(none_cors.is_err());
+        assert_eq!(
+            none_cors.unwrap_err(),
+            "ALLOWED_ORIGINS must be set to a non-empty value."
+        );
+
+        // Test empty string
+        let empty_cors = build_cors_layer_from_string(Some(""));
+        assert!(empty_cors.is_err());
+        assert_eq!(
+            empty_cors.unwrap_err(),
+            "ALLOWED_ORIGINS must contain at least one valid origin."
+        );
+
+        // Test whitespace string
+        let whitespace_cors = build_cors_layer_from_string(Some("   "));
+        assert!(whitespace_cors.is_err());
+        assert_eq!(
+            whitespace_cors.unwrap_err(),
+            "ALLOWED_ORIGINS must contain at least one valid origin."
+        );
     }
 }
