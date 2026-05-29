@@ -36,8 +36,8 @@ pub enum HyperInferError {
 pub enum DbError {
     #[error("Database error: {0}")]
     Sqlx(#[from] sqlx::Error),
-    #[error("Invalid UUID: {0}")]
-    InvalidUuid(String),
+    #[error("Invalid UUID")]
+    InvalidUuid,
     #[error("Not found")]
     NotFound,
     #[error("Unique constraint violation: {0}")]
