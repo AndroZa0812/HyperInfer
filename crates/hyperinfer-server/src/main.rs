@@ -725,6 +725,7 @@ mod tests {
             async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError>;
             async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError>;
             async fn create_api_key(&self, key_hash: &str, user_id: &str, team_id: &str, name: Option<String>) -> Result<ApiKey, DbError>;
+            async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError>;
             async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError>;
             async fn create_model_alias(&self, team_id: &str, alias: &str, target_model: &str, provider: &str) -> Result<ModelAlias, DbError>;
             async fn get_quota(&self, team_id: &str) -> Result<Option<Quota>, DbError>;
@@ -763,6 +764,7 @@ mod tests {
             db: MockDatabase::new(),
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         }
     }
 
@@ -794,6 +796,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_team(State(state), Path("nonexistent-id".to_string())).await;
@@ -832,6 +835,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_team(State(state), Path("test-team-id".to_string())).await;
@@ -869,6 +873,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_team(
@@ -903,6 +908,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_user(State(state), Path("nonexistent-user".to_string())).await;
@@ -930,6 +936,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_api_key(State(state), Path("nonexistent-key".to_string())).await;
@@ -957,6 +964,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_model_alias(State(state), Path("nonexistent-alias".to_string())).await;
@@ -984,6 +992,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_quota(State(state), Path("nonexistent-team".to_string())).await;
@@ -1011,6 +1020,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = get_team(State(state), Path("error-id".to_string())).await;
@@ -1160,6 +1170,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_user(
@@ -1216,6 +1227,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_api_key(
@@ -1268,6 +1280,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_model_alias(
@@ -1314,6 +1327,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_quota(
@@ -1351,6 +1365,7 @@ mod tests {
             db,
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
+            jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
         let response = create_team(

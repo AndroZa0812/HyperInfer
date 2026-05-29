@@ -42,6 +42,11 @@ async fn setup_test_db() -> (SqlxDb, ContainerAsync<Postgres>) {
     .await
     .expect("Failed to run migration 003");
 
+    sqlx::raw_sql(include_str!("../migrations/004_add_password_hash.sql"))
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 004");
+
     (SqlxDb::new(pool), postgres)
 }
 
