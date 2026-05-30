@@ -1,10 +1,12 @@
 pub mod deployment;
+pub mod engine;
 pub mod error;
 pub mod fallback;
 pub mod state;
 pub mod strategy;
 
 pub use deployment::{Deployment, DeploymentPool};
+pub use engine::{GlobalLimits, RouterEngine, RoutingResult};
 pub use error::RoutingError;
 pub use fallback::{ErrorKind, FallbackConfig};
 pub use state::{RedisConfig, RedisRoutingState};
