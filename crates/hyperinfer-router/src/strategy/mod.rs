@@ -1,4 +1,5 @@
 pub mod latency_based;
+pub mod least_busy;
 pub mod weighted_shuffle;
 
 use crate::deployment::Deployment;
