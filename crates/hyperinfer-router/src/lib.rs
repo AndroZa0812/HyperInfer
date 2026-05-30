@@ -1,10 +1,12 @@
 pub mod deployment;
 pub mod error;
+pub mod fallback;
 pub mod state;
 pub mod strategy;
 
 pub use deployment::{Deployment, DeploymentPool};
 pub use error::RoutingError;
+pub use fallback::{ErrorKind, FallbackConfig};
 pub use state::{RedisConfig, RedisRoutingState};
 pub use strategy::cost_based::CostBased;
 pub use strategy::latency_based::LatencyBased;
