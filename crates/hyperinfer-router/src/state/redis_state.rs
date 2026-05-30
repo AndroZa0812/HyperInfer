@@ -20,7 +20,10 @@ local tpm_ttl = tonumber(ARGV[7])
 local latency_ttl = tonumber(ARGV[8])
 local failures_ttl = tonumber(ARGV[9])
 
-redis.call('DECR', prefix .. ':in_flight')
+local in_flight = tonumber(redis.call('GET', prefix .. ':in_flight') or '0')
+if in_flight > 0 then
+    redis.call('DECR', prefix .. ':in_flight')
+end
 
 if outcome == 'success' then
     local old_ewma = tonumber(redis.call('GET', prefix .. ':latency') or '0')
@@ -57,6 +60,30 @@ else
     return {fails, cooldown_triggered}
 end
 "#;
+
+fn parse_u64(v: &Option<String>) -> u64 {
+    v.as_deref()
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0)
+}
+
+fn parse_f64(v: &Option<String>) -> f64 {
+    v.as_deref()
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(0.0)
+}
+
+fn metrics_from_values(values: &[Option<String>], base: usize) -> DeploymentMetrics {
+    DeploymentMetrics {
+        latency_ewma_ms: parse_f64(&values[base]),
+        in_flight: parse_u64(&values[base + 1]),
+        tpm_used: parse_u64(&values[base + 2]),
+        rpm_used: parse_u64(&values[base + 3]),
+        total_requests: parse_u64(&values[base + 4]),
+        total_failures: parse_u64(&values[base + 5]),
+        last_failure_ts: None,
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct RedisConfig {
@@ -124,26 +151,7 @@ impl RoutingState for RedisRoutingState {
             .query_async(&mut conn)
             .await?;
 
-        let parse_u64 = |v: &Option<String>| -> u64 {
-            v.as_deref()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0)
-        };
-        let parse_f64 = |v: &Option<String>| -> f64 {
-            v.as_deref()
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0)
-        };
-
-        Ok(DeploymentMetrics {
-            latency_ewma_ms: parse_f64(&values[0]),
-            in_flight: parse_u64(&values[1]),
-            tpm_used: parse_u64(&values[2]),
-            rpm_used: parse_u64(&values[3]),
-            total_requests: parse_u64(&values[4]),
-            total_failures: parse_u64(&values[5]),
-            last_failure_ts: None,
-        })
+        Ok(metrics_from_values(&values, 0))
     }
 
     async fn get_all_metrics(
@@ -175,31 +183,11 @@ impl RoutingState for RedisRoutingState {
 
         let values: Vec<Option<String>> = cmd.query_async(&mut conn).await?;
 
-        let parse_u64 = |v: &Option<String>| -> u64 {
-            v.as_deref()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(0)
-        };
-        let parse_f64 = |v: &Option<String>| -> f64 {
-            v.as_deref()
-                .and_then(|s| s.parse::<f64>().ok())
-                .unwrap_or(0.0)
-        };
-
         let mut result = HashMap::with_capacity(ids.len());
         for (i, id) in ids.iter().enumerate() {
             let base = i * keys_per_deployment;
             if base + 5 < values.len() {
-                let metrics = DeploymentMetrics {
-                    latency_ewma_ms: parse_f64(&values[base]),
-                    in_flight: parse_u64(&values[base + 1]),
-                    tpm_used: parse_u64(&values[base + 2]),
-                    rpm_used: parse_u64(&values[base + 3]),
-                    total_requests: parse_u64(&values[base + 4]),
-                    total_failures: parse_u64(&values[base + 5]),
-                    last_failure_ts: None,
-                };
-                result.insert(id.to_string(), metrics);
+                result.insert(id.to_string(), metrics_from_values(&values, base));
             }
         }
 
@@ -225,10 +213,14 @@ impl RoutingState for RedisRoutingState {
 
         tokio::spawn(async move {
             let mut conn = manager.clone();
+            let rpm_key = format!("{}:rpm", prefix);
             let pipe = redis::pipe()
                 .atomic()
                 .incr(format!("{}:in_flight", prefix), 1)
-                .incr(format!("{}:rpm", prefix), 1)
+                .incr(&rpm_key, 1)
+                .cmd("EXPIRE")
+                .arg(&rpm_key)
+                .arg(60)
                 .clone();
 
             if let Err(e) = pipe.query_async::<()>(&mut conn).await {
