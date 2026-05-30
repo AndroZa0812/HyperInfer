@@ -5,6 +5,7 @@ members = [
   "crates/hyperinfer-server",
   "crates/hyperinfer-python",
   "crates/hyperinfer-providers",
+  "crates/hyperinfer-router",
 ]
 # PyO3 crates cannot be built as regular Rust libs (they need Python symbols at
 # link time).  Exclude from default-members so `cargo build --workspace` works.
@@ -13,5 +14,6 @@ default-members = [
   "crates/hyperinfer-client",
   "crates/hyperinfer-server",
   "crates/hyperinfer-providers",
+  "crates/hyperinfer-router",
 ]
 resolver = "3"
