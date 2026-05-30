@@ -143,8 +143,8 @@ impl DeploymentPool {
         found
     }
 
-    pub fn get(&self, model_name: &str) -> Option<&Vec<Arc<Deployment>>> {
-        self.deployments.get(model_name)
+    pub fn get(&self, model_name: &str) -> Option<&[Arc<Deployment>]> {
+        self.deployments.get(model_name).map(|v| v.as_slice())
     }
 
     pub fn model_names(&self) -> Vec<String> {
