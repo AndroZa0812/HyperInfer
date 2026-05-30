@@ -1,3 +1,4 @@
+pub mod cost_based;
 pub mod latency_based;
 pub mod least_busy;
 pub mod usage_based;
