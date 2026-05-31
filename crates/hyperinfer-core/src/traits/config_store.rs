@@ -9,4 +9,5 @@ pub trait ConfigStore: Clone + Send + Sync + 'static {
     async fn fetch_config(&self) -> Result<Config, ConfigError>;
     async fn publish_config_update(&self, config: &Config) -> Result<(), ConfigError>;
     async fn publish_policy_update(&self, update: &PolicyUpdate) -> Result<(), ConfigError>;
+    async fn ping(&self) -> Result<(), ConfigError>;
 }
