@@ -7,14 +7,15 @@
 
 use axum::{
     body::Body,
-    extract::{Request, State},
-    http::{HeaderMap, StatusCode},
+    extract::{FromRequestParts, Request, State},
+    http::{request::Parts, HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
 use hyperinfer_core::User;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use utoipa::ToSchema;
 
 // ── JWT Claims ───────────────────────────────────────────────────────────────
 
@@ -35,13 +36,13 @@ pub struct AuthClaims {
 
 // ── Request/Response Types ────────────────────────────────────────────────────
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct LoginResponse {
     pub id: String,
     pub email: String,
@@ -49,7 +50,7 @@ pub struct LoginResponse {
     pub team_id: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct MeResponse {
     pub id: String,
     pub email: String,
@@ -175,6 +176,30 @@ fn extract_cookie_token(headers: &HeaderMap) -> Option<String> {
         }
     }
     None
+}
+
+// ── Admin Extractor ───────────────────────────────────────────────────────────
+
+/// Extractor that ensures the authenticated user has the "admin" role.
+/// Must be used after `auth_middleware` has injected `AuthClaims`.
+pub struct RequireAdmin(pub AuthClaims);
+
+impl<S: Send + Sync> FromRequestParts<S> for RequireAdmin {
+    type Rejection = Response;
+
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
+        let claims = parts
+            .extensions
+            .get::<AuthClaims>()
+            .cloned()
+            .ok_or_else(|| (StatusCode::UNAUTHORIZED, "Not authenticated").into_response())?;
+
+        if claims.role != "admin" {
+            return Err((StatusCode::FORBIDDEN, "Admin access required").into_response());
+        }
+
+        Ok(RequireAdmin(claims))
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

@@ -2,6 +2,10 @@
     import { api } from '$lib/api';
     import type { Team } from '$lib/types';
     import { onMount } from 'svelte';
+    import Button from '$lib/components/Button.svelte';
+    import Input from '$lib/components/Input.svelte';
+    import Modal from '$lib/components/Modal.svelte';
+    import Card from '$lib/components/Card.svelte';
 
     let teams = $state<Team[]>([]);
     let loading = $state(true);
@@ -27,15 +31,9 @@
 
     async function createTeam() {
         const name = newName.trim();
-        if (!name) {
-            createError = 'Team name is required';
-            return;
-        }
+        if (!name) { createError = 'Team name is required'; return; }
         const budget = validateBudget(newBudget);
-        if (budget < 0) {
-            createError = 'Budget must be a non-negative number';
-            return;
-        }
+        if (budget < 0) { createError = 'Budget must be a non-negative number'; return; }
         createError = '';
         try {
             const team = await api.createTeam(name, budget);
@@ -50,85 +48,89 @@
     }
 </script>
 
-<div class="space-y-6">
+<div class="space-y-8">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold">Teams</h1>
-        <button
-            class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg"
-            onclick={() => showCreate = true}
-        >
+        <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">Organization</p>
+            <h1 class="text-3xl font-bold text-[var(--on-surface)]">Teams</h1>
+        </div>
+        <Button onclick={() => showCreate = true}>
+            <span class="material-symbols-outlined" style="font-size: 18px">add</span>
             Create Team
-        </button>
+        </Button>
     </div>
 
     {#if loading}
-        <p>Loading...</p>
-    {:else if teams.length === 0}
-        <p class="text-gray-500">No teams yet</p>
-    {:else}
-        <div class="bg-[var(--bg-primary)] rounded-xl overflow-hidden">
-            <table class="w-full">
-                <thead class="bg-[var(--bg-secondary)]">
-                    <tr>
-                        <th class="px-4 py-3 text-left">Name</th>
-                        <th class="px-4 py-3 text-left">Budget</th>
-                        <th class="px-4 py-3 text-left">Created</th>
-                        <th class="px-4 py-3"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {#each teams as team}
-                        <tr class="border-t border-[var(--bg-secondary)]">
-                            <td class="px-4 py-3">{team.name}</td>
-                            <td class="px-4 py-3">${(team.budget_cents / 100).toFixed(2)}</td>
-                            <td class="px-4 py-3">{new Date(team.created_at).toLocaleDateString()}</td>
-                            <td class="px-4 py-3">
-                                <a href="/dashboard/teams/{team.id}" class="text-[var(--accent)] hover:underline">View</a>
-                            </td>
-                        </tr>
-                    {/each}
-                </tbody>
-            </table>
+        <div class="flex items-center justify-center h-64">
+            <span class="material-symbols-outlined animate-spin text-[var(--primary)]" style="font-size: 32px">progress_activity</span>
         </div>
+    {:else if teams.length === 0}
+        <Card class="text-center py-12">
+            <div class="space-y-3">
+                <div class="w-16 h-16 rounded-2xl bg-[var(--surface-container)] flex items-center justify-center mx-auto">
+                    <span class="material-symbols-outlined text-[var(--outline)]" style="font-size: 32px">group</span>
+                </div>
+                <p class="text-[var(--on-surface-variant)]">No teams yet</p>
+                <Button size="sm" onclick={() => showCreate = true}>Create your first team</Button>
+            </div>
+        </Card>
+    {:else}
+        <Card padding="none">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-[var(--surface-container-low)]">
+                            <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Name</th>
+                            <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Budget</th>
+                            <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Created</th>
+                            <th class="px-5 py-3.5 text-right text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each teams as team, i}
+                            <tr class="{i > 0 ? 'border-t border-[var(--ghost-border)]' : ''} hover:bg-[var(--surface-container-low)]/50 transition-colors">
+                                <td class="px-5 py-4">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-lg bg-[var(--surface-container)] flex items-center justify-center">
+                                            <span class="material-symbols-outlined text-[var(--primary)]" style="font-size: 18px">group</span>
+                                        </div>
+                                        <span class="text-sm font-medium text-[var(--on-surface)]">{team.name}</span>
+                                    </div>
+                                </td>
+                                <td class="px-5 py-4 text-sm text-[var(--on-surface)] font-mono">${'$'}{(team.budget_cents / 100).toFixed(2)}</td>
+                                <td class="px-5 py-4 text-sm text-[var(--on-surface-variant)]">{new Date(team.created_at).toLocaleDateString()}</td>
+                                <td class="px-5 py-4 text-right">
+                                    <Button href="/dashboard/teams/{team.id}" variant="ghost" size="sm">
+                                        View
+                                        <span class="material-symbols-outlined" style="font-size: 16px">chevron_right</span>
+                                    </Button>
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
     {/if}
 </div>
 
-{#if showCreate}
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center">
-        <form
-            class="bg-[var(--bg-primary)] p-6 rounded-xl w-96"
-            onsubmit={(e) => { e.preventDefault(); createTeam(); }}
-        >
-            <h2 class="text-lg font-semibold mb-4">Create Team</h2>
-            <label class="block mb-4">
-                <span class="text-sm font-medium mb-1 block">Team name</span>
-                <input
-                    bind:value={newName}
-                    placeholder="Team name"
-                    autocomplete="off"
-                    class="w-full px-4 py-2 border rounded-lg"
-                />
-            </label>
-            <label class="block mb-4">
-                <span class="text-sm font-medium mb-1 block">Budget (cents)</span>
-                <input
-                    type="number"
-                    bind:value={newBudget}
-                    placeholder="Budget in cents"
-                    min="0"
-                    autocomplete="off"
-                    class="w-full px-4 py-2 border rounded-lg"
-                />
-            </label>
-            {#if createError}
-                <p role="alert" class="text-red-500 text-sm mb-4">{createError}</p>
-            {/if}
-            <div class="flex gap-2 justify-end">
-                <button type="button" class="px-4 py-2" onclick={() => { showCreate = false; createError = ''; }}>Cancel</button>
-                <button type="submit" class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg">
-                    Create
-                </button>
+<Modal bind:open={showCreate}>
+    <form class="p-6 space-y-6" onsubmit={(e) => { e.preventDefault(); createTeam(); }}>
+        <div>
+            <h2 class="text-xl font-semibold text-[var(--on-surface)]">Create Team</h2>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">Set up a new organizational team.</p>
+        </div>
+        <Input label="Team Name" bind:value={newName} placeholder="e.g. Engineering Alpha" required />
+        <Input label="Budget (cents)" type="number" value={String(newBudget)} oninput={(e) => { newBudget = Number((e.target as HTMLInputElement).value) || 0; }} placeholder="10000" />
+        {#if createError}
+            <div class="flex items-center gap-2 text-sm text-[var(--error)] bg-[var(--error-container)]/20 rounded-lg px-4 py-3">
+                <span class="material-symbols-outlined" style="font-size: 18px">error</span>
+                {createError}
             </div>
-        </form>
-    </div>
-{/if}
+        {/if}
+        <div class="flex gap-3 justify-end">
+            <Button variant="ghost" onclick={() => { showCreate = false; createError = ''; }}>Cancel</Button>
+            <Button type="submit">Create</Button>
+        </div>
+    </form>
+</Modal>
