@@ -1,0 +1,14 @@
+target/
+.worktrees/
+.git/
+.github/
+.opencode/
+.understand-anything/
+.trunk/
+.jules/
+.changeset/
+node_modules/
+*.log
+.env
+.env.*
+!.env.example

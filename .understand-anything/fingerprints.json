@@ -1,0 +1,7427 @@
+{
+  "version": "1.0.0",
+  "gitCommitHash": "88c813f907d066eeaed1b004dbd3104254eeb20b",
+  "generatedAt": "2026-05-30T12:46:08.766Z",
+  "files": {
+    ".changeset/config.json": {
+      "filePath": ".changeset/config.json",
+      "contentHash": "b27d0e0743d98cf92f6e456439e21bdc1eac28ff6a6128017b1bb62b67a1c870",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    ".changeset/README.md": {
+      "filePath": ".changeset/README.md",
+      "contentHash": "495bd4805f8362853bce99689c1cd75db8c475dfa38930619d2e197d7554db27",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    ".config/nextest.toml": {
+      "filePath": ".config/nextest.toml",
+      "contentHash": "1e21e9212c8eecf7d52dd8a053ec794371e64b82c47f90856b33cfde33e5b3be",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3,
+      "hasStructuralAnalysis": true
+    },
+    ".env.example": {
+      "filePath": ".env.example",
+      "contentHash": "d6e04997f220f832e195e031ba9902993a94748df017fea49079c4d7108226a7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    ".github/dependabot.yml": {
+      "filePath": ".github/dependabot.yml",
+      "contentHash": "4f71832ed283664f29da853bbf5cb0cc636211553666bbd3d8ff8d636887270a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 49,
+      "hasStructuralAnalysis": true
+    },
+    ".github/pull_request_template.md": {
+      "filePath": ".github/pull_request_template.md",
+      "contentHash": "63881dbf3646bd3b1118c48689407080c240a78d76c66ffa320fe08947fc4718",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 56,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/pr_agent.yml": {
+      "filePath": ".github/workflows/pr_agent.yml",
+      "contentHash": "42cddae0f1c9f3a5c491e18bc0499424ffab85256b2fe67631f5c7374b3fa8e0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 41,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/pullfrog.yml": {
+      "filePath": ".github/workflows/pullfrog.yml",
+      "contentHash": "18383d793774d4c76c1e4705e9b486745bed79e58931132d12f08f13875c237d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/python-ci.yml": {
+      "filePath": ".github/workflows/python-ci.yml",
+      "contentHash": "fdb9662b16e5c34c0abb1923caefbb67609c2a2a054823b9edc5616cb1543d9e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 227,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/release.yml": {
+      "filePath": ".github/workflows/release.yml",
+      "contentHash": "dd8ed88d14d6ec2c71e91c74c8a1ce479160c69c8ff8577371fbf181b0c3ce5b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": true
+    },
+    ".github/workflows/rust-ci.yml": {
+      "filePath": ".github/workflows/rust-ci.yml",
+      "contentHash": "86d253f7831c505d0157da7078cabaf706bed792087df3492c686f45538cd73e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 151,
+      "hasStructuralAnalysis": true
+    },
+    ".jules/sentinel.md": {
+      "filePath": ".jules/sentinel.md",
+      "contentHash": "5bea48494d2d9003cbbeff2c1c6bd530618c5d6d04ce53bab4038f8ff9a18044",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    ".opencode/commands/review.md": {
+      "filePath": ".opencode/commands/review.md",
+      "contentHash": "9708d55aa525cae3e78f9e2bffbc6eff49dfca7c2fbe7b1c07f321e9e9baea0d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 74,
+      "hasStructuralAnalysis": true
+    },
+    ".opencode/opencode.jsonc": {
+      "filePath": ".opencode/opencode.jsonc",
+      "contentHash": "da7fdf788fd74c43cf56abbfb2e0bea8cd340dcda9817854a4356a069b438cd0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    ".opencode/prompts/code-reviewer.md": {
+      "filePath": ".opencode/prompts/code-reviewer.md",
+      "contentHash": "cf0608c25539cf1743cecfb1bfc56ef77b252a91f3a8b172745a1a6188a08909",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 97,
+      "hasStructuralAnalysis": true
+    },
+    ".opencode/skills/code-review/SKILL.md": {
+      "filePath": ".opencode/skills/code-review/SKILL.md",
+      "contentHash": "8a76c145287de8bc8f88c9c776c3d002d85addbde9fb8402b6b2659c73a39f93",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 80,
+      "hasStructuralAnalysis": true
+    },
+    ".trunk/configs/.isort.cfg": {
+      "filePath": ".trunk/configs/.isort.cfg",
+      "contentHash": "968e1af82279fb9bb4b6fd697ad2a83763eb6ca524403c42cf1f6f99707de619",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3,
+      "hasStructuralAnalysis": false
+    },
+    ".trunk/configs/.markdownlint.yaml": {
+      "filePath": ".trunk/configs/.markdownlint.yaml",
+      "contentHash": "697b0377e423ca0f494859a15e68e4a7d6c7727c2fc4c816f0c8e1b4cad0d2ec",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 3,
+      "hasStructuralAnalysis": true
+    },
+    ".trunk/configs/.rustfmt.toml": {
+      "filePath": ".trunk/configs/.rustfmt.toml",
+      "contentHash": "f1a22634bbffec62822faa208b352d302c19c2f70e29e57613b9df18d7c2fc36",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    ".trunk/configs/.shellcheckrc": {
+      "filePath": ".trunk/configs/.shellcheckrc",
+      "contentHash": "04c847ef9a565bb61def1d3d60bca0d625b2d0544a445464bedc42f0f2d84bb9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": false
+    },
+    ".trunk/configs/.yamllint.yaml": {
+      "filePath": ".trunk/configs/.yamllint.yaml",
+      "contentHash": "f9e4256dfb6fda12b1308e128fa1d41ba613eb1b083144ff11c10297fe1ec30a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    ".trunk/configs/ruff.toml": {
+      "filePath": ".trunk/configs/ruff.toml",
+      "contentHash": "fb169bbfb1cc90ed91bfb1390e86de752e44856e6d1e7b768ce25d8b6b80638e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    ".trunk/trunk.yaml": {
+      "filePath": ".trunk/trunk.yaml",
+      "contentHash": "1f8f880eda43fc5cbd65a9cf40812c042f4f6a0acfe46f190790c7342143e726",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": true
+    },
+    ".understand-anything/.understandignore": {
+      "filePath": ".understand-anything/.understandignore",
+      "contentHash": "b9a2c4c91e5a5f4bf52870b3ca4234a395ec862713936acabde9d67f9a7cf4d8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 105,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/package.json": {
+      "filePath": "apps/dashboard/package.json",
+      "contentHash": "14976d25ab9f050481c40e281e8953b5e80faa44fc3b8ec9bf2b1f226ffd0f09",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/postcss.config.js": {
+      "filePath": "apps/dashboard/postcss.config.js",
+      "contentHash": "5667a8f7c452f2c7d271c0c03b3916b8cd0b15800f66d0c13ecf0b8ff9501216",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/app.css": {
+      "filePath": "apps/dashboard/src/app.css",
+      "contentHash": "990d18afecbf38ceef691e02e5a7260099018f5c25582ed5913fdf4f6e215a08",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/app.html": {
+      "filePath": "apps/dashboard/src/app.html",
+      "contentHash": "a4abb8a878230ca3e5de24f4f643d334bac9080c6fd2ce9a4c33fc3866d8043d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/lib/api.ts": {
+      "filePath": "apps/dashboard/src/lib/api.ts",
+      "contentHash": "8e8f582995d8eae67af51076213056938fb5400318f490b84c205c4de729a0a4",
+      "functions": [
+        {
+          "name": "fetchApi",
+          "params": [
+            "path",
+            "options"
+          ],
+          "returnType": "Promise<T>",
+          "exported": false,
+          "lineCount": 20
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "./types",
+          "specifiers": [
+            "User",
+            "Team",
+            "ApiKey",
+            "UsageData"
+          ]
+        }
+      ],
+      "exports": [
+        "api"
+      ],
+      "totalLines": 80,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/lib/components/Sidebar.svelte": {
+      "filePath": "apps/dashboard/src/lib/components/Sidebar.svelte",
+      "contentHash": "e21b0402ec0ebd56b73e2021419857fdc168857e40e815c2382c64873ab974b8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 89,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/lib/components/UsageChart.svelte": {
+      "filePath": "apps/dashboard/src/lib/components/UsageChart.svelte",
+      "contentHash": "20a61fe4dcb95a3167a6396114c580911c2048fedb110b900811761a69a9f906",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/lib/components/VirtualList.svelte": {
+      "filePath": "apps/dashboard/src/lib/components/VirtualList.svelte",
+      "contentHash": "eef07c84a7dfefc462157871130a8f3e0d5739a6e6c8a1bfe41afdbb7346fdda",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 132,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/lib/stores/auth.ts": {
+      "filePath": "apps/dashboard/src/lib/stores/auth.ts",
+      "contentHash": "07b2049884a07659c15926fcd09b6bce530f47c806663c3571c416671f8334e6",
+      "functions": [
+        {
+          "name": "createAuthStore",
+          "params": [],
+          "exported": false,
+          "lineCount": 26
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "svelte/store",
+          "specifiers": [
+            "writable"
+          ]
+        },
+        {
+          "source": "$lib/api",
+          "specifiers": [
+            "api"
+          ]
+        },
+        {
+          "source": "$lib/types",
+          "specifiers": [
+            "User"
+          ]
+        }
+      ],
+      "exports": [
+        "auth"
+      ],
+      "totalLines": 33,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/lib/stores/theme.ts": {
+      "filePath": "apps/dashboard/src/lib/stores/theme.ts",
+      "contentHash": "191cb323dfd2d8ffbb36852486bc662193bfe7f00233d7483e3b172fef7d9b1b",
+      "functions": [
+        {
+          "name": "createThemeStore",
+          "params": [],
+          "exported": false,
+          "lineCount": 29
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "svelte/store",
+          "specifiers": [
+            "writable"
+          ]
+        }
+      ],
+      "exports": [
+        "theme"
+      ],
+      "totalLines": 34,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/lib/types.ts": {
+      "filePath": "apps/dashboard/src/lib/types.ts",
+      "contentHash": "327892f1a96fb28b938f03da2dd521933580c903e1530b6c4354c20793bc3d98",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/routes/+layout.svelte": {
+      "filePath": "apps/dashboard/src/routes/+layout.svelte",
+      "contentHash": "84747a063879e4d9ac56ae5c658b5489be695398d59a2f4e3156dc647f4cdcae",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 16,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/+layout.ts": {
+      "filePath": "apps/dashboard/src/routes/+layout.ts",
+      "contentHash": "58ca28942740b2ff08d6416473a2e8038f8a660017ce0b8b0d9ab3bb44453659",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "ssr",
+        "prerender"
+      ],
+      "totalLines": 3,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/src/routes/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/+page.svelte",
+      "contentHash": "e0e32c8c70cfc1a405e49230d44f6610a91a7df20c804c89e559ae2afaf36650",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/+layout.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/+layout.svelte",
+      "contentHash": "e0b21d3d10ee3435c3ed248ecc440130129da04fb9eb30500dbd7e03a6e887d7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 20,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/+page.svelte",
+      "contentHash": "7ae1da89bf84003a58dfc3b8546ed6cf881b31c24cb3cd21afd997a042d5cc3e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/conversations/[id]/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/conversations/[id]/+page.svelte",
+      "contentHash": "0c0892873b0158ace98850c5f97d9a02760ef6cb426a94dd43e9b5c2caa4b5e2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 57,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/conversations/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/conversations/+page.svelte",
+      "contentHash": "58abcc5abffa8bbd44dca2b91ff98eb3585de600eaa988a57da099f41868a6ea",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 54,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/keys/[id]/metrics/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/keys/[id]/metrics/+page.svelte",
+      "contentHash": "260a1d22a5bcc3a4d06347af68a70f00ed1b8aca4d90353e82687e2e168a3f2f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 50,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/keys/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/keys/+page.svelte",
+      "contentHash": "df87e9467a7934e246b9c9fcbad13c7a9eb29106c95371d47b0af7fc545b3c4f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 129,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/settings/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/settings/+page.svelte",
+      "contentHash": "43d7d53b2dee2ffab623752747ea760e28895eb0d0612170c637d08165a4482b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 140,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/teams/[id]/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/teams/[id]/+page.svelte",
+      "contentHash": "3a0186327f0a1b90b6caee5a2bca69e1bf4e42af6d05e974edc4fc2c1854bbf0",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 67,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/teams/[id]/budget/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/teams/[id]/budget/+page.svelte",
+      "contentHash": "835d6c32c33f3209cd8f698f1cfc96e7eb9716d89d774e7c6d33e18314aaf0a8",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 53,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/teams/[id]/keys/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/teams/[id]/keys/+page.svelte",
+      "contentHash": "4c22199dea5a7d09b0ec240e8f7cc11b108418f9ccdf06d84961d175d8699802",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 135,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/teams/[id]/usage/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/teams/[id]/usage/+page.svelte",
+      "contentHash": "6ab9c095bb5780dd04ca03f8534b6ef30989e8e6777cfdef8ebe81ffb256c169",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 85,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/dashboard/teams/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/dashboard/teams/+page.svelte",
+      "contentHash": "5df0e149e7b83547bdbf92503f398f9525e87f39059cf099afac135deeb1c393",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 134,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/src/routes/login/+page.svelte": {
+      "filePath": "apps/dashboard/src/routes/login/+page.svelte",
+      "contentHash": "4f3353b14f7aafd44f4f8335d63c9a7873d8f247a6d5a6e902076f64879e5a42",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 83,
+      "hasStructuralAnalysis": false
+    },
+    "apps/dashboard/svelte.config.js": {
+      "filePath": "apps/dashboard/svelte.config.js",
+      "contentHash": "db054cff0b4721343cdb8ddce73a49c57969179da3ed895197b0645b7d1ad2ff",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@sveltejs/adapter-static",
+          "specifiers": [
+            "adapter"
+          ]
+        },
+        {
+          "source": "@sveltejs/vite-plugin-svelte",
+          "specifiers": [
+            "vitePreprocess"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/tsconfig.json": {
+      "filePath": "apps/dashboard/tsconfig.json",
+      "contentHash": "1ce3c20e2568587932750a1623077d719cba6fce714014a48e7ce477c7e4b81f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "apps/dashboard/vite.config.ts": {
+      "filePath": "apps/dashboard/vite.config.ts",
+      "contentHash": "ce227a069834a9e6f269416c110f92a4ed0e1cda2f881666e143566b484dc3e2",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "@sveltejs/kit/vite",
+          "specifiers": [
+            "sveltekit"
+          ]
+        },
+        {
+          "source": "@tailwindcss/vite",
+          "specifiers": [
+            "tailwindcss"
+          ]
+        },
+        {
+          "source": "vite",
+          "specifiers": [
+            "defineConfig"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/CHANGELOG.md": {
+      "filePath": "bindings/hyperinfer-langchain/CHANGELOG.md",
+      "contentHash": "ffa6523732d15e04f299253b7520b8c4c729637d434388735a39f2682c2ae5ef",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/package.json": {
+      "filePath": "bindings/hyperinfer-langchain/package.json",
+      "contentHash": "754e4ed3109a19e2aee59b9991e81aa8e35c28faa263164666c34e1cd8944526",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/pyproject.toml": {
+      "filePath": "bindings/hyperinfer-langchain/pyproject.toml",
+      "contentHash": "d49fae9341f8a2df550c6280da9b1f31cb36850e364c5c43af30e75a9e3db876",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 30,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/README.md": {
+      "filePath": "bindings/hyperinfer-langchain/README.md",
+      "contentHash": "a68a79ae7f2eb663b8e6afe5594a0568d67f9666c00dfc9035fbc42729a1c83b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 46,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/src/hyperinfer_langchain/__init__.py": {
+      "filePath": "bindings/hyperinfer-langchain/src/hyperinfer_langchain/__init__.py",
+      "contentHash": "9a6a7ae96e4355ba040fb73d452428c1c42917d014ba38e57806f9d94113f1e9",
+      "functions": [
+        {
+          "name": "_format_messages",
+          "params": [
+            "messages"
+          ],
+          "returnType": "list[dict[str, Any]]",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "_run_sync",
+          "params": [
+            "coro"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "HyperInferChatModel",
+          "methods": [
+            "_llm_type",
+            "_generate",
+            "_agenerate",
+            "_stream",
+            "_astream",
+            "from_config"
+          ],
+          "properties": [
+            "client",
+            "model",
+            "virtual_key",
+            "temperature",
+            "max_tokens"
+          ],
+          "exported": true,
+          "lineCount": 192
+        }
+      ],
+      "imports": [
+        {
+          "source": "asyncio",
+          "specifiers": [
+            "asyncio"
+          ]
+        },
+        {
+          "source": "concurrent.futures",
+          "specifiers": [
+            "concurrent.futures"
+          ]
+        },
+        {
+          "source": "queue",
+          "specifiers": [
+            "queue"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "AsyncIterator",
+            "Iterator"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "cast"
+          ]
+        },
+        {
+          "source": "hyperinfer",
+          "specifiers": [
+            "Client",
+            "Config"
+          ]
+        },
+        {
+          "source": "langchain_community.adapters.openai",
+          "specifiers": [
+            "convert_message_to_dict"
+          ]
+        },
+        {
+          "source": "langchain_core.callbacks.manager",
+          "specifiers": [
+            "AsyncCallbackManagerForLLMRun",
+            "CallbackManagerForLLMRun"
+          ]
+        },
+        {
+          "source": "langchain_core.language_models.chat_models",
+          "specifiers": [
+            "BaseChatModel"
+          ]
+        },
+        {
+          "source": "langchain_core.messages",
+          "specifiers": [
+            "AIMessage",
+            "AIMessageChunk",
+            "BaseMessage"
+          ]
+        },
+        {
+          "source": "langchain_core.outputs",
+          "specifiers": [
+            "ChatGeneration",
+            "ChatGenerationChunk",
+            "ChatResult"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "Field"
+          ]
+        }
+      ],
+      "exports": [
+        "_format_messages",
+        "_run_sync",
+        "HyperInferChatModel"
+      ],
+      "totalLines": 246,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/tests/conftest.py": {
+      "filePath": "bindings/hyperinfer-langchain/tests/conftest.py",
+      "contentHash": "dc03c2c4da1ed3299cdd8493fd205d730bd8a0923e0d235ad5fd2849522c21a7",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-langchain/tests/test_langchain.py": {
+      "filePath": "bindings/hyperinfer-langchain/tests/test_langchain.py",
+      "contentHash": "15e76df89e6ef6417a5c380550d145c659c90eb9b76cfac0dc32d04160491ae7",
+      "functions": [],
+      "classes": [
+        {
+          "name": "TestRunSyncBridge",
+          "methods": [
+            "test_generate_safe_inside_running_loop",
+            "test_stream_safe_inside_running_loop"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 26
+        },
+        {
+          "name": "TestHyperInferChatModel",
+          "methods": [
+            "test_llm_type",
+            "test_default_attributes",
+            "test_custom_attributes",
+            "test_agenerate_with_human_message",
+            "test_agenerate_with_system_message",
+            "test_agenerate_with_ai_message",
+            "test_generate_sync",
+            "test_agenerate_with_temperature",
+            "test_agenerate_with_max_tokens",
+            "test_from_config"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 164
+        },
+        {
+          "name": "TestHyperInferChatModelStreaming",
+          "methods": [
+            "test_astream_yields_chunks",
+            "test_astream_concatenates_to_full_response",
+            "test_astream_propagates_errors"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 101
+        }
+      ],
+      "imports": [
+        {
+          "source": "unittest.mock",
+          "specifiers": [
+            "AsyncMock",
+            "MagicMock",
+            "patch"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "hyperinfer_langchain",
+          "specifiers": [
+            "HyperInferChatModel"
+          ]
+        },
+        {
+          "source": "langchain_core.messages",
+          "specifiers": [
+            "AIMessage",
+            "HumanMessage",
+            "SystemMessage"
+          ]
+        },
+        {
+          "source": "langchain_core.outputs",
+          "specifiers": [
+            "ChatGenerationChunk"
+          ]
+        }
+      ],
+      "exports": [
+        "TestRunSyncBridge",
+        "TestHyperInferChatModel",
+        "TestHyperInferChatModelStreaming"
+      ],
+      "totalLines": 306,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/CHANGELOG.md": {
+      "filePath": "bindings/hyperinfer-llamaindex/CHANGELOG.md",
+      "contentHash": "6b35e96c50746c6bda28957d7332999c0e33e6ef780713815d2faafbef70360e",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/package.json": {
+      "filePath": "bindings/hyperinfer-llamaindex/package.json",
+      "contentHash": "7c00b1272095d4ae31ebeb0b3eb5bfe2d0d0d74d871b5c0130a31b4c248bd8e1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/pyproject.toml": {
+      "filePath": "bindings/hyperinfer-llamaindex/pyproject.toml",
+      "contentHash": "7c021f6d8463e0d8b3663b7d622581a1dbaa6acf8cac3458c16fd1ddc6b464b9",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 21,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/README.md": {
+      "filePath": "bindings/hyperinfer-llamaindex/README.md",
+      "contentHash": "53210e6e35c065d9791bd87208cd2a4e282d37f9d1dca72e8377041f69833f6b",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/src/hyperinfer_llamaindex/__init__.py": {
+      "filePath": "bindings/hyperinfer-llamaindex/src/hyperinfer_llamaindex/__init__.py",
+      "contentHash": "06b6c1842d0551b8fe6ae5484eb270cd06e7d6ddcaec71f384aee21b4c9e8bd2",
+      "functions": [
+        {
+          "name": "_run_sync",
+          "params": [
+            "coro"
+          ],
+          "returnType": "Any",
+          "exported": true,
+          "lineCount": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "HyperInferLLM",
+          "methods": [
+            "metadata",
+            "complete",
+            "_acomplete",
+            "stream_complete",
+            "astream_complete",
+            "from_config"
+          ],
+          "properties": [
+            "client",
+            "model",
+            "virtual_key",
+            "temperature",
+            "max_tokens",
+            "context_window",
+            "num_output"
+          ],
+          "exported": true,
+          "lineCount": 167
+        }
+      ],
+      "imports": [
+        {
+          "source": "asyncio",
+          "specifiers": [
+            "asyncio"
+          ]
+        },
+        {
+          "source": "concurrent.futures",
+          "specifiers": [
+            "concurrent.futures"
+          ]
+        },
+        {
+          "source": "queue",
+          "specifiers": [
+            "queue"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any",
+            "cast"
+          ]
+        },
+        {
+          "source": "hyperinfer",
+          "specifiers": [
+            "Client",
+            "Config"
+          ]
+        },
+        {
+          "source": "llama_index.core.base.llms.types",
+          "specifiers": [
+            "CompletionResponseAsyncGen",
+            "CompletionResponseGen"
+          ]
+        },
+        {
+          "source": "llama_index.core.llms",
+          "specifiers": [
+            "CompletionResponse",
+            "CustomLLM",
+            "LLMMetadata"
+          ]
+        },
+        {
+          "source": "llama_index.core.llms.callbacks",
+          "specifiers": [
+            "llm_completion_callback"
+          ]
+        },
+        {
+          "source": "pydantic",
+          "specifiers": [
+            "Field"
+          ]
+        }
+      ],
+      "exports": [
+        "_run_sync",
+        "HyperInferLLM"
+      ],
+      "totalLines": 207,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/tests/conftest.py": {
+      "filePath": "bindings/hyperinfer-llamaindex/tests/conftest.py",
+      "contentHash": "a9ba2ba15ebabb0c5c642f64dcd0bd34dd99bf15a045aec9cf3109d0373a4c47",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 2,
+      "hasStructuralAnalysis": true
+    },
+    "bindings/hyperinfer-llamaindex/tests/test_llamaindex.py": {
+      "filePath": "bindings/hyperinfer-llamaindex/tests/test_llamaindex.py",
+      "contentHash": "4e6f19613893c698532841dd097fc0c6036f6744051e756f95d0ef24bd0b7e77",
+      "functions": [],
+      "classes": [
+        {
+          "name": "TestRunSyncBridge",
+          "methods": [
+            "test_complete_safe_inside_running_loop",
+            "test_stream_complete_safe_inside_running_loop"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 42
+        },
+        {
+          "name": "TestHyperInferLLM",
+          "methods": [
+            "test_metadata",
+            "test_default_attributes",
+            "test_custom_attributes",
+            "test_acomplete",
+            "test_acomplete_with_temperature",
+            "test_acomplete_with_max_tokens",
+            "test_acomplete_error_handling",
+            "test_complete_sync",
+            "test_from_config",
+            "test_from_config_custom_redis_url",
+            "test_acomplete_empty_response",
+            "test_acomplete_response_without_message"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 182
+        },
+        {
+          "name": "TestHyperInferLLMStreaming",
+          "methods": [
+            "test_astream_complete_yields_cumulative_text",
+            "test_astream_complete_empty_delta_on_final_chunk",
+            "test_astream_complete_propagates_errors"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 96
+        }
+      ],
+      "imports": [
+        {
+          "source": "unittest.mock",
+          "specifiers": [
+            "AsyncMock",
+            "patch"
+          ]
+        },
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "hyperinfer_llamaindex",
+          "specifiers": [
+            "HyperInferLLM"
+          ]
+        },
+        {
+          "source": "llama_index.core.llms",
+          "specifiers": [
+            "CompletionResponse"
+          ]
+        }
+      ],
+      "exports": [
+        "TestRunSyncBridge",
+        "TestHyperInferLLM",
+        "TestHyperInferLLMStreaming"
+      ],
+      "totalLines": 334,
+      "hasStructuralAnalysis": true
+    },
+    "Cargo.toml": {
+      "filePath": "Cargo.toml",
+      "contentHash": "f807081f26e82a913071befd6b10d3dfaefd6b69be438554431dd1183a4571c2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 18,
+      "hasStructuralAnalysis": true
+    },
+    "cliff.toml": {
+      "filePath": "cliff.toml",
+      "contentHash": "05a1e809f05fa4fcddd7f9d34260c208f6e09daecbf5a7a1b85f68d52d805f4f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/Cargo.toml": {
+      "filePath": "crates/hyperinfer-client/Cargo.toml",
+      "contentHash": "b49c94ce73bfe0d10d72af1ecf51b529e20e029c22838d6d051ef84f5708d1ef",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/CHANGELOG.md": {
+      "filePath": "crates/hyperinfer-client/CHANGELOG.md",
+      "contentHash": "a92f984373304ab2a7d3d676779cd3c44b63cd540b5c98d16fcfc4ada278be04",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/package.json": {
+      "filePath": "crates/hyperinfer-client/package.json",
+      "contentHash": "77ee8c97d35d3ffd975e37e31ba82b6dca9661cd32535b758263ab4325b8a754",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/cache.rs": {
+      "filePath": "crates/hyperinfer-client/src/cache.rs",
+      "contentHash": "c45a516a1fbecf9cb1974efb56001219009863bd173248d51e877f5159d11cfc",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "redis_url",
+            "namespace"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "with_ttl",
+          "params": [
+            "secs"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "cache_key",
+          "params": [
+            "request"
+          ],
+          "returnType": "Option<String>",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "get",
+          "params": [
+            "request"
+          ],
+          "returnType": "Option<ChatResponse>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "set",
+          "params": [
+            "request",
+            "response"
+          ],
+          "exported": true,
+          "lineCount": 28
+        }
+      ],
+      "classes": [
+        {
+          "name": "ExactMatchCache",
+          "methods": [
+            "new",
+            "with_ttl",
+            "cache_key",
+            "get",
+            "set"
+          ],
+          "properties": [
+            "conn",
+            "ttl_secs",
+            "namespace"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatRequest",
+            "ChatResponse"
+          ]
+        },
+        {
+          "source": "redis",
+          "specifiers": [
+            "aio::ConnectionManager",
+            "AsyncCommands"
+          ]
+        },
+        {
+          "source": "sha2",
+          "specifiers": [
+            "Digest",
+            "Sha256"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "Mutex"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "debug",
+            "warn"
+          ]
+        }
+      ],
+      "exports": [
+        "ExactMatchCache",
+        "new",
+        "with_ttl",
+        "cache_key",
+        "get",
+        "set"
+      ],
+      "totalLines": 362,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/http_client.rs": {
+      "filePath": "crates/hyperinfer-client/src/http_client.rs",
+      "contentHash": "d1684c883af83bb60a0db0c792e826b2032db6286c491daeb2e1492853e92354",
+      "functions": [
+        {
+          "name": "drain_lines",
+          "params": [
+            "raw_buf",
+            "lines"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "new",
+          "params": [],
+          "returnType": "Result<Self, reqwest::Error>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "call_openai",
+          "params": [
+            "model",
+            "api_key",
+            "request"
+          ],
+          "returnType": "Result<ChatResponse, HyperInferError>",
+          "exported": true,
+          "lineCount": 70
+        },
+        {
+          "name": "call_anthropic",
+          "params": [
+            "model",
+            "api_key",
+            "request"
+          ],
+          "returnType": "Result<ChatResponse, HyperInferError>",
+          "exported": true,
+          "lineCount": 116
+        },
+        {
+          "name": "stream_openai",
+          "params": [
+            "model",
+            "api_key",
+            "request"
+          ],
+          "returnType": "Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>",
+          "exported": true,
+          "lineCount": 148
+        },
+        {
+          "name": "stream_anthropic",
+          "params": [
+            "model",
+            "api_key",
+            "request"
+          ],
+          "returnType": "Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>",
+          "exported": true,
+          "lineCount": 214
+        }
+      ],
+      "classes": [
+        {
+          "name": "HttpCaller",
+          "methods": [
+            "new",
+            "call_openai",
+            "call_anthropic",
+            "stream_openai",
+            "stream_anthropic"
+          ],
+          "properties": [
+            "client"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "OpenAiResponse",
+          "methods": [],
+          "properties": [
+            "id",
+            "choices",
+            "usage"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "OpenAiChoice",
+          "methods": [],
+          "properties": [
+            "index",
+            "message",
+            "finish_reason"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "Message",
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "UsageDetail",
+          "methods": [],
+          "properties": [
+            "prompt_tokens",
+            "completion_tokens",
+            "total_tokens"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "futures",
+          "specifiers": [
+            "Stream"
+          ]
+        },
+        {
+          "source": "hyperinfer_core::types",
+          "specifiers": [
+            "ChatMessage",
+            "Choice",
+            "MessageRole",
+            "Usage"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatChunk",
+            "ChatRequest",
+            "ChatResponse",
+            "HyperInferError"
+          ]
+        },
+        {
+          "source": "reqwest",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::pin",
+          "specifiers": [
+            "Pin"
+          ]
+        }
+      ],
+      "exports": [
+        "drain_lines",
+        "HttpCaller",
+        "OpenAiResponse",
+        "OpenAiChoice",
+        "Message",
+        "UsageDetail",
+        "new",
+        "call_openai",
+        "call_anthropic",
+        "stream_openai",
+        "stream_anthropic"
+      ],
+      "totalLines": 888,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/lib.rs": {
+      "filePath": "crates/hyperinfer-client/src/lib.rs",
+      "contentHash": "f61a5ccc4d7abbe2e1121cc68f816fa27a2adc76b946c258787c4fbcc801ad72",
+      "functions": [
+        {
+          "name": "account",
+          "params": [],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "drop",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "poll_next",
+          "params": [
+            "self",
+            "cx"
+          ],
+          "returnType": "Poll<Option<Self::Item>>",
+          "exported": false,
+          "lineCount": 29
+        },
+        {
+          "name": "new",
+          "params": [
+            "redis_url",
+            "config"
+          ],
+          "returnType": "Result<Self, HyperInferError>",
+          "exported": true,
+          "lineCount": 32
+        },
+        {
+          "name": "set_mirror",
+          "params": [
+            "cfg"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "inject_provider_registry",
+          "params": [
+            "external_registry"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "chat",
+          "params": [
+            "key",
+            "request"
+          ],
+          "returnType": "Result<ChatResponse, HyperInferError>",
+          "exported": true,
+          "lineCount": 156
+        },
+        {
+          "name": "chat_stream",
+          "params": [
+            "key",
+            "request"
+          ],
+          "returnType": "Result<\n        Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>,\n        HyperInferError,\n    >",
+          "exported": true,
+          "lineCount": 102
+        }
+      ],
+      "classes": [
+        {
+          "name": "AccountedStream",
+          "methods": [
+            "account",
+            "drop",
+            "poll_next"
+          ],
+          "properties": [
+            "inner",
+            "telemetry",
+            "rate_limiter",
+            "key",
+            "model",
+            "start",
+            "input_tokens",
+            "output_tokens",
+            "accounted",
+            "span"
+          ],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "HyperInferClient",
+          "methods": [
+            "new",
+            "set_mirror",
+            "inject_provider_registry",
+            "chat",
+            "chat_stream"
+          ],
+          "properties": [
+            "config",
+            "http_caller",
+            "router",
+            "rate_limiter",
+            "telemetry",
+            "cache",
+            "mirror",
+            "provider_registry"
+          ],
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "imports": [
+        {
+          "source": "cache",
+          "specifiers": [
+            "ExactMatchCache"
+          ]
+        },
+        {
+          "source": "http_client",
+          "specifiers": [
+            "HttpCaller"
+          ]
+        },
+        {
+          "source": "mirroring",
+          "specifiers": [
+            "MirrorConfig",
+            "MirrorHandle"
+          ]
+        },
+        {
+          "source": "router",
+          "specifiers": [
+            "Router"
+          ]
+        },
+        {
+          "source": "telemetry",
+          "specifiers": [
+            "Telemetry"
+          ]
+        },
+        {
+          "source": "telemetry_otlp",
+          "specifiers": [
+            "init_langfuse_telemetry",
+            "init_telemetry",
+            "init_telemetry_with_headers",
+            "set_gen_ai_attributes",
+            "set_gen_ai_response",
+            "set_gen_ai_usage",
+            "shutdown_telemetry"
+          ]
+        },
+        {
+          "source": "futures",
+          "specifiers": [
+            "Stream"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "rate_limiting::RateLimiter",
+            "ChatChunk",
+            "ChatRequest",
+            "ChatResponse",
+            "Config",
+            "HyperInferError"
+          ]
+        },
+        {
+          "source": "hyperinfer_providers",
+          "specifiers": [
+            "ProviderRegistry"
+          ]
+        },
+        {
+          "source": "std::pin",
+          "specifiers": [
+            "Pin"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "std::task",
+          "specifiers": [
+            "Context",
+            "Poll"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "RwLock"
+          ]
+        },
+        {
+          "source": "tracing::Instrument as _",
+          "specifiers": [
+            "tracing::Instrument as _"
+          ]
+        }
+      ],
+      "exports": [
+        "HyperInferClient",
+        "new",
+        "set_mirror",
+        "inject_provider_registry",
+        "chat",
+        "chat_stream"
+      ],
+      "totalLines": 460,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/mirroring.rs": {
+      "filePath": "crates/hyperinfer-client/src/mirroring.rs",
+      "contentHash": "05e2f04cf1b466697eadaa209965a533b8899417e6ad39a624f4975f24b60a10",
+      "functions": [
+        {
+          "name": "mirror_semaphore",
+          "params": [],
+          "returnType": "&'static Arc<Semaphore>",
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "new",
+          "params": [
+            "model",
+            "sample_rate"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "maybe_mirror",
+          "params": [
+            "mirror_handle",
+            "http_caller",
+            "router",
+            "config_snapshot",
+            "_key",
+            "request"
+          ],
+          "exported": true,
+          "lineCount": 102
+        }
+      ],
+      "classes": [
+        {
+          "name": "MirrorConfig",
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "model",
+            "sample_rate"
+          ],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "imports": [
+        {
+          "source": "crate::util",
+          "specifiers": [
+            "rand_f64"
+          ]
+        },
+        {
+          "source": "crate",
+          "specifiers": [
+            "HttpCaller"
+          ]
+        },
+        {
+          "source": "crate",
+          "specifiers": [
+            "Router"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "types::Provider",
+            "ChatRequest",
+            "Config"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc",
+            "OnceLock"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "RwLock",
+            "Semaphore"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "warn"
+          ]
+        }
+      ],
+      "exports": [
+        "MirrorConfig",
+        "new",
+        "maybe_mirror"
+      ],
+      "totalLines": 328,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/router.rs": {
+      "filePath": "crates/hyperinfer-client/src/router.rs",
+      "contentHash": "5f735ebb3f822fa5abcdbe590176b9405c2f949b82962d3bb0018b9ad1996919",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "rules"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "with_aliases",
+          "params": [
+            "aliases"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "with_default_provider",
+          "params": [
+            "provider"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "parse_target_model",
+          "params": [
+            "target"
+          ],
+          "returnType": "Result<(String, Option<Provider>), String>",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "infer_provider",
+          "params": [
+            "model"
+          ],
+          "returnType": "Option<Provider>",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "resolve_provider",
+          "params": [
+            "explicit",
+            "model"
+          ],
+          "returnType": "Option<Provider>",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "resolve",
+          "params": [
+            "model",
+            "_config"
+          ],
+          "returnType": "Option<(String, Provider)>",
+          "exported": true,
+          "lineCount": 9
+        }
+      ],
+      "classes": [
+        {
+          "name": "Router",
+          "methods": [
+            "new",
+            "with_aliases",
+            "with_default_provider",
+            "parse_target_model",
+            "infer_provider",
+            "resolve_provider",
+            "resolve"
+          ],
+          "properties": [
+            "rules",
+            "model_aliases",
+            "default_provider"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "hyperinfer_core::types",
+          "specifiers": [
+            "Config",
+            "Provider"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "warn"
+          ]
+        }
+      ],
+      "exports": [
+        "Router",
+        "new",
+        "with_aliases",
+        "with_default_provider",
+        "resolve"
+      ],
+      "totalLines": 297,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/telemetry_otlp.rs": {
+      "filePath": "crates/hyperinfer-client/src/telemetry_otlp.rs",
+      "contentHash": "9bba5308dada4a1ee6d21df740a91e154317ab330301a747417dd5c80a6f2566",
+      "functions": [
+        {
+          "name": "send_bytes",
+          "params": [
+            "request"
+          ],
+          "returnType": "Result<http::Response<bytes::Bytes>, opentelemetry_http::HttpError>",
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "init_telemetry",
+          "params": [
+            "endpoint"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "init_telemetry_with_headers",
+          "params": [
+            "endpoint",
+            "headers"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 55
+        },
+        {
+          "name": "is_insecure_langfuse_url",
+          "params": [
+            "host"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "init_langfuse_telemetry",
+          "params": [
+            "public_key",
+            "secret_key",
+            "langfuse_host"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "shutdown_telemetry",
+          "params": [],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "set_gen_ai_attributes",
+          "params": [
+            "span",
+            "system",
+            "model",
+            "operation"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "set_gen_ai_usage",
+          "params": [
+            "span",
+            "input_tokens",
+            "output_tokens"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "set_gen_ai_response",
+          "params": [
+            "span",
+            "response_id",
+            "finish_reason"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [
+        {
+          "name": "ReqwestHttpClient",
+          "methods": [
+            "send_bytes"
+          ],
+          "properties": [],
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "imports": [
+        {
+          "source": "opentelemetry",
+          "specifiers": [
+            "global"
+          ]
+        },
+        {
+          "source": "opentelemetry_http",
+          "specifiers": [
+            "HttpClient"
+          ]
+        },
+        {
+          "source": "opentelemetry_sdk::propagation",
+          "specifiers": [
+            "TraceContextPropagator"
+          ]
+        },
+        {
+          "source": "opentelemetry_sdk::trace",
+          "specifiers": [
+            "SdkTracerProvider"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "OnceLock"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "Span"
+          ]
+        },
+        {
+          "source": "tracing_opentelemetry",
+          "specifiers": [
+            "OpenTelemetrySpanExt"
+          ]
+        }
+      ],
+      "exports": [
+        "init_telemetry",
+        "init_telemetry_with_headers",
+        "init_langfuse_telemetry",
+        "shutdown_telemetry",
+        "set_gen_ai_attributes",
+        "set_gen_ai_usage",
+        "set_gen_ai_response"
+      ],
+      "totalLines": 290,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/telemetry.rs": {
+      "filePath": "crates/hyperinfer-client/src/telemetry.rs",
+      "contentHash": "0d967d6cc874bfe75ac9e80a7ee2c60750c4522999964fe4b0bf59399191ecc6",
+      "functions": [
+        {
+          "name": "key_id",
+          "params": [
+            "key"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "new",
+          "params": [
+            "redis_url"
+          ],
+          "returnType": "Result<Self, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "with_stream_key",
+          "params": [
+            "stream_key"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "record",
+          "params": [
+            "key",
+            "model",
+            "response_time_ms"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "record_with_tokens",
+          "params": [
+            "key",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "response_time_ms"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 51
+        }
+      ],
+      "classes": [
+        {
+          "name": "Telemetry",
+          "methods": [
+            "key_id",
+            "new",
+            "with_stream_key",
+            "record",
+            "record_with_tokens"
+          ],
+          "properties": [
+            "manager",
+            "stream_key"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "imports": [
+        {
+          "source": "hex",
+          "specifiers": [
+            "hex"
+          ]
+        },
+        {
+          "source": "sha2",
+          "specifiers": [
+            "Digest",
+            "Sha256"
+          ]
+        },
+        {
+          "source": "std::time",
+          "specifiers": [
+            "SystemTime",
+            "UNIX_EPOCH"
+          ]
+        }
+      ],
+      "exports": [
+        "Telemetry",
+        "new",
+        "with_stream_key",
+        "record",
+        "record_with_tokens"
+      ],
+      "totalLines": 344,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-client/src/util.rs": {
+      "filePath": "crates/hyperinfer-client/src/util.rs",
+      "contentHash": "9039caccc4c92edea3331ffa3bac626abfedf26f70b051d4c6ed812dcb342b1d",
+      "functions": [
+        {
+          "name": "rand_f64",
+          "params": [],
+          "returnType": "f64",
+          "exported": true,
+          "lineCount": 33
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "rand_f64"
+      ],
+      "totalLines": 56,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/Cargo.toml": {
+      "filePath": "crates/hyperinfer-core/Cargo.toml",
+      "contentHash": "054ab118a425e55fe246e506dfe036f5ce3c6c9f716beb12f59a16287821a2e3",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 36,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/CHANGELOG.md": {
+      "filePath": "crates/hyperinfer-core/CHANGELOG.md",
+      "contentHash": "05bef741fd3f9f4c5b2bb68d607956d7d72f7754e8ce1df8b4b4bfb1a943bd64",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/package.json": {
+      "filePath": "crates/hyperinfer-core/package.json",
+      "contentHash": "f72f7867c679c81570d90716a2ba09853303bc695a0b4c22a73fd0465bbf2bd4",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/error.rs": {
+      "filePath": "crates/hyperinfer-core/src/error.rs",
+      "contentHash": "a98118bac9048251c8e782f2b52eb9651b68120b4e04fa2b46639c03236350a3",
+      "functions": [],
+      "classes": [
+        {
+          "name": "HyperInferError",
+          "methods": [],
+          "properties": [
+            "Config",
+            "RateLimit",
+            "Http",
+            "ApiError",
+            "StreamParse",
+            "Database",
+            "Redis",
+            "UnsupportedStreaming"
+          ],
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "DbError",
+          "methods": [],
+          "properties": [
+            "Sqlx",
+            "InvalidUuid",
+            "NotFound",
+            "UniqueViolation",
+            "ValidationError"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "ConfigError",
+          "methods": [],
+          "properties": [
+            "Redis",
+            "Serialization",
+            "Other"
+          ],
+          "exported": true,
+          "lineCount": 8
+        }
+      ],
+      "imports": [
+        {
+          "source": "thiserror",
+          "specifiers": [
+            "Error"
+          ]
+        }
+      ],
+      "exports": [
+        "HyperInferError",
+        "DbError",
+        "ConfigError"
+      ],
+      "totalLines": 58,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/lib.rs": {
+      "filePath": "crates/hyperinfer-core/src/lib.rs",
+      "contentHash": "c23310167c75d897f33ba86a3ef8a59a2c1e0e0006650a27132673a6222e884b",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "error",
+          "specifiers": [
+            "ConfigError",
+            "DbError",
+            "HyperInferError"
+          ]
+        },
+        {
+          "source": "rate_limiting",
+          "specifiers": [
+            "RateLimiter",
+            "USAGE_REQUESTS_KEY_PREFIX",
+            "USAGE_TOKENS_KEY_PREFIX"
+          ]
+        },
+        {
+          "source": "redis",
+          "specifiers": [
+            "PolicyUpdate"
+          ]
+        },
+        {
+          "source": "telemetry_consumer",
+          "specifiers": [
+            "TelemetryConsumer"
+          ]
+        },
+        {
+          "source": "traits",
+          "specifiers": [
+            "ApiKey",
+            "ConfigStore",
+            "Database",
+            "ModelAlias",
+            "Quota",
+            "Team",
+            "UsageLog",
+            "User"
+          ]
+        },
+        {
+          "source": "types",
+          "specifiers": [
+            "ChatChunk",
+            "ChatMessage",
+            "ChatRequest",
+            "ChatResponse",
+            "Choice",
+            "Config",
+            "MessageRole",
+            "Provider",
+            "RoutingRule",
+            "Usage",
+            "UsageRecord"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/rate_limiting.rs": {
+      "filePath": "crates/hyperinfer-core/src/rate_limiting.rs",
+      "contentHash": "32763dbc1f7337d1d22434bff59a4d2fbb095259e1a3a2779df9f8382ce6888f",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "redis_url"
+          ],
+          "returnType": "Result<Self, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "is_allowed",
+          "params": [
+            "key",
+            "amount"
+          ],
+          "returnType": "Result<bool, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 44
+        },
+        {
+          "name": "check_rpm",
+          "params": [
+            "key",
+            "limit"
+          ],
+          "returnType": "Result<(bool, u64), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 24
+        },
+        {
+          "name": "check_tpm",
+          "params": [
+            "key",
+            "limit",
+            "tokens"
+          ],
+          "returnType": "Result<bool, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 31
+        },
+        {
+          "name": "record_usage",
+          "params": [
+            "key",
+            "tokens_used"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 20
+        }
+      ],
+      "classes": [
+        {
+          "name": "TokenBucket",
+          "methods": [],
+          "properties": [
+            "capacity",
+            "tokens",
+            "refill_rate",
+            "last_refill"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "Quota",
+          "methods": [],
+          "properties": [
+            "max_requests_per_minute",
+            "max_tokens_per_minute",
+            "budget_cents"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "RateLimiter",
+          "methods": [
+            "new",
+            "is_allowed",
+            "check_rpm",
+            "check_tpm",
+            "record_usage"
+          ],
+          "properties": [
+            "redis_manager",
+            "default_rpm",
+            "default_tpm"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "redis::aio",
+          "specifiers": [
+            "ConnectionManager"
+          ]
+        },
+        {
+          "source": "redis",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::time",
+          "specifiers": [
+            "Instant"
+          ]
+        }
+      ],
+      "exports": [
+        "TokenBucket",
+        "Quota",
+        "RateLimiter",
+        "new",
+        "is_allowed",
+        "check_rpm",
+        "check_tpm",
+        "record_usage"
+      ],
+      "totalLines": 380,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/redis.rs": {
+      "filePath": "crates/hyperinfer-core/src/redis.rs",
+      "contentHash": "c35549708249212777c66ce08beee271a0d21e1852e3bbc4752ff36574283268",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "redis_url"
+          ],
+          "returnType": "Result<Self, ConfigError>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "subscribe_to_config_updates",
+          "params": [
+            "config"
+          ],
+          "returnType": "Result<tokio::task::JoinHandle<()>, ConfigError>",
+          "exported": true,
+          "lineCount": 68
+        },
+        {
+          "name": "subscribe_to_policy_updates",
+          "params": [
+            "callback"
+          ],
+          "returnType": "Result<tokio::task::JoinHandle<()>, ConfigError>",
+          "exported": true,
+          "lineCount": 56
+        },
+        {
+          "name": "fetch_config",
+          "params": [],
+          "returnType": "Result<Config, ConfigError>",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "publish_config_update",
+          "params": [
+            "config"
+          ],
+          "returnType": "Result<(), ConfigError>",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "publish_policy_update",
+          "params": [
+            "update"
+          ],
+          "returnType": "Result<(), ConfigError>",
+          "exported": true,
+          "lineCount": 15
+        }
+      ],
+      "classes": [
+        {
+          "name": "ConfigUpdate",
+          "methods": [],
+          "properties": [
+            "config"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "PolicyUpdate",
+          "methods": [],
+          "properties": [
+            "key",
+            "action",
+            "reason"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "PolicyAction",
+          "methods": [],
+          "properties": [
+            "Revoke",
+            "Update"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ConfigManager",
+          "methods": [
+            "new",
+            "subscribe_to_config_updates",
+            "subscribe_to_policy_updates",
+            "fetch_config",
+            "publish_config_update",
+            "publish_policy_update"
+          ],
+          "properties": [
+            "client",
+            "manager"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "imports": [
+        {
+          "source": "futures_util::stream",
+          "specifiers": [
+            "StreamExt"
+          ]
+        },
+        {
+          "source": "redis::aio",
+          "specifiers": [
+            "ConnectionManager"
+          ]
+        },
+        {
+          "source": "redis",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "RwLock"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "error",
+            "info"
+          ]
+        },
+        {
+          "source": "crate::error",
+          "specifiers": [
+            "ConfigError"
+          ]
+        },
+        {
+          "source": "crate::types",
+          "specifiers": [
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "ConfigUpdate",
+        "PolicyUpdate",
+        "PolicyAction",
+        "ConfigManager",
+        "new",
+        "subscribe_to_config_updates",
+        "subscribe_to_policy_updates",
+        "fetch_config",
+        "publish_config_update",
+        "publish_policy_update"
+      ],
+      "totalLines": 421,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/telemetry_consumer.rs": {
+      "filePath": "crates/hyperinfer-core/src/telemetry_consumer.rs",
+      "contentHash": "83f6eaea80341cfc026c4ea9ce984411476ed21ea6c090b38164bf2ed2ebe262",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "redis_url"
+          ],
+          "returnType": "Result<Self, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "with_stream_key",
+          "params": [
+            "stream_key"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "with_consumer_group",
+          "params": [
+            "group"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "ensure_consumer_group",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group"
+          ],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": false,
+          "lineCount": 33
+        },
+        {
+          "name": "ack_messages",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group",
+            "msg_ids"
+          ],
+          "returnType": "Result<(), redis::RedisError>",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "ack_messages_with_retry",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group",
+            "msg_ids",
+            "max_retries",
+            "base_delay_ms"
+          ],
+          "returnType": "Result<(), redis::RedisError>",
+          "exported": false,
+          "lineCount": 34
+        },
+        {
+          "name": "do_ack_messages",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group",
+            "msg_ids"
+          ],
+          "returnType": "Result<(), redis::RedisError>",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "process_entry",
+          "params": [
+            "msg_id",
+            "fields",
+            "handler"
+          ],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "extract_string",
+          "params": [
+            "value"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "extract_stream_entries",
+          "params": [
+            "value"
+          ],
+          "returnType": "Result<Vec<StreamEntry>, redis::RedisError>",
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "extract_stream_entry",
+          "params": [
+            "entry_data"
+          ],
+          "returnType": "Result<(String, Vec<(String, String)>), redis::RedisError>",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "extract_fields",
+          "params": [
+            "value"
+          ],
+          "returnType": "Vec<(String, String)>",
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "recover_pending_messages",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group",
+            "consumer_name",
+            "handler"
+          ],
+          "returnType": "Result<(), redis::RedisError>",
+          "exported": false,
+          "lineCount": 87
+        },
+        {
+          "name": "read_and_process_batch",
+          "params": [
+            "conn",
+            "stream_key",
+            "consumer_group",
+            "consumer_name",
+            "handler"
+          ],
+          "returnType": "Result<(), redis::RedisError>",
+          "exported": false,
+          "lineCount": 46
+        },
+        {
+          "name": "start_consuming",
+          "params": [
+            "handler",
+            "cancellation_token"
+          ],
+          "returnType": "Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 115
+        },
+        {
+          "name": "parse_entry",
+          "params": [
+            "msg_id",
+            "fields"
+          ],
+          "returnType": "Option<UsageRecord>",
+          "exported": false,
+          "lineCount": 40
+        },
+        {
+          "name": "read_single_batch",
+          "params": [],
+          "returnType": "Result<Vec<UsageRecord>, Box<dyn std::error::Error + Send + Sync>>",
+          "exported": true,
+          "lineCount": 26
+        }
+      ],
+      "classes": [
+        {
+          "name": "TelemetryConsumer",
+          "methods": [
+            "new",
+            "with_stream_key",
+            "with_consumer_group",
+            "ensure_consumer_group",
+            "ack_messages",
+            "ack_messages_with_retry",
+            "do_ack_messages",
+            "process_entry",
+            "extract_string",
+            "extract_stream_entries",
+            "extract_stream_entry",
+            "extract_fields",
+            "recover_pending_messages",
+            "read_and_process_batch",
+            "start_consuming",
+            "parse_entry",
+            "read_single_batch"
+          ],
+          "properties": [
+            "client",
+            "stream_key",
+            "consumer_group",
+            "consumer_name"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "redis::aio",
+          "specifiers": [
+            "MultiplexedConnection"
+          ]
+        },
+        {
+          "source": "redis",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "tokio_util::sync",
+          "specifiers": [
+            "CancellationToken"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "error",
+            "info",
+            "warn"
+          ]
+        },
+        {
+          "source": "crate::types",
+          "specifiers": [
+            "UsageRecord"
+          ]
+        }
+      ],
+      "exports": [
+        "TelemetryConsumer",
+        "new",
+        "with_stream_key",
+        "with_consumer_group",
+        "start_consuming",
+        "read_single_batch"
+      ],
+      "totalLines": 883,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/traits/config_store.rs": {
+      "filePath": "crates/hyperinfer-core/src/traits/config_store.rs",
+      "contentHash": "49405d84c1b2a9b23ad1a14c5b40935d876d9942c91b35c821e93e325c98a49a",
+      "functions": [],
+      "classes": [
+        {
+          "name": "ConfigStore",
+          "methods": [
+            "fetch_config",
+            "publish_config_update",
+            "publish_policy_update"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "crate::error",
+          "specifiers": [
+            "ConfigError"
+          ]
+        },
+        {
+          "source": "crate::redis",
+          "specifiers": [
+            "PolicyUpdate"
+          ]
+        },
+        {
+          "source": "crate::types",
+          "specifiers": [
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "ConfigStore"
+      ],
+      "totalLines": 13,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/traits/database.rs": {
+      "filePath": "crates/hyperinfer-core/src/traits/database.rs",
+      "contentHash": "e931e7229e953458c3b94dbdc125ce606fc6d2fb510ba79cf781a6dd6daec421",
+      "functions": [],
+      "classes": [
+        {
+          "name": "Database",
+          "methods": [
+            "get_team",
+            "create_team",
+            "get_user",
+            "get_user_by_email",
+            "create_user",
+            "update_password_hash",
+            "count_users_by_role",
+            "get_api_key",
+            "get_api_key_by_hash",
+            "create_api_key",
+            "deactivate_api_key",
+            "get_model_alias",
+            "create_model_alias",
+            "get_quota",
+            "create_quota",
+            "record_usage"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 50
+        },
+        {
+          "name": "Team",
+          "methods": [],
+          "properties": [
+            "id",
+            "name",
+            "budget_cents",
+            "created_at",
+            "updated_at"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "User",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "email",
+            "role",
+            "password_hash",
+            "created_at"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "ApiKey",
+          "methods": [],
+          "properties": [
+            "id",
+            "key_hash",
+            "user_id",
+            "team_id",
+            "name",
+            "is_active",
+            "created_at",
+            "expires_at"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "ModelAlias",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "alias",
+            "target_model",
+            "provider",
+            "created_at"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "Quota",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "rpm_limit",
+            "tpm_limit",
+            "updated_at"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "UsageLog",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "api_key_id",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "response_time_ms",
+            "recorded_at"
+          ],
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "imports": [
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "chrono",
+          "specifiers": [
+            "DateTime",
+            "Utc"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "crate::error",
+          "specifiers": [
+            "DbError"
+          ]
+        }
+      ],
+      "exports": [
+        "Database",
+        "Team",
+        "User",
+        "ApiKey",
+        "ModelAlias",
+        "Quota",
+        "UsageLog"
+      ],
+      "totalLines": 121,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/traits/mod.rs": {
+      "filePath": "crates/hyperinfer-core/src/traits/mod.rs",
+      "contentHash": "8b23755f133d4d14df342c594c87a3e36acab2f31ee0901cf1e4f102e31d7960",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "config_store",
+          "specifiers": [
+            "ConfigStore"
+          ]
+        },
+        {
+          "source": "database",
+          "specifiers": [
+            "ApiKey",
+            "Database",
+            "ModelAlias",
+            "Quota",
+            "Team",
+            "UsageLog",
+            "User"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 6,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/src/types.rs": {
+      "filePath": "crates/hyperinfer-core/src/types.rs",
+      "contentHash": "23a91413e1062c50188916132001a05bb140ea46cfdea37b8a122b9566601965",
+      "functions": [
+        {
+          "name": "validate",
+          "params": [],
+          "returnType": "Result<(), crate::HyperInferError>",
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "fmt",
+          "params": [
+            "f"
+          ],
+          "returnType": "std::fmt::Result",
+          "exported": false,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "ChatRequest",
+          "methods": [
+            "validate"
+          ],
+          "properties": [
+            "model",
+            "messages",
+            "temperature",
+            "max_tokens",
+            "stream",
+            "stop"
+          ],
+          "exported": true,
+          "lineCount": 14
+        },
+        {
+          "name": "ChatChunk",
+          "methods": [],
+          "properties": [
+            "id",
+            "model",
+            "delta",
+            "finish_reason",
+            "usage"
+          ],
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "ChatMessage",
+          "methods": [],
+          "properties": [
+            "role",
+            "content"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "MessageRole",
+          "methods": [],
+          "properties": [
+            "System",
+            "User",
+            "Assistant"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "TokenBucket",
+          "methods": [],
+          "properties": [
+            "capacity",
+            "tokens",
+            "refill_rate",
+            "last_refill"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "Config",
+          "methods": [],
+          "properties": [
+            "api_keys",
+            "routing_rules",
+            "quotas",
+            "model_aliases",
+            "default_provider"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "RoutingRule",
+          "methods": [],
+          "properties": [
+            "name",
+            "priority",
+            "fallback_models"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "Quota",
+          "methods": [],
+          "properties": [
+            "max_requests_per_minute",
+            "max_tokens_per_minute",
+            "budget_cents"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "Provider",
+          "methods": [
+            "fmt"
+          ],
+          "properties": [
+            "OpenAI",
+            "Anthropic",
+            "Other"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "Usage",
+          "methods": [],
+          "properties": [
+            "input_tokens",
+            "output_tokens"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "UsageRecord",
+          "methods": [],
+          "properties": [
+            "key",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "response_time_ms",
+            "timestamp",
+            "msg_id"
+          ],
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "Choice",
+          "methods": [],
+          "properties": [
+            "index",
+            "message",
+            "finish_reason"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "ChatResponse",
+          "methods": [],
+          "properties": [
+            "id",
+            "model",
+            "choices",
+            "usage"
+          ],
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "imports": [
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::collections",
+          "specifiers": [
+            "HashMap"
+          ]
+        },
+        {
+          "source": "std::time",
+          "specifiers": [
+            "Instant"
+          ]
+        }
+      ],
+      "exports": [
+        "ChatRequest",
+        "ChatChunk",
+        "validate",
+        "ChatMessage",
+        "MessageRole",
+        "TokenBucket",
+        "Config",
+        "RoutingRule",
+        "Quota",
+        "Provider",
+        "Usage",
+        "UsageRecord",
+        "Choice",
+        "ChatResponse"
+      ],
+      "totalLines": 535,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/tests/rate_limiting-integration.rs": {
+      "filePath": "crates/hyperinfer-core/tests/rate_limiting-integration.rs",
+      "contentHash": "746a368772a0dd3b5daffd6bee0185faafa8f3a4cc567c6bc350aa8cf1d664a8",
+      "functions": [
+        {
+          "name": "setup_redis",
+          "params": [],
+          "returnType": "(String, testcontainers::ContainerAsync<GenericImage>)",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "test_rate_limiter_new",
+          "params": [],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "test_rate_limiter_is_allowed",
+          "params": [],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "test_rate_limiter_is_allowed_blocking",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "test_rate_limiter_check_rpm",
+          "params": [],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "test_rate_limiter_check_tpm",
+          "params": [],
+          "exported": false,
+          "lineCount": 19
+        },
+        {
+          "name": "test_rate_limiter_record_usage",
+          "params": [],
+          "exported": false,
+          "lineCount": 46
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "RateLimiter",
+            "USAGE_REQUESTS_KEY_PREFIX",
+            "USAGE_TOKENS_KEY_PREFIX"
+          ]
+        },
+        {
+          "source": "std::time",
+          "specifiers": [
+            "SystemTime",
+            "UNIX_EPOCH"
+          ]
+        },
+        {
+          "source": "testcontainers",
+          "specifiers": [
+            "core::IntoContainerPort",
+            "runners::AsyncRunner",
+            "GenericImage"
+          ]
+        },
+        {
+          "source": "testcontainers_modules::redis",
+          "specifiers": [
+            "REDIS_PORT"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 169,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-core/tests/telemetry-integration.rs": {
+      "filePath": "crates/hyperinfer-core/tests/telemetry-integration.rs",
+      "contentHash": "b4fd0aaf2c5d5e12774982e9618d65be9221580b21d3af2c0dfa35fd067189d1",
+      "functions": [
+        {
+          "name": "init_tracing",
+          "params": [],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "setup_redis",
+          "params": [],
+          "returnType": "(String, testcontainers::ContainerAsync<GenericImage>)",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "test_telemetry_consumer_new",
+          "params": [],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "test_telemetry_consumer_with_custom_settings",
+          "params": [],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "test_telemetry_consumer_read_empty_stream",
+          "params": [],
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "test_telemetry_consumer_read_records",
+          "params": [],
+          "exported": false,
+          "lineCount": 76
+        },
+        {
+          "name": "test_telemetry_consumer_with_custom_stream",
+          "params": [],
+          "exported": false,
+          "lineCount": 45
+        },
+        {
+          "name": "test_telemetry_consumer_start_consuming",
+          "params": [],
+          "exported": false,
+          "lineCount": 77
+        },
+        {
+          "name": "test_telemetry_consumer_handles_malformed_data",
+          "params": [],
+          "exported": false,
+          "lineCount": 57
+        },
+        {
+          "name": "test_telemetry_consumer_large_batch",
+          "params": [],
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "test_telemetry_consumer_zero_tokens",
+          "params": [],
+          "exported": false,
+          "lineCount": 44
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "TelemetryConsumer",
+            "UsageRecord"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Once"
+          ]
+        },
+        {
+          "source": "testcontainers",
+          "specifiers": [
+            "core::IntoContainerPort",
+            "runners::AsyncRunner",
+            "GenericImage"
+          ]
+        },
+        {
+          "source": "testcontainers_modules::redis",
+          "specifiers": [
+            "REDIS_PORT"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 429,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/Cargo.toml": {
+      "filePath": "crates/hyperinfer-providers/Cargo.toml",
+      "contentHash": "67acb7e99da39e1d536af650f8bcb6cbc1a087897a09df31c318b76bcba82312",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 26,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/src/anthropic.rs": {
+      "filePath": "crates/hyperinfer-providers/src/anthropic.rs",
+      "contentHash": "9362b69d541ffb61054b93c7f60021d7113a206702749c04d7a66afddba8a17d",
+      "functions": [
+        {
+          "name": "build_anthropic_request_body",
+          "params": [
+            "request",
+            "stream"
+          ],
+          "returnType": "(\n    Option<String>,\n    Vec<serde_json::Value>,\n    serde_json::Map<String, serde_json::Value>,\n)",
+          "exported": false,
+          "lineCount": 60
+        },
+        {
+          "name": "new",
+          "params": [],
+          "returnType": "Result<Self, reqwest::Error>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "clone",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "&'static str",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "base_url",
+          "params": [],
+          "returnType": "&'static str",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "chat",
+          "params": [
+            "request",
+            "api_key"
+          ],
+          "returnType": "Result<ChatResponse, HyperInferError>",
+          "exported": false,
+          "lineCount": 74
+        },
+        {
+          "name": "stream",
+          "params": [
+            "request",
+            "api_key"
+          ],
+          "returnType": "Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>",
+          "exported": false,
+          "lineCount": 153
+        }
+      ],
+      "classes": [
+        {
+          "name": "AnthropicProvider",
+          "methods": [
+            "new",
+            "clone",
+            "name",
+            "base_url",
+            "chat",
+            "stream"
+          ],
+          "properties": [
+            "http_client",
+            "base_url"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "imports": [
+        {
+          "source": "super::provider_trait",
+          "specifiers": [
+            "LlmProvider"
+          ]
+        },
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "futures",
+          "specifiers": [
+            "Stream",
+            "StreamExt"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatChunk",
+            "ChatMessage",
+            "ChatRequest",
+            "ChatResponse",
+            "Choice",
+            "HyperInferError",
+            "MessageRole",
+            "Usage"
+          ]
+        },
+        {
+          "source": "reqwest",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "std::pin",
+          "specifiers": [
+            "Pin"
+          ]
+        }
+      ],
+      "exports": [
+        "AnthropicProvider",
+        "new"
+      ],
+      "totalLines": 359,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/src/lib.rs": {
+      "filePath": "crates/hyperinfer-providers/src/lib.rs",
+      "contentHash": "199badbab6331c7abf9605ab5845e703d3d53fa944821ee2197e1a5222fca50c",
+      "functions": [
+        {
+          "name": "drain_lines",
+          "params": [
+            "raw_buf",
+            "lines"
+          ],
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "init_default_registry",
+          "params": [
+            "registry"
+          ],
+          "exported": true,
+          "lineCount": 19
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "provider_trait",
+          "specifiers": [
+            "LlmProvider"
+          ]
+        },
+        {
+          "source": "registry",
+          "specifiers": [
+            "ProviderRegistry"
+          ]
+        }
+      ],
+      "exports": [
+        "drain_lines",
+        "init_default_registry"
+      ],
+      "totalLines": 159,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/src/openai.rs": {
+      "filePath": "crates/hyperinfer-providers/src/openai.rs",
+      "contentHash": "9ad99a0fc2bfbac880cc75d11ae32c00759081f631a583bdea5b1b49d935f662",
+      "functions": [
+        {
+          "name": "new",
+          "params": [],
+          "returnType": "Result<Self, reqwest::Error>",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "clone",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "chat_request_to_openai_body",
+          "params": [
+            "request"
+          ],
+          "returnType": "serde_json::Value",
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "&'static str",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "base_url",
+          "params": [],
+          "returnType": "&'static str",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "chat",
+          "params": [
+            "request",
+            "api_key"
+          ],
+          "returnType": "Result<ChatResponse, HyperInferError>",
+          "exported": false,
+          "lineCount": 88
+        },
+        {
+          "name": "stream",
+          "params": [
+            "request",
+            "api_key"
+          ],
+          "returnType": "Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send + 'static>>",
+          "exported": false,
+          "lineCount": 147
+        }
+      ],
+      "classes": [
+        {
+          "name": "OpenAiProvider",
+          "methods": [
+            "new",
+            "clone",
+            "name",
+            "base_url",
+            "chat",
+            "stream"
+          ],
+          "properties": [
+            "http_client",
+            "base_url"
+          ],
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "imports": [
+        {
+          "source": "super::provider_trait",
+          "specifiers": [
+            "LlmProvider"
+          ]
+        },
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "futures",
+          "specifiers": [
+            "Stream",
+            "StreamExt"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatChunk",
+            "ChatMessage",
+            "ChatRequest",
+            "ChatResponse",
+            "Choice",
+            "HyperInferError",
+            "MessageRole",
+            "Usage"
+          ]
+        },
+        {
+          "source": "reqwest",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "std::pin",
+          "specifiers": [
+            "Pin"
+          ]
+        }
+      ],
+      "exports": [
+        "OpenAiProvider",
+        "new"
+      ],
+      "totalLines": 322,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/src/provider_trait.rs": {
+      "filePath": "crates/hyperinfer-providers/src/provider_trait.rs",
+      "contentHash": "94dbd09b1a3f147454d742b74768140ca992713eae3fe085b9438f9ffb7c5404",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "provider"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "into_stream",
+          "params": [
+            "request",
+            "api_key"
+          ],
+          "returnType": "Pin<\n        Box<\n            dyn Stream<Item = Result<ChatChunk, hyperinfer_core::HyperInferError>> + Send + 'static,\n        >,\n    >",
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [
+        {
+          "name": "LlmProvider",
+          "methods": [
+            "name",
+            "chat",
+            "stream",
+            "base_url",
+            "supports_streaming",
+            "health_check"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 43
+        },
+        {
+          "name": "StreamingProvider",
+          "methods": [
+            "new",
+            "into_stream"
+          ],
+          "properties": [
+            "inner"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "futures",
+          "specifiers": [
+            "Stream"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatChunk",
+            "ChatRequest",
+            "ChatResponse"
+          ]
+        },
+        {
+          "source": "std::pin",
+          "specifiers": [
+            "Pin"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "LlmProvider",
+        "StreamingProvider",
+        "new",
+        "into_stream"
+      ],
+      "totalLines": 77,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-providers/src/registry.rs": {
+      "filePath": "crates/hyperinfer-providers/src/registry.rs",
+      "contentHash": "3c19473ce70da31df9d4b4d646e679d827aa5113507f18a419a403deaef90d91",
+      "functions": [
+        {
+          "name": "new",
+          "params": [],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "register",
+          "params": [
+            "provider"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "register_arc_if_absent",
+          "params": [
+            "name",
+            "provider"
+          ],
+          "returnType": "Result<(), Arc<str>>",
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "get",
+          "params": [
+            "name"
+          ],
+          "returnType": "Option<Arc<dyn crate::provider_trait::LlmProvider>>",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "list",
+          "params": [],
+          "returnType": "Vec<Arc<str>>",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "contains",
+          "params": [
+            "name"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "unregister",
+          "params": [
+            "name"
+          ],
+          "returnType": "Option<Arc<dyn crate::provider_trait::LlmProvider>>",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "get_streaming",
+          "params": [
+            "name"
+          ],
+          "returnType": "Option<crate::provider_trait::StreamingProvider>",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "default",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "clone",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 5
+        }
+      ],
+      "classes": [
+        {
+          "name": "ProviderRegistry",
+          "methods": [
+            "new",
+            "register",
+            "register_arc_if_absent",
+            "get",
+            "list",
+            "contains",
+            "unregister",
+            "get_streaming",
+            "default",
+            "clone"
+          ],
+          "properties": [
+            "providers"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "std::collections",
+          "specifiers": [
+            "HashMap"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "RwLock"
+          ]
+        }
+      ],
+      "exports": [
+        "ProviderRegistry",
+        "new",
+        "register",
+        "register_arc_if_absent",
+        "get",
+        "list",
+        "contains",
+        "unregister",
+        "get_streaming"
+      ],
+      "totalLines": 302,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/Cargo.toml": {
+      "filePath": "crates/hyperinfer-python/Cargo.toml",
+      "contentHash": "718bb00e62e59edaf141376b9a94ac48cd6ef30aeca504e02ef18086ac0833b2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 25,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/CHANGELOG.md": {
+      "filePath": "crates/hyperinfer-python/CHANGELOG.md",
+      "contentHash": "586ca9bfc323889bbb09c47d54219be225956bac7d40eab5ecd6bf8cb593f503",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 11,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/package.json": {
+      "filePath": "crates/hyperinfer-python/package.json",
+      "contentHash": "f453d06529763bf62671ce0d45f207b854040772862ecd513d6161d47dc4a763",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/pyproject.toml": {
+      "filePath": "crates/hyperinfer-python/pyproject.toml",
+      "contentHash": "4b7df48b1d76a33f34c3c8237d31d4c2b104aea765a5bae9fb7f15063c83a603",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/python/hyperinfer/__init__.py": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/__init__.py",
+      "contentHash": "23d75ecfefe30c4c46113f698e16e9dbec302e171dbe53f63275f9684fcc3263",
+      "functions": [
+        {
+          "name": "__getattr__",
+          "params": [
+            "name"
+          ],
+          "returnType": "type[\"HyperInferClient\"]",
+          "exported": true,
+          "lineCount": 12
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING"
+          ]
+        },
+        {
+          "source": "hyperinfer.client",
+          "specifiers": [
+            "Client"
+          ]
+        },
+        {
+          "source": "hyperinfer.config",
+          "specifiers": [
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "__getattr__"
+      ],
+      "totalLines": 28,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/python/hyperinfer/_hyperinfer.pyi": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/_hyperinfer.pyi",
+      "contentHash": "606201745e542a46dcad923f7a26f6164670d87a2af54e2c5fb6e4a94145872b",
+      "functions": [
+        {
+          "name": "init_langfuse_telemetry",
+          "params": [
+            "public_key",
+            "secret_key",
+            "langfuse_host"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "shutdown_telemetry",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "HyperInferClient",
+          "methods": [
+            "__init__",
+            "init",
+            "chat",
+            "chat_stream",
+            "set_mirror",
+            "close"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 114
+        },
+        {
+          "name": "ChunkStream",
+          "methods": [
+            "__aiter__",
+            "__anext__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "AsyncIterator"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "init_langfuse_telemetry",
+        "shutdown_telemetry",
+        "HyperInferClient",
+        "ChunkStream"
+      ],
+      "totalLines": 160,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/python/hyperinfer/client.py": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/client.py",
+      "contentHash": "23b30eeaf0b8acf960b7f43b8c99c56caa8c9a008d6c3c62ec35a885864cfa17",
+      "functions": [
+        {
+          "name": "__getattr__",
+          "params": [
+            "name"
+          ],
+          "returnType": "type[\"HyperInferClient\"]",
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "Client",
+          "methods": [
+            "__init__",
+            "init",
+            "chat",
+            "stream",
+            "set_mirror",
+            "__aenter__",
+            "close",
+            "__aexit__"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 149
+        }
+      ],
+      "imports": [
+        {
+          "source": "asyncio",
+          "specifiers": [
+            "asyncio"
+          ]
+        },
+        {
+          "source": "collections.abc",
+          "specifiers": [
+            "AsyncIterator"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "TYPE_CHECKING",
+            "Any"
+          ]
+        },
+        {
+          "source": "hyperinfer.config",
+          "specifiers": [
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "__getattr__",
+        "Client"
+      ],
+      "totalLines": 172,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/python/hyperinfer/config.py": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/config.py",
+      "contentHash": "57338d67de16208c35dc36cb720e483642cecca86d347874ffd3b82acb061cb7",
+      "functions": [],
+      "classes": [
+        {
+          "name": "Config",
+          "methods": [
+            "__init__",
+            "with_api_key",
+            "with_alias",
+            "with_routing_rule",
+            "with_quota",
+            "with_default_provider",
+            "to_dict"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 118
+        }
+      ],
+      "imports": [
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        }
+      ],
+      "exports": [
+        "Config"
+      ],
+      "totalLines": 124,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/python/hyperinfer/py.typed": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/py.typed",
+      "contentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": false
+    },
+    "crates/hyperinfer-python/python/hyperinfer/telemetry.py": {
+      "filePath": "crates/hyperinfer-python/python/hyperinfer/telemetry.py",
+      "contentHash": "245df76de7f0bebfaeaab0debc4ffc9d61adc5560a89b0855d7e92b3c152099c",
+      "functions": [
+        {
+          "name": "init_langfuse_telemetry",
+          "params": [
+            "public_key",
+            "secret_key",
+            "langfuse_host"
+          ],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "shutdown_telemetry",
+          "params": [],
+          "returnType": "None",
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "classes": [],
+      "imports": [],
+      "exports": [
+        "init_langfuse_telemetry",
+        "shutdown_telemetry"
+      ],
+      "totalLines": 15,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/README.md": {
+      "filePath": "crates/hyperinfer-python/README.md",
+      "contentHash": "295640cc23f9ccc0050bf1a95aed8ac49f99adbb2b385a89836d4f9bc504afe2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 10,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/src/client.rs": {
+      "filePath": "crates/hyperinfer-python/src/client.rs",
+      "contentHash": "710730c6aa657487d34e798a0d322d611005793b245182f81f4c7f3ab9596fc2",
+      "functions": [
+        {
+          "name": "parse_routing_rules",
+          "params": [
+            "dict"
+          ],
+          "returnType": "PyResult<Vec<RoutingRule>>",
+          "exported": false,
+          "lineCount": 31
+        },
+        {
+          "name": "parse_quotas",
+          "params": [
+            "dict"
+          ],
+          "returnType": "PyResult<HashMap<String, Quota>>",
+          "exported": false,
+          "lineCount": 34
+        },
+        {
+          "name": "config_from_py",
+          "params": [
+            "py",
+            "obj"
+          ],
+          "returnType": "PyResult<Config>",
+          "exported": false,
+          "lineCount": 58
+        },
+        {
+          "name": "__aiter__",
+          "params": [
+            "slf"
+          ],
+          "returnType": "PyRef<'_, Self>",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "__anext__",
+          "params": [
+            "py"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "create_client",
+          "params": [
+            "redis_url",
+            "inner",
+            "config_dict"
+          ],
+          "returnType": "Result<RustClient, PyErr>",
+          "exported": false,
+          "lineCount": 45
+        },
+        {
+          "name": "store_and_clear",
+          "params": [
+            "client",
+            "inner",
+            "config_dict"
+          ],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "new",
+          "params": [
+            "redis_url",
+            "config"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "init",
+          "params": [
+            "py"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "init_with_registry",
+          "params": [
+            "py",
+            "registry_wrapper"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "set_mirror",
+          "params": [
+            "py",
+            "model",
+            "sample_rate"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": true,
+          "lineCount": 33
+        },
+        {
+          "name": "chat",
+          "params": [
+            "py",
+            "key",
+            "request"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": true,
+          "lineCount": 38
+        },
+        {
+          "name": "chat_stream",
+          "params": [
+            "py",
+            "key",
+            "request"
+          ],
+          "returnType": "PyResult<Bound<'a, PyAny>>",
+          "exported": true,
+          "lineCount": 59
+        }
+      ],
+      "classes": [
+        {
+          "name": "ChunkStream",
+          "methods": [
+            "__aiter__",
+            "__anext__"
+          ],
+          "properties": [
+            "rx"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "HyperInferClient",
+          "methods": [
+            "new",
+            "init",
+            "init_with_registry",
+            "set_mirror",
+            "chat",
+            "chat_stream"
+          ],
+          "properties": [
+            "inner",
+            "redis_url",
+            "config_dict"
+          ],
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "imports": [
+        {
+          "source": "futures",
+          "specifiers": [
+            "StreamExt"
+          ]
+        },
+        {
+          "source": "hyperinfer_client::HyperInferClient as RustClient",
+          "specifiers": [
+            "hyperinfer_client::HyperInferClient as RustClient"
+          ]
+        },
+        {
+          "source": "hyperinfer_core::types",
+          "specifiers": [
+            "Quota"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatChunk",
+            "ChatResponse",
+            "Config",
+            "HyperInferError",
+            "RoutingRule"
+          ]
+        },
+        {
+          "source": "pyo3::prelude",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "pyo3::types",
+          "specifiers": [
+            "PyDict",
+            "PyList"
+          ]
+        },
+        {
+          "source": "std::collections",
+          "specifiers": [
+            "HashMap"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "mpsc",
+            "RwLock"
+          ]
+        },
+        {
+          "source": "super::registry_wrapper",
+          "specifiers": [
+            "ProviderRegistryWrapper"
+          ]
+        }
+      ],
+      "exports": [
+        "ChunkStream",
+        "HyperInferClient",
+        "new",
+        "init",
+        "init_with_registry",
+        "set_mirror",
+        "chat",
+        "chat_stream"
+      ],
+      "totalLines": 473,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/src/lib.rs": {
+      "filePath": "crates/hyperinfer-python/src/lib.rs",
+      "contentHash": "e9378f737b41d28c8a5cb41a914911f71a7b68c87a7f92a31a0082ac49303962",
+      "functions": [
+        {
+          "name": "init_langfuse_telemetry",
+          "params": [
+            "public_key",
+            "secret_key",
+            "langfuse_host"
+          ],
+          "returnType": "PyResult<()>",
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "shutdown_telemetry",
+          "params": [],
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "_hyperinfer",
+          "params": [
+            "_py",
+            "m"
+          ],
+          "returnType": "PyResult<()>",
+          "exported": false,
+          "lineCount": 9
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "client",
+          "specifiers": [
+            "ChunkStream",
+            "HyperInferClient"
+          ]
+        },
+        {
+          "source": "registry_wrapper",
+          "specifiers": [
+            "create_provider_registry",
+            "ProviderRegistryWrapper"
+          ]
+        },
+        {
+          "source": "pyo3::prelude",
+          "specifiers": [
+            "*"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 42,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/src/providers.rs": {
+      "filePath": "crates/hyperinfer-python/src/providers.rs",
+      "contentHash": "38710fd72a919553c501c19fc6690fcd3f94d574ae453bc87196c68a83de976e",
+      "functions": [
+        {
+          "name": "new",
+          "params": [
+            "name",
+            "chat_callable",
+            "stream_callable"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "chat",
+          "params": [
+            "py",
+            "request"
+          ],
+          "returnType": "PyResult<hyperinfer_core::ChatResponse>",
+          "exported": true,
+          "lineCount": 40
+        },
+        {
+          "name": "py_dict_to_chat_response",
+          "params": [
+            "dict"
+          ],
+          "returnType": "PyResult<hyperinfer_core::ChatResponse>",
+          "exported": false,
+          "lineCount": 101
+        },
+        {
+          "name": "clone",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "name",
+          "params": [],
+          "returnType": "&str",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "supports_streaming",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "chat",
+          "params": [
+            "request",
+            "_api_key"
+          ],
+          "returnType": "Result<hyperinfer_core::ChatResponse, hyperinfer_core::HyperInferError>",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "stream",
+          "params": [
+            "_request",
+            "_api_key"
+          ],
+          "returnType": "std::pin::Pin<\n        Box<\n            dyn futures::Stream<\n                    Item = Result<hyperinfer_core::ChatChunk, hyperinfer_core::HyperInferError>,\n                > + Send\n                + 'static,\n        >,\n    >",
+          "exported": false,
+          "lineCount": 14
+        }
+      ],
+      "classes": [
+        {
+          "name": "PythonProvider",
+          "methods": [
+            "new",
+            "chat",
+            "py_dict_to_chat_response",
+            "clone",
+            "name",
+            "supports_streaming",
+            "chat",
+            "stream"
+          ],
+          "properties": [
+            "name",
+            "chat_callable",
+            "stream_callable"
+          ],
+          "exported": true,
+          "lineCount": 5
+        }
+      ],
+      "imports": [
+        {
+          "source": "pyo3::prelude",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "pyo3::types",
+          "specifiers": [
+            "PyDict",
+            "PyList"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "PythonProvider",
+        "new",
+        "chat"
+      ],
+      "totalLines": 227,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/src/registry_wrapper.rs": {
+      "filePath": "crates/hyperinfer-python/src/registry_wrapper.rs",
+      "contentHash": "e938bc9d50492042ca730e823b143ff0a85d1cf53b7c8199a1dbb2ee44745ba5",
+      "functions": [
+        {
+          "name": "get_registry",
+          "params": [],
+          "returnType": "Arc<ProviderRegistry>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "new",
+          "params": [],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "register_provider",
+          "params": [
+            "name",
+            "chat_callable",
+            "stream_callable"
+          ],
+          "returnType": "PyResult<()>",
+          "exported": true,
+          "lineCount": 20
+        },
+        {
+          "name": "unregister_provider",
+          "params": [
+            "name"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "list_providers",
+          "params": [],
+          "returnType": "Vec<String>",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "contains",
+          "params": [
+            "name"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "default",
+          "params": [],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "create_provider_registry",
+          "params": [],
+          "returnType": "ProviderRegistryWrapper",
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "classes": [
+        {
+          "name": "ProviderRegistryWrapper",
+          "methods": [
+            "get_registry",
+            "new",
+            "register_provider",
+            "unregister_provider",
+            "list_providers",
+            "contains",
+            "default"
+          ],
+          "properties": [
+            "registry"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "super::providers",
+          "specifiers": [
+            "PythonProvider"
+          ]
+        },
+        {
+          "source": "hyperinfer_providers",
+          "specifiers": [
+            "ProviderRegistry"
+          ]
+        },
+        {
+          "source": "pyo3::prelude",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "ProviderRegistryWrapper",
+        "get_registry",
+        "new",
+        "register_provider",
+        "unregister_provider",
+        "list_providers",
+        "contains",
+        "create_provider_registry"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/src/types.rs": {
+      "filePath": "crates/hyperinfer-python/src/types.rs",
+      "contentHash": "aa8a02569d21913b93dcd24ae384afa9222a9cb805d3a6f6f9dcd9068df2a740",
+      "functions": [
+        {
+          "name": "message_from_py",
+          "params": [
+            "dict"
+          ],
+          "returnType": "PyResult<ChatMessage>",
+          "exported": true,
+          "lineCount": 25
+        },
+        {
+          "name": "request_from_py",
+          "params": [
+            "_py",
+            "obj"
+          ],
+          "returnType": "PyResult<ChatRequest>",
+          "exported": true,
+          "lineCount": 41
+        },
+        {
+          "name": "message_role_to_py",
+          "params": [
+            "py",
+            "role"
+          ],
+          "returnType": "PyResult<Py<PyAny>>",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "response_to_py",
+          "params": [
+            "py",
+            "response"
+          ],
+          "returnType": "PyResult<Py<PyAny>>",
+          "exported": true,
+          "lineCount": 27
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ChatMessage",
+            "ChatRequest",
+            "ChatResponse",
+            "MessageRole"
+          ]
+        },
+        {
+          "source": "pyo3::prelude",
+          "specifiers": [
+            "*"
+          ]
+        },
+        {
+          "source": "pyo3::types",
+          "specifiers": [
+            "PyDict"
+          ]
+        },
+        {
+          "source": "pyo3",
+          "specifiers": [
+            "IntoPyObjectExt"
+          ]
+        },
+        {
+          "source": "pyo3",
+          "specifiers": [
+            "Py"
+          ]
+        }
+      ],
+      "exports": [
+        "message_from_py",
+        "request_from_py",
+        "response_to_py"
+      ],
+      "totalLines": 113,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/tests/integration/__init__.py": {
+      "filePath": "crates/hyperinfer-python/tests/integration/__init__.py",
+      "contentHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 1,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/tests/integration/test_redis_integration.py": {
+      "filePath": "crates/hyperinfer-python/tests/integration/test_redis_integration.py",
+      "contentHash": "8c5dd518ec413238bdcb8bcd3f3266c90de630d93745fe36095f76c5c2aaf304",
+      "functions": [
+        {
+          "name": "redis_container",
+          "params": [],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "redis_url",
+          "params": [
+            "redis_container"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_client_init_connects_to_redis",
+          "params": [
+            "redis_url"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_client_context_manager",
+          "params": [
+            "redis_url"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "test_chat_without_api_key_fails",
+          "params": [
+            "redis_url"
+          ],
+          "exported": true,
+          "lineCount": 18
+        },
+        {
+          "name": "test_stream_without_api_key_fails",
+          "params": [
+            "redis_url"
+          ],
+          "exported": true,
+          "lineCount": 11
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "hyperinfer",
+          "specifiers": [
+            "Client",
+            "Config"
+          ]
+        },
+        {
+          "source": "testcontainers.redis",
+          "specifiers": [
+            "RedisContainer"
+          ]
+        }
+      ],
+      "exports": [
+        "redis_container",
+        "redis_url",
+        "test_client_init_connects_to_redis",
+        "test_client_context_manager",
+        "test_chat_without_api_key_fails",
+        "test_stream_without_api_key_fails"
+      ],
+      "totalLines": 91,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/tests/test_client.py": {
+      "filePath": "crates/hyperinfer-python/tests/test_client.py",
+      "contentHash": "7c757a076cb1d9d27b7809d513af7df5ff80ffecd4e9b17a964592cd9da18bf3",
+      "functions": [],
+      "classes": [
+        {
+          "name": "TestConfig",
+          "methods": [
+            "test_init",
+            "test_with_api_key",
+            "test_with_api_key_multiple_providers",
+            "test_with_alias",
+            "test_with_alias_multiple",
+            "test_with_routing_rule",
+            "test_with_routing_rule_multiple",
+            "test_with_quota_all_params",
+            "test_with_quota_partial_params",
+            "test_with_quota_none_params",
+            "test_with_default_provider",
+            "test_to_dict_empty",
+            "test_to_dict_with_data",
+            "test_fluent_api_chain"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 159
+        }
+      ],
+      "imports": [
+        {
+          "source": "hyperinfer.config",
+          "specifiers": [
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "TestConfig"
+      ],
+      "totalLines": 165,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/tests/test_integration.py": {
+      "filePath": "crates/hyperinfer-python/tests/test_integration.py",
+      "contentHash": "e0390e27a53e693230eb52ed2e4e1ba4d618d5b8628a8b361cccf137cde5072b",
+      "functions": [
+        {
+          "name": "config",
+          "params": [],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "test_config_fluent_api",
+          "params": [],
+          "exported": true,
+          "lineCount": 13
+        },
+        {
+          "name": "test_client_accepts_config",
+          "params": [
+            "config"
+          ],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_client_default_no_config",
+          "params": [],
+          "exported": true,
+          "lineCount": 5
+        },
+        {
+          "name": "test_config_to_dict_completeness",
+          "params": [
+            "config"
+          ],
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "test_config_default_provider_preserved",
+          "params": [],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "test_config_quota_round_trip",
+          "params": [],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "pytest",
+          "specifiers": [
+            "pytest"
+          ]
+        },
+        {
+          "source": "hyperinfer",
+          "specifiers": [
+            "Client",
+            "Config"
+          ]
+        }
+      ],
+      "exports": [
+        "config",
+        "test_config_fluent_api",
+        "test_client_accepts_config",
+        "test_client_default_no_config",
+        "test_config_to_dict_completeness",
+        "test_config_default_provider_preserved",
+        "test_config_quota_round_trip"
+      ],
+      "totalLines": 79,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-python/tests/test_otel.py": {
+      "filePath": "crates/hyperinfer-python/tests/test_otel.py",
+      "contentHash": "1ab0927f9de4cbdc36039d7c14bc01a76879abf17490b8e3c43996f07cca6d02",
+      "functions": [
+        {
+          "name": "_make_basic_auth",
+          "params": [
+            "public_key",
+            "secret_key"
+          ],
+          "returnType": "str",
+          "exported": true,
+          "lineCount": 4
+        }
+      ],
+      "classes": [
+        {
+          "name": "TestLangfuseAuthEncoding",
+          "methods": [
+            "test_basic_auth_format",
+            "test_basic_auth_round_trip",
+            "test_basic_auth_special_characters",
+            "test_langfuse_endpoint_construction",
+            "test_langfuse_custom_host_endpoint"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 35
+        },
+        {
+          "name": "_OtlpRequestCapture",
+          "methods": [
+            "__init__",
+            "record",
+            "count"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "_Handler",
+          "methods": [
+            "do_POST",
+            "log_message"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 15
+        },
+        {
+          "name": "TestMockOtlpCollector",
+          "methods": [
+            "test_authorization_header_contains_basic_auth"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 44
+        },
+        {
+          "name": "TestConfigOtelIntegration",
+          "methods": [
+            "test_config_dict_has_expected_keys",
+            "test_config_api_keys_accessible",
+            "test_config_model_aliases_accessible",
+            "test_config_quota_fields",
+            "test_config_default_provider",
+            "test_config_routing_rule"
+          ],
+          "properties": [],
+          "exported": true,
+          "lineCount": 62
+        }
+      ],
+      "imports": [
+        {
+          "source": "base64",
+          "specifiers": [
+            "base64"
+          ]
+        },
+        {
+          "source": "http.server",
+          "specifiers": [
+            "http.server"
+          ]
+        },
+        {
+          "source": "threading",
+          "specifiers": [
+            "threading"
+          ]
+        },
+        {
+          "source": "http.server",
+          "specifiers": [
+            "BaseHTTPRequestHandler"
+          ]
+        },
+        {
+          "source": "typing",
+          "specifiers": [
+            "Any"
+          ]
+        },
+        {
+          "source": "hyperinfer.telemetry",
+          "specifiers": [
+            "init_langfuse_telemetry",
+            "shutdown_telemetry"
+          ]
+        }
+      ],
+      "exports": [
+        "_make_basic_auth",
+        "TestLangfuseAuthEncoding",
+        "_OtlpRequestCapture",
+        "_Handler",
+        "TestMockOtlpCollector",
+        "TestConfigOtelIntegration"
+      ],
+      "totalLines": 232,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/Cargo.toml": {
+      "filePath": "crates/hyperinfer-server/Cargo.toml",
+      "contentHash": "230150851ac4f3630ef6c786202379c4234be5ea5aecc682076a451d81fec2d1",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 65,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/CHANGELOG.md": {
+      "filePath": "crates/hyperinfer-server/CHANGELOG.md",
+      "contentHash": "187a6d1686243a5228e57df1ce47f00d64f39dbb180350973a0a8991b5ec8c8a",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/migrations/001_initial_schema.sql": {
+      "filePath": "crates/hyperinfer-server/migrations/001_initial_schema.sql",
+      "contentHash": "0318c4dd6858ccf7aef89dbab0e8a9b4afbe0e6b11b05dbede1a8fb1146098d2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 72,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/migrations/002_usage_logs.sql": {
+      "filePath": "crates/hyperinfer-server/migrations/002_usage_logs.sql",
+      "contentHash": "ffab546c85ea06939ccaac572f17edebda283209de31453fa23f889b9f4f0bdf",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 17,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/migrations/003_usage_logs_composite_index.sql": {
+      "filePath": "crates/hyperinfer-server/migrations/003_usage_logs_composite_index.sql",
+      "contentHash": "c0f4dd9341477aea3908a3a7eaa7b8f4e78c4f82b735ebeca5cb23b55d9a079f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/migrations/004_add_password_hash.sql": {
+      "filePath": "crates/hyperinfer-server/migrations/004_add_password_hash.sql",
+      "contentHash": "4b47220715a9579e95d7a782f001a96c74d5348653b3cfd8a7835f4c38a8c992",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 4,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/package.json": {
+      "filePath": "crates/hyperinfer-server/package.json",
+      "contentHash": "ad427578b9252aab1d896b4c167fcff470c7bf675d7920783e47b90e0c361d08",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 9,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/auth.rs": {
+      "filePath": "crates/hyperinfer-server/src/auth.rs",
+      "contentHash": "da65881dd2e0cbc1edd577388308a0cd8a5b71c40d536a004b29e7489b9e044d",
+      "functions": [
+        {
+          "name": "cookie_secure",
+          "params": [],
+          "returnType": "bool",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "auth_cookie",
+          "params": [
+            "token"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "clear_auth_cookie",
+          "params": [],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "create_auth_token",
+          "params": [
+            "user",
+            "jwt_secret",
+            "expires_in_secs"
+          ],
+          "returnType": "Result<String, jsonwebtoken::errors::Error>",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "validate_auth_token",
+          "params": [
+            "token",
+            "jwt_secret"
+          ],
+          "returnType": "Result<AuthClaims, jsonwebtoken::errors::Error>",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "auth_middleware",
+          "params": [
+            "State(jwt_secret)",
+            "req",
+            "next"
+          ],
+          "returnType": "Response",
+          "exported": true,
+          "lineCount": 29
+        },
+        {
+          "name": "extract_bearer_token",
+          "params": [
+            "headers"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "extract_cookie_token",
+          "params": [
+            "headers"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 12
+        }
+      ],
+      "classes": [
+        {
+          "name": "AuthClaims",
+          "methods": [],
+          "properties": [
+            "sub",
+            "email",
+            "role",
+            "team_id",
+            "exp"
+          ],
+          "exported": true,
+          "lineCount": 12
+        },
+        {
+          "name": "LoginRequest",
+          "methods": [],
+          "properties": [
+            "email",
+            "password"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "LoginResponse",
+          "methods": [],
+          "properties": [
+            "id",
+            "email",
+            "role",
+            "team_id"
+          ],
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "MeResponse",
+          "methods": [],
+          "properties": [
+            "id",
+            "email",
+            "role",
+            "team_id"
+          ],
+          "exported": true,
+          "lineCount": 6
+        }
+      ],
+      "imports": [
+        {
+          "source": "axum",
+          "specifiers": [
+            "body::Body",
+            "middleware::Next"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "User"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        }
+      ],
+      "exports": [
+        "AuthClaims",
+        "LoginRequest",
+        "LoginResponse",
+        "MeResponse",
+        "auth_cookie",
+        "clear_auth_cookie",
+        "create_auth_token",
+        "validate_auth_token",
+        "auth_middleware"
+      ],
+      "totalLines": 259,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/db.rs": {
+      "filePath": "crates/hyperinfer-server/src/db.rs",
+      "contentHash": "8c159258d5a45dc8640ea42d2bf8cf093b12da36ba916d7d7dd7c70d115f28bc",
+      "functions": [
+        {
+          "name": "hash_password",
+          "params": [
+            "password"
+          ],
+          "returnType": "Result<String, DbError>",
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "verify_password",
+          "params": [
+            "password",
+            "hash"
+          ],
+          "returnType": "bool",
+          "exported": true,
+          "lineCount": 10
+        },
+        {
+          "name": "new",
+          "params": [
+            "pool"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "get_team",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<Team>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "create_team",
+          "params": [
+            "name",
+            "budget_cents"
+          ],
+          "returnType": "Result<Team, DbError>",
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "get_user",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<User>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "get_user_by_email",
+          "params": [
+            "email"
+          ],
+          "returnType": "Result<Option<User>, DbError>",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "create_user",
+          "params": [
+            "team_id",
+            "email",
+            "role",
+            "password_hash"
+          ],
+          "returnType": "Result<User, DbError>",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "get_api_key",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<ApiKey>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "get_api_key_by_hash",
+          "params": [
+            "key_hash"
+          ],
+          "returnType": "Result<Option<ApiKey>, DbError>",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "create_api_key",
+          "params": [
+            "key_hash",
+            "user_id",
+            "team_id",
+            "name"
+          ],
+          "returnType": "Result<ApiKey, DbError>",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "deactivate_api_key",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<ApiKey, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "get_model_alias",
+          "params": [
+            "id"
+          ],
+          "returnType": "Result<Option<ModelAlias>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "create_model_alias",
+          "params": [
+            "team_id",
+            "alias",
+            "target_model",
+            "provider"
+          ],
+          "returnType": "Result<ModelAlias, DbError>",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "get_quota",
+          "params": [
+            "team_id"
+          ],
+          "returnType": "Result<Option<Quota>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "create_quota",
+          "params": [
+            "team_id",
+            "rpm_limit",
+            "tpm_limit"
+          ],
+          "returnType": "Result<Quota, DbError>",
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "record_usage",
+          "params": [
+            "team_id",
+            "api_key_id",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "response_time_ms"
+          ],
+          "returnType": "Result<UsageLog, DbError>",
+          "exported": false,
+          "lineCount": 26
+        },
+        {
+          "name": "count_users_by_role",
+          "params": [
+            "role"
+          ],
+          "returnType": "Result<i64, DbError>",
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "update_password_hash",
+          "params": [
+            "user_id",
+            "password_hash"
+          ],
+          "returnType": "Result<(), DbError>",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "from",
+          "params": [
+            "row"
+          ],
+          "returnType": "Self",
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "new",
+          "params": [
+            "redis_url"
+          ],
+          "returnType": "Result<Self, hyperinfer_core::ConfigError>",
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "subscribe_to_config_updates",
+          "params": [
+            "config"
+          ],
+          "returnType": "Result<tokio::task::JoinHandle<()>, hyperinfer_core::ConfigError>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "fetch_config",
+          "params": [],
+          "returnType": "Result<hyperinfer_core::Config, hyperinfer_core::ConfigError>",
+          "exported": false,
+          "lineCount": 3
+        },
+        {
+          "name": "publish_config_update",
+          "params": [
+            "config"
+          ],
+          "returnType": "Result<(), hyperinfer_core::ConfigError>",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "publish_policy_update",
+          "params": [
+            "update"
+          ],
+          "returnType": "Result<(), hyperinfer_core::ConfigError>",
+          "exported": false,
+          "lineCount": 6
+        }
+      ],
+      "classes": [
+        {
+          "name": "SqlxDb",
+          "methods": [
+            "new",
+            "get_team",
+            "create_team",
+            "get_user",
+            "get_user_by_email",
+            "create_user",
+            "get_api_key",
+            "get_api_key_by_hash",
+            "create_api_key",
+            "deactivate_api_key",
+            "get_model_alias",
+            "create_model_alias",
+            "get_quota",
+            "create_quota",
+            "record_usage",
+            "count_users_by_role",
+            "update_password_hash"
+          ],
+          "properties": [
+            "pool"
+          ],
+          "exported": true,
+          "lineCount": 3
+        },
+        {
+          "name": "TeamRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "name",
+            "budget_cents",
+            "created_at",
+            "updated_at"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "UserRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "email",
+            "role",
+            "password_hash",
+            "created_at"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "ApiKeyRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "key_hash",
+            "user_id",
+            "team_id",
+            "name",
+            "is_active",
+            "created_at",
+            "expires_at"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "ModelAliasRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "alias",
+            "target_model",
+            "provider",
+            "created_at"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "QuotaRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "rpm_limit",
+            "tpm_limit",
+            "updated_at"
+          ],
+          "exported": false,
+          "lineCount": 7
+        },
+        {
+          "name": "UsageLogRow",
+          "methods": [],
+          "properties": [
+            "id",
+            "team_id",
+            "api_key_id",
+            "model",
+            "input_tokens",
+            "output_tokens",
+            "response_time_ms",
+            "recorded_at"
+          ],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "RedisConfigStore",
+          "methods": [
+            "new",
+            "subscribe_to_config_updates",
+            "fetch_config",
+            "publish_config_update",
+            "publish_policy_update"
+          ],
+          "properties": [
+            "manager"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "argon2",
+          "specifiers": [
+            "Argon2",
+            "PasswordVerifier"
+          ]
+        },
+        {
+          "source": "async_trait",
+          "specifiers": [
+            "async_trait"
+          ]
+        },
+        {
+          "source": "chrono",
+          "specifiers": [
+            "DateTime",
+            "Utc"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "ApiKey",
+            "ConfigStore",
+            "Database",
+            "DbError",
+            "ModelAlias",
+            "PolicyUpdate",
+            "Quota",
+            "Team",
+            "UsageLog",
+            "User"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Serialize"
+          ]
+        },
+        {
+          "source": "sqlx",
+          "specifiers": [
+            "PgPool"
+          ]
+        }
+      ],
+      "exports": [
+        "hash_password",
+        "verify_password",
+        "SqlxDb",
+        "new",
+        "RedisConfigStore",
+        "new",
+        "subscribe_to_config_updates"
+      ],
+      "totalLines": 479,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/frontend.rs": {
+      "filePath": "crates/hyperinfer-server/src/frontend.rs",
+      "contentHash": "fdb09a5b8f3bf96338d0de4f504b684bbe38ee6d20a744e5ef642373cd8bc376",
+      "functions": [
+        {
+          "name": "spa_handler",
+          "params": [
+            "uri"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": true,
+          "lineCount": 19
+        },
+        {
+          "name": "spa_handler",
+          "params": [
+            "_uri"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": true,
+          "lineCount": 7
+        }
+      ],
+      "classes": [
+        {
+          "name": "Frontend",
+          "methods": [],
+          "properties": [],
+          "exported": false,
+          "lineCount": 1
+        }
+      ],
+      "imports": [
+        {
+          "source": "axum::http",
+          "specifiers": [
+            "Uri"
+          ]
+        },
+        {
+          "source": "axum::response",
+          "specifiers": [
+            "IntoResponse"
+          ]
+        },
+        {
+          "source": "axum::http",
+          "specifiers": [
+            "header"
+          ]
+        },
+        {
+          "source": "rust_embed",
+          "specifiers": [
+            "RustEmbed"
+          ]
+        }
+      ],
+      "exports": [
+        "spa_handler",
+        "spa_handler"
+      ],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/lib.rs": {
+      "filePath": "crates/hyperinfer-server/src/lib.rs",
+      "contentHash": "bedd0072f0fe5d0c3c851666b00113f2dd4b1da920d1ab122de6217d0dad3106",
+      "functions": [],
+      "classes": [],
+      "imports": [
+        {
+          "source": "db",
+          "specifiers": [
+            "RedisConfigStore",
+            "SqlxDb"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 8,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/main.rs": {
+      "filePath": "crates/hyperinfer-server/src/main.rs",
+      "contentHash": "d0963e416cbcb568173810da39556450b1ecda8476e784ddf15ccec6b3d67a79",
+      "functions": [
+        {
+          "name": "admin_auth_middleware",
+          "params": [
+            "State(state)",
+            "req",
+            "next"
+          ],
+          "returnType": "Result<Response, (StatusCode, &'static str)>",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "parse_bearer_token",
+          "params": [
+            "header"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "config_sync",
+          "params": [
+            "State(state)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "get_team",
+          "params": [
+            "State(state)",
+            "Path(team_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "create_team",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "get_user",
+          "params": [
+            "State(state)",
+            "Path(user_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "create_user",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "get_api_key",
+          "params": [
+            "State(state)",
+            "Path(key_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "create_api_key",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 21
+        },
+        {
+          "name": "revoke_api_key",
+          "params": [
+            "State(state)",
+            "Path(key_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "get_model_alias",
+          "params": [
+            "State(state)",
+            "Path(alias_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "create_model_alias",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "get_quota",
+          "params": [
+            "State(state)",
+            "Path(team_id)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 14
+        },
+        {
+          "name": "create_quota",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "login_handler",
+          "params": [
+            "State(state)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 53
+        },
+        {
+          "name": "me_handler",
+          "params": [
+            "Extension(claims)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "logout_handler",
+          "params": [],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "change_password_handler",
+          "params": [
+            "State(state)",
+            "Extension(claims)",
+            "Json(req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": false,
+          "lineCount": 51
+        },
+        {
+          "name": "hash_key",
+          "params": [
+            "key"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "key_id",
+          "params": [
+            "key"
+          ],
+          "returnType": "String",
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "build_cors_layer_from_string",
+          "params": [
+            "origins_str"
+          ],
+          "returnType": "Result<CorsLayer, &'static str>",
+          "exported": true,
+          "lineCount": 28
+        },
+        {
+          "name": "resolve_api_key",
+          "params": [
+            "db",
+            "key"
+          ],
+          "returnType": "Result<Option<(String, String)>, DbError>",
+          "exported": false,
+          "lineCount": 11
+        },
+        {
+          "name": "main",
+          "params": [],
+          "returnType": "Result<(), Box<dyn std::error::Error + Send + Sync>>",
+          "exported": false,
+          "lineCount": 206
+        }
+      ],
+      "classes": [
+        {
+          "name": "AppState",
+          "methods": [],
+          "properties": [
+            "config",
+            "db",
+            "config_manager",
+            "admin_token",
+            "jwt_secret"
+          ],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "CreateTeamRequest",
+          "methods": [],
+          "properties": [
+            "name",
+            "budget_cents"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "CreateUserRequest",
+          "methods": [],
+          "properties": [
+            "team_id",
+            "email",
+            "role"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "CreateApiKeyRequest",
+          "methods": [],
+          "properties": [
+            "key",
+            "user_id",
+            "team_id",
+            "name"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "CreateModelAliasRequest",
+          "methods": [],
+          "properties": [
+            "team_id",
+            "alias",
+            "target_model",
+            "provider"
+          ],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "CreateQuotaRequest",
+          "methods": [],
+          "properties": [
+            "team_id",
+            "rpm_limit",
+            "tpm_limit"
+          ],
+          "exported": false,
+          "lineCount": 5
+        },
+        {
+          "name": "ChangePasswordRequest",
+          "methods": [],
+          "properties": [
+            "current_password",
+            "new_password"
+          ],
+          "exported": false,
+          "lineCount": 4
+        }
+      ],
+      "imports": [
+        {
+          "source": "axum",
+          "specifiers": [
+            "body::Body",
+            "Router"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "Config",
+            "ConfigStore",
+            "Database",
+            "DbError",
+            "TelemetryConsumer",
+            "UsageRecord"
+          ]
+        },
+        {
+          "source": "hyperinfer_server",
+          "specifiers": [
+            "RedisConfigStore",
+            "SqlxDb"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize"
+          ]
+        },
+        {
+          "source": "sha2",
+          "specifiers": [
+            "Digest",
+            "Sha256"
+          ]
+        },
+        {
+          "source": "std::sync",
+          "specifiers": [
+            "Arc"
+          ]
+        },
+        {
+          "source": "subtle",
+          "specifiers": [
+            "ConstantTimeEq"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "RwLock"
+          ]
+        },
+        {
+          "source": "tokio_util::sync",
+          "specifiers": [
+            "CancellationToken"
+          ]
+        },
+        {
+          "source": "tower_http::cors",
+          "specifiers": [
+            "CorsLayer"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "info"
+          ]
+        }
+      ],
+      "exports": [
+        "admin_auth_middleware",
+        "build_cors_layer_from_string"
+      ],
+      "totalLines": 1422,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/mcp.rs": {
+      "filePath": "crates/hyperinfer-server/src/mcp.rs",
+      "contentHash": "d0529dfb379ac40dd9133d6a17877fcc1a58d54e49747e75795bfca5b233ae3a",
+      "functions": [
+        {
+          "name": "jwt_auth_middleware",
+          "params": [
+            "State(state)",
+            "req",
+            "next"
+          ],
+          "returnType": "Response",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "extract_bearer",
+          "params": [
+            "headers"
+          ],
+          "returnType": "Option<String>",
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "validate_jwt",
+          "params": [
+            "token",
+            "secret"
+          ],
+          "returnType": "Result<McpClaims, jsonwebtoken::errors::Error>",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "create_jwt",
+          "params": [
+            "sub",
+            "secret"
+          ],
+          "returnType": "String",
+          "exported": true,
+          "lineCount": 22
+        },
+        {
+          "name": "drop",
+          "params": [],
+          "exported": false,
+          "lineCount": 16
+        },
+        {
+          "name": "new",
+          "params": [
+            "jwt_secret"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 6
+        },
+        {
+          "name": "ok",
+          "params": [
+            "id",
+            "result"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "err",
+          "params": [
+            "id",
+            "code",
+            "message"
+          ],
+          "returnType": "Self",
+          "exported": true,
+          "lineCount": 11
+        },
+        {
+          "name": "dispatch_method",
+          "params": [
+            "req"
+          ],
+          "returnType": "JsonRpcResponse",
+          "exported": true,
+          "lineCount": 16
+        },
+        {
+          "name": "mcp_sse_handler",
+          "params": [
+            "State(state)",
+            "Extension(claims)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": true,
+          "lineCount": 117
+        },
+        {
+          "name": "mcp_message_handler",
+          "params": [
+            "State(state)",
+            "Extension(claims)",
+            "Query(query)",
+            "Json(rpc_req)"
+          ],
+          "returnType": "impl IntoResponse",
+          "exported": true,
+          "lineCount": 78
+        },
+        {
+          "name": "collect_frames",
+          "params": [
+            "rx",
+            "limit"
+          ],
+          "returnType": "Vec<SseFrame>",
+          "exported": true,
+          "lineCount": 10
+        }
+      ],
+      "classes": [
+        {
+          "name": "McpClaims",
+          "methods": [],
+          "properties": [
+            "sub",
+            "exp"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "SessionRemovalGuard",
+          "methods": [
+            "drop"
+          ],
+          "properties": [
+            "sessions",
+            "sid"
+          ],
+          "exported": false,
+          "lineCount": 4
+        },
+        {
+          "name": "SseFrame",
+          "methods": [],
+          "properties": [
+            "event",
+            "data"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "McpSession",
+          "methods": [],
+          "properties": [
+            "id",
+            "owner",
+            "tx"
+          ],
+          "exported": true,
+          "lineCount": 8
+        },
+        {
+          "name": "McpState",
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "sessions",
+            "jwt_secret"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "JsonRpcRequest",
+          "methods": [],
+          "properties": [
+            "jsonrpc",
+            "id",
+            "method",
+            "params"
+          ],
+          "exported": true,
+          "lineCount": 7
+        },
+        {
+          "name": "JsonRpcResponse",
+          "methods": [
+            "ok",
+            "err"
+          ],
+          "properties": [
+            "jsonrpc",
+            "id",
+            "result",
+            "error"
+          ],
+          "exported": true,
+          "lineCount": 9
+        },
+        {
+          "name": "JsonRpcError",
+          "methods": [],
+          "properties": [
+            "code",
+            "message"
+          ],
+          "exported": true,
+          "lineCount": 4
+        },
+        {
+          "name": "MessageQuery",
+          "methods": [],
+          "properties": [
+            "session_id"
+          ],
+          "exported": true,
+          "lineCount": 3
+        }
+      ],
+      "imports": [
+        {
+          "source": "axum",
+          "specifiers": [
+            "body::Body",
+            "middleware::Next",
+            "Extension",
+            "Json"
+          ]
+        },
+        {
+          "source": "serde",
+          "specifiers": [
+            "Deserialize",
+            "Serialize"
+          ]
+        },
+        {
+          "source": "serde_json",
+          "specifiers": [
+            "Value"
+          ]
+        },
+        {
+          "source": "std",
+          "specifiers": [
+            "collections::HashMap",
+            "convert::Infallible",
+            "sync::Arc",
+            "time::Duration"
+          ]
+        },
+        {
+          "source": "tokio::sync",
+          "specifiers": [
+            "mpsc",
+            "RwLock"
+          ]
+        },
+        {
+          "source": "tracing",
+          "specifiers": [
+            "warn"
+          ]
+        },
+        {
+          "source": "uuid",
+          "specifiers": [
+            "Uuid"
+          ]
+        },
+        {
+          "source": "jsonwebtoken",
+          "specifiers": [
+            "decode",
+            "Algorithm",
+            "DecodingKey",
+            "Validation"
+          ]
+        }
+      ],
+      "exports": [
+        "McpClaims",
+        "jwt_auth_middleware",
+        "validate_jwt",
+        "create_jwt",
+        "SseFrame",
+        "McpSession",
+        "McpState",
+        "new",
+        "JsonRpcRequest",
+        "JsonRpcResponse",
+        "JsonRpcError",
+        "ok",
+        "err",
+        "dispatch_method",
+        "mcp_sse_handler",
+        "MessageQuery",
+        "mcp_message_handler",
+        "collect_frames"
+      ],
+      "totalLines": 787,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/src/seeding.rs": {
+      "filePath": "crates/hyperinfer-server/src/seeding.rs",
+      "contentHash": "e0cc9a2c55c7baaae5f5300aceca1acbe23f399e43c9b4c3a5f80e5d7dbde756",
+      "functions": [
+        {
+          "name": "run_seeding",
+          "params": [
+            "db"
+          ],
+          "returnType": "Result<(), DbError>",
+          "exported": true,
+          "lineCount": 77
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "crate::db",
+          "specifiers": [
+            "hash_password"
+          ]
+        },
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "Database",
+            "DbError"
+          ]
+        },
+        {
+          "source": "std",
+          "specifiers": [
+            "env"
+          ]
+        }
+      ],
+      "exports": [
+        "run_seeding"
+      ],
+      "totalLines": 88,
+      "hasStructuralAnalysis": true
+    },
+    "crates/hyperinfer-server/tests/integration.rs": {
+      "filePath": "crates/hyperinfer-server/tests/integration.rs",
+      "contentHash": "8c1c8baef2174e861959a4f82d272cdd352e198e06bd48e1c9f053d6b3f37f6c",
+      "functions": [
+        {
+          "name": "setup_test_db",
+          "params": [],
+          "returnType": "(SqlxDb, ContainerAsync<Postgres>)",
+          "exported": false,
+          "lineCount": 44
+        },
+        {
+          "name": "test_database_create_and_get_team",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "test_database_create_and_get_user",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "test_database_create_and_get_api_key",
+          "params": [],
+          "exported": false,
+          "lineCount": 34
+        },
+        {
+          "name": "test_database_create_and_get_model_alias",
+          "params": [],
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "test_database_create_and_get_quota",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "test_get_nonexistent_team",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "test_get_nonexistent_user",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "test_get_nonexistent_api_key",
+          "params": [],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "test_get_nonexistent_model_alias",
+          "params": [],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "test_get_nonexistent_quota",
+          "params": [],
+          "exported": false,
+          "lineCount": 12
+        },
+        {
+          "name": "test_duplicate_team_name",
+          "params": [],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "test_duplicate_user_email",
+          "params": [],
+          "exported": false,
+          "lineCount": 17
+        },
+        {
+          "name": "test_duplicate_api_key_hash",
+          "params": [],
+          "exported": false,
+          "lineCount": 22
+        },
+        {
+          "name": "test_duplicate_model_alias_per_team",
+          "params": [],
+          "exported": false,
+          "lineCount": 20
+        },
+        {
+          "name": "test_duplicate_quota_per_team",
+          "params": [],
+          "exported": false,
+          "lineCount": 15
+        },
+        {
+          "name": "test_invalid_uuid_format",
+          "params": [],
+          "exported": false,
+          "lineCount": 6
+        },
+        {
+          "name": "test_create_user_invalid_team_fk",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "test_create_api_key_invalid_user_fk",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "test_create_api_key_invalid_team_fk",
+          "params": [],
+          "exported": false,
+          "lineCount": 23
+        },
+        {
+          "name": "test_create_model_alias_invalid_team_fk",
+          "params": [],
+          "exported": false,
+          "lineCount": 13
+        },
+        {
+          "name": "test_create_quota_invalid_team_fk",
+          "params": [],
+          "exported": false,
+          "lineCount": 8
+        },
+        {
+          "name": "test_record_usage_success",
+          "params": [],
+          "exported": false,
+          "lineCount": 30
+        },
+        {
+          "name": "test_record_usage_zero_tokens",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "test_record_usage_large_values",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "test_record_usage_multiple_logs",
+          "params": [],
+          "exported": false,
+          "lineCount": 35
+        },
+        {
+          "name": "test_record_usage_invalid_team_id",
+          "params": [],
+          "exported": false,
+          "lineCount": 31
+        },
+        {
+          "name": "test_record_usage_invalid_api_key_id",
+          "params": [],
+          "exported": false,
+          "lineCount": 24
+        },
+        {
+          "name": "test_record_usage_invalid_uuid_format",
+          "params": [],
+          "exported": false,
+          "lineCount": 9
+        },
+        {
+          "name": "test_record_usage_different_models",
+          "params": [],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "test_get_api_key_by_hash",
+          "params": [],
+          "exported": false,
+          "lineCount": 28
+        },
+        {
+          "name": "test_get_api_key_by_hash_inactive",
+          "params": [],
+          "exported": false,
+          "lineCount": 27
+        },
+        {
+          "name": "test_get_api_key_by_hash_not_found",
+          "params": [],
+          "exported": false,
+          "lineCount": 10
+        },
+        {
+          "name": "test_count_users_by_role",
+          "params": [],
+          "exported": false,
+          "lineCount": 37
+        },
+        {
+          "name": "test_create_user_with_password_hash",
+          "params": [],
+          "exported": false,
+          "lineCount": 18
+        },
+        {
+          "name": "test_get_user_by_email",
+          "params": [],
+          "exported": false,
+          "lineCount": 31
+        },
+        {
+          "name": "test_password_hashing",
+          "params": [],
+          "exported": false,
+          "lineCount": 17
+        }
+      ],
+      "classes": [],
+      "imports": [
+        {
+          "source": "hyperinfer_core",
+          "specifiers": [
+            "Database"
+          ]
+        },
+        {
+          "source": "hyperinfer_server",
+          "specifiers": [
+            "SqlxDb"
+          ]
+        },
+        {
+          "source": "sqlx::postgres",
+          "specifiers": [
+            "PgPoolOptions"
+          ]
+        },
+        {
+          "source": "testcontainers",
+          "specifiers": [
+            "ImageExt"
+          ]
+        },
+        {
+          "source": "testcontainers",
+          "specifiers": [
+            "runners::AsyncRunner",
+            "ContainerAsync"
+          ]
+        },
+        {
+          "source": "testcontainers_modules::postgres",
+          "specifiers": [
+            "Postgres"
+          ]
+        },
+        {
+          "source": "hyperinfer_server::db",
+          "specifiers": [
+            "hash_password"
+          ]
+        }
+      ],
+      "exports": [],
+      "totalLines": 850,
+      "hasStructuralAnalysis": true
+    },
+    "docker-compose.yml": {
+      "filePath": "docker-compose.yml",
+      "contentHash": "22268a7205ce99bda1761e2cae8d86127a5aead040bc96a5e335990377d7e68d",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 75,
+      "hasStructuralAnalysis": true
+    },
+    "Dockerfile": {
+      "filePath": "Dockerfile",
+      "contentHash": "081830a31408fe24f5fcae3e07f47f15c1845ede41befeba72c1777fda8c850f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 44,
+      "hasStructuralAnalysis": true
+    },
+    "lefthook.yml": {
+      "filePath": "lefthook.yml",
+      "contentHash": "46782db96e9c64f756d37fa4a188c38255749b2653afca3bf476ec49eadcd1af",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 39,
+      "hasStructuralAnalysis": true
+    },
+    "opencode.json": {
+      "filePath": "opencode.json",
+      "contentHash": "2f362eafe403e7885c9227eae5a7b924708073882950da737d2a3ced74617518",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 5,
+      "hasStructuralAnalysis": true
+    },
+    "package.json": {
+      "filePath": "package.json",
+      "contentHash": "4587b47b8f6ac1ace21b7c7ea08e9a58392a5964fd225a31fce428cdca2d527f",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 22,
+      "hasStructuralAnalysis": true
+    },
+    "pyproject.toml": {
+      "filePath": "pyproject.toml",
+      "contentHash": "462b2c56d09433f8cb53a3d611cdc452fd0f0b92a8be7b615b6b9c18d5f6ff36",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 134,
+      "hasStructuralAnalysis": true
+    },
+    "README.md": {
+      "filePath": "README.md",
+      "contentHash": "3bf78d5bf06ae6123adb097404e7a596744f70d704448c5e905656621bdfda58",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 43,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/build-package.sh": {
+      "filePath": "scripts/build-package.sh",
+      "contentHash": "5c386634921bc6651b5c4771b6c7da61438a518ac24e7e7ba31b24ed7a0901e2",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 19,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/get-changed-packages.js": {
+      "filePath": "scripts/get-changed-packages.js",
+      "contentHash": "4f8d351f20bd1a79851e706314a43466af46a42408bc0fbd837534ff6c0ac41c",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    },
+    "scripts/sync-versions.js": {
+      "filePath": "scripts/sync-versions.js",
+      "contentHash": "28fd4c1b5bb36e88c1775dc8609a63e56e188f354cea964b1a93ae359aa51c77",
+      "functions": [],
+      "classes": [],
+      "imports": [],
+      "exports": [],
+      "totalLines": 51,
+      "hasStructuralAnalysis": true
+    }
+  }
+}

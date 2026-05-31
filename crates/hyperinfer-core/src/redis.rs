@@ -177,6 +177,12 @@ impl ConfigManager {
         Ok(handle)
     }
 
+    pub async fn ping(&self) -> Result<(), ConfigError> {
+        let mut conn = self.manager.clone();
+        redis::cmd("PING").query_async::<String>(&mut conn).await?;
+        Ok(())
+    }
+
     pub async fn fetch_config(&self) -> Result<Config, ConfigError> {
         let mut conn = self.manager.clone();
 
