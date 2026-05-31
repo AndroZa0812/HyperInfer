@@ -134,7 +134,9 @@ async fn create_team<D: Database, C: ConfigStore>(
         Ok(team) => Json(team).into_response(),
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
-            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
+            DbError::UniqueViolation => {
+                (StatusCode::CONFLICT, "Team name already exists").into_response()
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
         },
     }
@@ -1604,11 +1606,8 @@ mod tests {
     #[tokio::test]
     async fn test_create_team_unique_violation() {
         let mut db = MockDatabase::new();
-        db.expect_create_team().times(1).returning(|name, _| {
-            Err(DbError::UniqueViolation(format!(
-                "Team with name '{}' already exists",
-                name
-            )))
+        db.expect_create_team().times(1).returning(|_, _| {
+            Err(DbError::UniqueViolation)
         });
 
         let config = Config {

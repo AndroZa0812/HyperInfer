@@ -68,10 +68,7 @@ impl Database for SqlxDb {
             Ok(row) => row,
             Err(e) => {
                 if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
-                    return Err(DbError::UniqueViolation(format!(
-                        "Team with name '{}' already exists",
-                        name
-                    )));
+                    return Err(DbError::UniqueViolation);
                 }
                 return Err(DbError::Sqlx(e));
             }
