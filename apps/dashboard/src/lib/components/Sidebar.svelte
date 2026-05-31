@@ -51,11 +51,10 @@
 				{@const active = isActive(item.path)}
 				<a
 					href={item.path}
-					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group
-						{active
-							? 'text-[var(--primary)]'
-							: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/50'}"
-					style={active ? 'background: var(--primary) / 0.08' : ''}
+				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group
+					{active
+						? 'text-[var(--primary)] bg-[var(--primary)]/8'
+						: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/50'}"
 				>
 					<span class="material-symbols-outlined transition-all duration-200 {active ? 'fill-1' : ''}" style="font-size: 20px">{item.icon}</span>
 					<span class="text-sm font-medium">{item.label}</span>

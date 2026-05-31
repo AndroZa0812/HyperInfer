@@ -866,10 +866,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .merge(auth_public_routes)
         .merge(auth_protected_routes);
 
-    // Swagger UI - enabled by default, set ENABLE_DOCS=false to disable in production
+    // Swagger UI - disabled by default, set ENABLE_DOCS=true to enable for development
     let enable_docs = std::env::var("ENABLE_DOCS")
-        .map(|v| v != "false" && v != "0")
-        .unwrap_or(true);
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
 
     if enable_docs {
         #[derive(OpenApi)]

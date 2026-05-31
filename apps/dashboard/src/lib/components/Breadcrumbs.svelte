@@ -1,6 +1,4 @@
 <script lang="ts">
-	import { page } from '$app/stores';
-
 	interface Crumb {
 		label: string;
 		href?: string;
