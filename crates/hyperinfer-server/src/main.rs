@@ -1606,9 +1606,9 @@ mod tests {
     #[tokio::test]
     async fn test_create_team_unique_violation() {
         let mut db = MockDatabase::new();
-        db.expect_create_team().times(1).returning(|_, _| {
-            Err(DbError::UniqueViolation)
-        });
+        db.expect_create_team()
+            .times(1)
+            .returning(|_, _| Err(DbError::UniqueViolation));
 
         let config = Config {
             api_keys: std::collections::HashMap::new(),
