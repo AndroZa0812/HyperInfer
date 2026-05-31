@@ -28,6 +28,7 @@ FROM debian:trixie-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 app \
     && useradd --uid 1000 --gid app --shell /bin/false --create-home app

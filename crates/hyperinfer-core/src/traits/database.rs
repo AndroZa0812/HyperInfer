@@ -54,6 +54,7 @@ pub trait Database: Clone + Send + Sync + 'static {
         output_tokens: i32,
         response_time_ms: i64,
     ) -> Result<UsageLog, DbError>;
+    async fn ping(&self) -> Result<(), DbError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
