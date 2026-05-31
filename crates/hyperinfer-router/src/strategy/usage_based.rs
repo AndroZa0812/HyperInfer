@@ -51,7 +51,7 @@ impl RoutingStrategy for UsageBased {
 
             let utilization = match deployment.tpm_limit {
                 Some(limit) if limit > 0 => metrics.tpm_used as f64 / limit as f64,
-                _ => metrics.tpm_used as f64,
+                _ => 0.0,
             };
 
             eligible.push((i, utilization));

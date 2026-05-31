@@ -115,32 +115,33 @@ impl DeploymentPool {
     }
 
     pub fn add(&mut self, deployment: Deployment) {
-        let model_name = deployment.model_name.clone();
-        let entry = self.deployments.entry(model_name).or_default();
+        let entry = self
+            .deployments
+            .entry(deployment.model_name.clone())
+            .or_default();
         entry.push(Arc::new(deployment));
         entry.sort_by_key(|d| d.order);
     }
 
     pub fn remove(&mut self, id: &str) -> bool {
-        let mut found = false;
-        let mut empty_keys = Vec::new();
+        let mut found_key = None;
 
         for (key, deployments) in self.deployments.iter_mut() {
             let initial_len = deployments.len();
             deployments.retain(|d| d.id != id);
             if deployments.len() < initial_len {
-                found = true;
-            }
-            if deployments.is_empty() {
-                empty_keys.push(key.clone());
+                found_key = Some(key.clone());
+                break;
             }
         }
 
-        for key in empty_keys {
-            self.deployments.remove(&key);
+        if let Some(ref key) = found_key {
+            if self.deployments.get(key).is_some_and(|v| v.is_empty()) {
+                self.deployments.remove(key);
+            }
         }
 
-        found
+        found_key.is_some()
     }
 
     pub fn get(&self, model_name: &str) -> Option<&[Arc<Deployment>]> {

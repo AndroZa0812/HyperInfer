@@ -136,14 +136,9 @@ impl RouterEngine {
             .get(&resolved_model)
             .ok_or_else(|| RoutingError::NoDeployments(resolved_model.clone()))?;
 
-        let mut eligible = Vec::new();
-        for d in candidates {
-            if !state.is_cooled_down(&d.id).await? {
-                eligible.push(Arc::clone(d));
-            }
-        }
+        let candidates_vec: Vec<Arc<Deployment>> = candidates.to_vec();
 
-        if eligible.is_empty() {
+        if candidates_vec.is_empty() {
             return Err(RoutingError::NoDeployments(resolved_model.clone()));
         }
 
@@ -163,7 +158,7 @@ impl RouterEngine {
         })?;
 
         let selected = strategy
-            .select(&resolved_model, &eligible, state, ctx)
+            .select(&resolved_model, &candidates_vec, state, ctx)
             .await?;
 
         Ok(RoutingResult {
@@ -173,7 +168,7 @@ impl RouterEngine {
         })
     }
 
-    pub async fn route_with_fallback<F>(
+    pub async fn route_with_fallback(
         &self,
         model: &str,
         state: &dyn RoutingState,
@@ -183,10 +178,7 @@ impl RouterEngine {
             )
                 -> Pin<Box<dyn Future<Output = Result<(), hyperinfer_core::HyperInferError>> + Send>>
             + Send,
-    ) -> Result<RoutingResult, RoutingError>
-    where
-        F: Future<Output = Result<(), hyperinfer_core::HyperInferError>> + Send,
-    {
+    ) -> Result<RoutingResult, RoutingError> {
         let start_time = Instant::now();
         let mut total_attempts: u32 = 0;
 
@@ -472,9 +464,7 @@ mod tests {
         };
 
         let result = engine
-            .route_with_fallback::<Pin<Box<dyn Future<Output = Result<(), hyperinfer_core::HyperInferError>> + Send>>>(
-                "gpt-4", &state, &ctx, executor,
-            )
+            .route_with_fallback("gpt-4", &state, &ctx, executor)
             .await;
 
         assert!(result.is_err());

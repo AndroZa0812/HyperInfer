@@ -88,7 +88,8 @@ impl RoutingStrategy for CostBased {
             let cost = estimate_cost(&candidates[i], request);
             let weight = candidates[i].weight;
 
-            if cost < best_cost || (cost == best_cost && weight > best_weight) {
+            if cost < best_cost || ((cost - best_cost).abs() < f64::EPSILON && weight > best_weight)
+            {
                 best_idx = i;
                 best_cost = cost;
                 best_weight = weight;
