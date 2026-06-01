@@ -2,7 +2,7 @@
 
 use axum::{
     body::Body,
-    extract::{Extension, Json, Path, State},
+    extract::{Extension, Json, Path, Query, State},
     http::{header::SET_COOKIE, Request, StatusCode},
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -16,9 +16,9 @@ use hyperinfer_server::{
     },
     db::{hash_password, verify_password},
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
-    RedisConfigStore, SqlxDb,
+    proxy, RedisConfigStore, SqlxDb,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
@@ -83,6 +83,70 @@ async fn config_sync<D: Database, C: ConfigStore>(
 ) -> impl IntoResponse {
     let config = state.config.read().await;
     Json(config.clone())
+}
+
+async fn get_routing_config_handler<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+) -> impl IntoResponse {
+    match state.db.get_routing_config().await {
+        Ok(Some(config)) => Json(config).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Routing config not found").into_response(),
+        Err(e) => {
+            tracing::error!("Failed to get routing config: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get routing config",
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn update_routing_config_handler<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Json(req): Json<UpdateRoutingConfigRequest>,
+) -> impl IntoResponse {
+    let core_req = hyperinfer_core::UpdateRoutingConfigRequest {
+        strategy: req.strategy,
+        strategy_params: req.strategy_params,
+        fallback_config: req.fallback_config,
+        routing_groups: req.routing_groups,
+    };
+    match state.db.update_routing_config(core_req).await {
+        Ok(config) => Json(config).into_response(),
+        Err(e) => {
+            tracing::error!("Failed to update routing config: {:?}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update routing config",
+            )
+                .into_response()
+        }
+    }
+}
+
+async fn get_routing_health<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+) -> impl IntoResponse {
+    let deployments = state.db.list_deployments("", Some(true)).await;
+    let deployment_count = match deployments {
+        Ok(d) => d.len(),
+        Err(_) => 0,
+    };
+
+    let config = state.db.get_routing_config().await;
+    let strategy = match config {
+        Ok(Some(c)) => c.strategy,
+        Ok(None) => "weighted-shuffle".to_string(),
+        Err(_) => "unknown".to_string(),
+    };
+
+    Json(serde_json::json!({
+        "active_deployments": deployment_count,
+        "strategy": strategy,
+        "status": "healthy",
+    }))
+    .into_response()
 }
 
 async fn get_team<D: Database, C: ConfigStore>(
@@ -269,6 +333,187 @@ async fn create_quota<D: Database, C: ConfigStore>(
     }
 }
 
+// ── Deployment Handlers ────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct ListDeploymentsQuery {
+    model: String,
+    is_active: Option<bool>,
+}
+
+async fn list_deployments<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Query(query): Query<ListDeploymentsQuery>,
+) -> impl IntoResponse {
+    match state
+        .db
+        .list_deployments(&query.model, query.is_active)
+        .await
+    {
+        Ok(deployments) => Json(deployments).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list deployments",
+            )
+                .into_response(),
+        },
+    }
+}
+
+async fn get_deployment<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.get_deployment(&id).await {
+        Ok(Some(deployment)) => Json(deployment).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Deployment not found").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Deployment not found").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get deployment",
+            )
+                .into_response(),
+        },
+    }
+}
+
+async fn create_deployment<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
+) -> impl IntoResponse {
+    match state.db.create_deployment(req).await {
+        Ok(deployment) => (
+            StatusCode::CREATED,
+            Json(serde_json::json!({
+                "id": deployment.id,
+                "name": deployment.name,
+                "provider": deployment.provider,
+                "model": deployment.model,
+                "base_url": deployment.base_url,
+                "is_active": deployment.is_active,
+                "weight": deployment.weight,
+                "priority": deployment.priority,
+                "max_tpm": deployment.max_tpm,
+                "max_rpm": deployment.max_rpm,
+                "cost_per_1k_input_tokens": deployment.cost_per_1k_input_tokens,
+                "cost_per_1k_output_tokens": deployment.cost_per_1k_output_tokens,
+                "metadata": deployment.metadata,
+                "sort_order": deployment.sort_order,
+                "created_at": deployment.created_at,
+                "updated_at": deployment.updated_at,
+            })),
+        )
+            .into_response(),
+        Err(e) => match e {
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
+            DbError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create deployment",
+            )
+                .into_response(),
+        },
+    }
+}
+
+async fn update_deployment<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Path(id): Path<String>,
+    Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
+) -> impl IntoResponse {
+    match state.db.update_deployment(&id, req).await {
+        Ok(deployment) => Json(deployment).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Deployment not found").into_response(),
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
+            DbError::ValidationError(msg) => (StatusCode::BAD_REQUEST, msg).into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update deployment",
+            )
+                .into_response(),
+        },
+    }
+}
+
+async fn delete_deployment<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.delete_deployment(&id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Deployment not found").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to delete deployment",
+            )
+                .into_response(),
+        },
+    }
+}
+
+// ── OpenAI-Compatible Proxy Handler ────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ProxyError {
+    error: String,
+    code: u16,
+}
+
+impl IntoResponse for ProxyError {
+    fn into_response(self) -> Response {
+        let status = StatusCode::from_u16(self.code).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        (status, Json(self)).into_response()
+    }
+}
+
+async fn chat_completions_handler<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Json(request): Json<hyperinfer_core::ChatRequest>,
+) -> Result<Json<serde_json::Value>, ProxyError> {
+    // 1. Load deployments from database
+    let deployments = state
+        .db
+        .list_deployments(&request.model, Some(true))
+        .await
+        .map_err(|e| ProxyError {
+            error: format!("Failed to load deployments: {}", e),
+            code: 500,
+        })?;
+
+    if deployments.is_empty() {
+        return Err(ProxyError {
+            error: format!("No active deployments found for model '{}'", request.model),
+            code: 404,
+        });
+    }
+
+    // 2. Select deployment using routing
+    let selected = proxy::select_deployment(&request, &deployments)
+        .await
+        .map_err(|e| ProxyError {
+            error: format!("Routing failed: {}", e),
+            code: 503,
+        })?;
+
+    // 3. Forward request to selected deployment
+    let body = proxy::forward_request(&request, &selected.base_url, &selected.api_key)
+        .await
+        .map_err(|code| ProxyError {
+            error: "Upstream request failed".to_string(),
+            code,
+        })?;
+
+    Ok(Json(body))
+}
+
 #[derive(Deserialize)]
 struct CreateTeamRequest {
     name: String,
@@ -303,6 +548,14 @@ struct CreateQuotaRequest {
     team_id: String,
     rpm_limit: i32,
     tpm_limit: i32,
+}
+
+#[derive(Deserialize)]
+struct UpdateRoutingConfigRequest {
+    strategy: Option<String>,
+    strategy_params: Option<serde_json::Value>,
+    fallback_config: Option<serde_json::Value>,
+    routing_groups: Option<serde_json::Value>,
 }
 
 // ── Auth Handlers ────────────────────────────────────────────────────────────
@@ -670,6 +923,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/{team_id}", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .route(
+            "/v1/deployments",
+            get(list_deployments).post(create_deployment),
+        )
+        .route(
+            "/v1/deployments/{id}",
+            get(get_deployment)
+                .put(update_deployment)
+                .delete(delete_deployment),
+        )
         .layer(middleware::from_fn_with_state(
             state.clone(),
             admin_auth_middleware,
@@ -687,11 +950,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             auth_middleware,
         ));
 
+    // OpenAI-compatible proxy endpoint (public, no auth required)
+    let proxy_router = Router::new()
+        .route("/v1/chat/completions", post(chat_completions_handler))
+        .with_state(state.clone());
+
+    // Routing config routes - protected by admin token
+    let routing_config_routes = Router::new()
+        .route(
+            "/v1/routing/config",
+            get(get_routing_config_handler).put(update_routing_config_handler),
+        )
+        .route("/v1/routing/health", get(get_routing_health))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin_auth_middleware,
+        ));
+
     let app = Router::new()
         .merge(v1_router)
         .merge(mcp_router)
         .merge(auth_public_routes)
         .merge(auth_protected_routes)
+        .merge(proxy_router)
+        .merge(routing_config_routes)
         .fallback(hyperinfer_server::frontend::spa_handler)
         .layer(cors)
         .with_state(state);
@@ -740,6 +1022,11 @@ mod tests {
             async fn record_usage(&self, team_id: &str, api_key_id: &str, model: &str, input_tokens: i32, output_tokens: i32, response_time_ms: i64) -> Result<UsageLog, DbError>;
             async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError>;
             async fn update_password_hash(&self, user_id: &str, password_hash: &str) -> Result<(), DbError>;
+            async fn list_deployments(&self, model: &str, is_active: Option<bool>) -> Result<Vec<hyperinfer_core::Deployment>, DbError>;
+            async fn get_deployment(&self, id: &str) -> Result<Option<hyperinfer_core::Deployment>, DbError>;
+            async fn create_deployment(&self, req: hyperinfer_core::CreateDeploymentRequest) -> Result<hyperinfer_core::Deployment, DbError>;
+            async fn update_deployment(&self, id: &str, req: hyperinfer_core::CreateDeploymentRequest) -> Result<hyperinfer_core::Deployment, DbError>;
+            async fn delete_deployment(&self, id: &str) -> Result<(), DbError>;
         }
     }
 
