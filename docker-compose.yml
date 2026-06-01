@@ -52,6 +52,7 @@ services:
       INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL}
       INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD}
       RUST_LOG: ${LOG_LEVEL:-info}
+      ENABLE_DOCS: ${ENABLE_DOCS:-false}
     ports:
       - "${SERVER_PORT:-3000}:3000"
     restart: unless-stopped

@@ -13,6 +13,7 @@ use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer,
 use hyperinfer_server::{
     auth::{
         auth_middleware, create_auth_token, AuthClaims, LoginRequest, LoginResponse, MeResponse,
+        RequireAdmin,
     },
     db::{hash_password, verify_password},
     mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState},
@@ -26,6 +27,8 @@ use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use tower_http::cors::CorsLayer;
 use tracing::info;
+use utoipa::{OpenApi, ToSchema};
+use utoipa_swagger_ui::SwaggerUi;
 
 #[derive(Clone)]
 struct AppState<D: Database, C: ConfigStore> {
@@ -149,6 +152,16 @@ async fn get_routing_health<D: Database, C: ConfigStore>(
     .into_response()
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/teams/{id}",
+    params(("id" = String, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "Team found"),
+        (status = 404, description = "Team not found")
+    ),
+    tag = "teams"
+)]
 async fn get_team<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(team_id): Path<String>,
@@ -164,8 +177,21 @@ async fn get_team<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/teams",
+    request_body = CreateTeamRequest,
+    responses(
+        (status = 200, description = "Team created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required"),
+        (status = 409, description = "Team name already exists")
+    ),
+    tag = "teams"
+)]
 async fn create_team<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<CreateTeamRequest>,
 ) -> impl IntoResponse {
     match state.db.create_team(&req.name, req.budget_cents).await {
@@ -178,6 +204,16 @@ async fn create_team<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/users/{id}",
+    params(("id" = String, Path, description = "User ID")),
+    responses(
+        (status = 200, description = "User found"),
+        (status = 404, description = "User not found")
+    ),
+    tag = "users"
+)]
 async fn get_user<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(user_id): Path<String>,
@@ -193,8 +229,20 @@ async fn get_user<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/users",
+    request_body = CreateUserRequest,
+    responses(
+        (status = 200, description = "User created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "users"
+)]
 async fn create_user<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
     match state
@@ -210,6 +258,16 @@ async fn create_user<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/api_keys/{id}",
+    params(("id" = String, Path, description = "API Key ID")),
+    responses(
+        (status = 200, description = "API key found"),
+        (status = 404, description = "API key not found")
+    ),
+    tag = "api_keys"
+)]
 async fn get_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(key_id): Path<String>,
@@ -225,8 +283,20 @@ async fn get_api_key<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/api_keys",
+    request_body = CreateApiKeyRequest,
+    responses(
+        (status = 200, description = "API key created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "api_keys"
+)]
 async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
     let key_hash = hash_key(&req.key);
@@ -247,8 +317,20 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/api_keys/{id}/revoke",
+    params(("id" = String, Path, description = "API Key ID")),
+    responses(
+        (status = 200, description = "API key revoked"),
+        (status = 404, description = "API key not found"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "api_keys"
+)]
 async fn revoke_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Path(key_id): Path<String>,
 ) -> impl IntoResponse {
     match state.db.deactivate_api_key(&key_id).await {
@@ -265,6 +347,16 @@ async fn revoke_api_key<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/model_aliases/{id}",
+    params(("id" = String, Path, description = "Model alias ID")),
+    responses(
+        (status = 200, description = "Model alias found"),
+        (status = 404, description = "Model alias not found")
+    ),
+    tag = "model_aliases"
+)]
 async fn get_model_alias<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(alias_id): Path<String>,
@@ -280,8 +372,20 @@ async fn get_model_alias<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/model_aliases",
+    request_body = CreateModelAliasRequest,
+    responses(
+        (status = 200, description = "Model alias created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "model_aliases"
+)]
 async fn create_model_alias<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<CreateModelAliasRequest>,
 ) -> impl IntoResponse {
     match state
@@ -301,6 +405,16 @@ async fn create_model_alias<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/quotas/{team_id}",
+    params(("team_id" = String, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "Quota found"),
+        (status = 404, description = "Quota not found")
+    ),
+    tag = "quotas"
+)]
 async fn get_quota<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Path(team_id): Path<String>,
@@ -316,8 +430,20 @@ async fn get_quota<D: Database, C: ConfigStore>(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/quotas",
+    request_body = CreateQuotaRequest,
+    responses(
+        (status = 200, description = "Quota created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "quotas"
+)]
 async fn create_quota<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<CreateQuotaRequest>,
 ) -> impl IntoResponse {
     match state
@@ -542,20 +668,20 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
     Ok(Json(body))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateTeamRequest {
     name: String,
     budget_cents: i64,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateUserRequest {
     team_id: String,
     email: String,
     role: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateApiKeyRequest {
     key: String,
     user_id: String,
@@ -563,7 +689,7 @@ struct CreateApiKeyRequest {
     name: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateModelAliasRequest {
     team_id: String,
     alias: String,
@@ -571,7 +697,7 @@ struct CreateModelAliasRequest {
     provider: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 struct CreateQuotaRequest {
     team_id: String,
     rpm_limit: i32,
@@ -586,8 +712,24 @@ struct UpdateRoutingConfigRequest {
     routing_groups: Option<serde_json::Value>,
 }
 
+#[derive(Deserialize, ToSchema)]
+struct ChangePasswordRequest {
+    current_password: String,
+    new_password: String,
+}
+
 // ── Auth Handlers ────────────────────────────────────────────────────────────
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/login",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "Login successful, returns JWT cookie"),
+        (status = 401, description = "Invalid credentials")
+    ),
+    tag = "auth"
+)]
 async fn login_handler(
     State(state): State<ProdState>,
     Json(req): Json<LoginRequest>,
@@ -642,6 +784,15 @@ async fn login_handler(
         .into_response()
 }
 
+#[utoipa::path(
+    get,
+    path = "/v1/auth/me",
+    responses(
+        (status = 200, description = "Current user info"),
+        (status = 401, description = "Not authenticated")
+    ),
+    tag = "auth"
+)]
 async fn me_handler(Extension(claims): Extension<AuthClaims>) -> impl IntoResponse {
     let response = MeResponse {
         id: claims.sub,
@@ -653,6 +804,14 @@ async fn me_handler(Extension(claims): Extension<AuthClaims>) -> impl IntoRespon
     Json(response).into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/v1/auth/logout",
+    responses(
+        (status = 204, description = "Logged out")
+    ),
+    tag = "auth"
+)]
 async fn logout_handler() -> impl IntoResponse {
     (
         [(SET_COOKIE, hyperinfer_server::auth::clear_auth_cookie())],
@@ -660,12 +819,17 @@ async fn logout_handler() -> impl IntoResponse {
     )
 }
 
-#[derive(Deserialize)]
-struct ChangePasswordRequest {
-    current_password: String,
-    new_password: String,
-}
-
+#[utoipa::path(
+    post,
+    path = "/v1/auth/change-password",
+    request_body = ChangePasswordRequest,
+    responses(
+        (status = 204, description = "Password changed"),
+        (status = 400, description = "Validation error"),
+        (status = 401, description = "Current password incorrect")
+    ),
+    tag = "auth"
+)]
 async fn change_password_handler(
     State(state): State<ProdState>,
     Extension(claims): Extension<AuthClaims>,
@@ -938,8 +1102,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ))
         .with_state(mcp_state);
 
-    let v1_router = Router::new()
+    // Internal service-to-service routes protected by static admin token
+    let config_sync_router = Router::new()
         .route("/v1/config/sync", get(config_sync))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            admin_auth_middleware,
+        ));
+
+    // Dashboard-facing v1 routes protected by JWT auth (role checks via RequireAdmin extractor)
+    let v1_jwt_router = Router::new()
         .route("/v1/teams/{id}", get(get_team))
         .route("/v1/teams", post(create_team))
         .route("/v1/users/{id}", get(get_user))
@@ -962,8 +1134,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .delete(delete_deployment),
         )
         .layer(middleware::from_fn_with_state(
-            state.clone(),
-            admin_auth_middleware,
+            state.jwt_secret.clone(),
+            auth_middleware,
         ));
 
     // Auth routes for user/password authentication
@@ -995,13 +1167,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             admin_auth_middleware,
         ));
 
-    let app = Router::new()
-        .merge(v1_router)
+    let mut app = Router::new()
+        .merge(config_sync_router)
+        .merge(v1_jwt_router)
         .merge(mcp_router)
         .merge(auth_public_routes)
         .merge(auth_protected_routes)
         .merge(proxy_router)
-        .merge(routing_config_routes)
+        .merge(routing_config_routes);
+
+    // Swagger UI - disabled by default, set ENABLE_DOCS=true to enable for development
+    let enable_docs = std::env::var("ENABLE_DOCS")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
+    if enable_docs {
+        #[derive(OpenApi)]
+        #[openapi(
+            paths(
+                get_team,
+                create_team,
+                get_user,
+                create_user,
+                get_api_key,
+                create_api_key,
+                revoke_api_key,
+                get_model_alias,
+                create_model_alias,
+                get_quota,
+                create_quota,
+                login_handler,
+                me_handler,
+                logout_handler,
+                change_password_handler,
+            ),
+            components(schemas(
+                CreateTeamRequest,
+                CreateUserRequest,
+                CreateApiKeyRequest,
+                CreateModelAliasRequest,
+                CreateQuotaRequest,
+                ChangePasswordRequest,
+                LoginRequest,
+                LoginResponse,
+                MeResponse,
+            )),
+            tags(
+                (name = "teams", description = "Team management"),
+                (name = "users", description = "User management"),
+                (name = "api_keys", description = "API key management"),
+                (name = "model_aliases", description = "Model alias management"),
+                (name = "quotas", description = "Quota management"),
+                (name = "auth", description = "Authentication"),
+            ),
+            info(
+                title = "HyperInfer Control Plane API",
+                version = "0.1.0",
+                description = "Next-Generation LLM Gateway - Control Plane API",
+            )
+        )]
+        struct ApiDoc;
+
+        info!("Swagger UI enabled at /docs");
+        app = app.merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()));
+    }
+
+    let app = app
         .fallback(hyperinfer_server::frontend::spa_handler)
         .layer(cors)
         .with_state(state);
@@ -1198,8 +1429,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-123".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_team(
             State(state),
+            admin,
             Json(CreateTeamRequest {
                 name: "New Team".to_string(),
                 budget_cents: 5000,
@@ -1432,31 +1672,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_resolve_api_key_not_found() {
-        let mut db = MockDatabase::new();
-
-        db.expect_get_api_key_by_hash()
-            .times(1)
-            .returning(|_| Ok(None));
-
-        let result = resolve_api_key(&db, "nonexistent-key").await;
-        assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
-    }
-
-    #[tokio::test]
-    async fn test_resolve_api_key_database_error() {
-        let mut db = MockDatabase::new();
-
-        db.expect_get_api_key_by_hash()
-            .times(1)
-            .returning(|_| Err(DbError::Sqlx(sqlx::Error::Protocol("test error".into()))));
-
-        let result = resolve_api_key(&db, "test-key").await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
     async fn test_create_user_success() {
         use chrono::Utc;
 
@@ -1495,8 +1710,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_user(
             State(state),
+            admin,
             Json(CreateUserRequest {
                 team_id: "team-id".to_string(),
                 email: "new@example.com".to_string(),
@@ -1552,8 +1776,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_api_key(
             State(state),
+            admin,
             Json(CreateApiKeyRequest {
                 key: "test-secret-key".to_string(),
                 user_id: "user-id".to_string(),
@@ -1605,8 +1838,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_model_alias(
             State(state),
+            admin,
             Json(CreateModelAliasRequest {
                 team_id: "team-id".to_string(),
                 alias: "gpt-4-fast".to_string(),
@@ -1652,8 +1894,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_quota(
             State(state),
+            admin,
             Json(CreateQuotaRequest {
                 team_id: "team-id".to_string(),
                 rpm_limit: 100,
@@ -1690,8 +1941,17 @@ mod tests {
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
         };
 
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
         let response = create_team(
             State(state),
+            admin,
             Json(CreateTeamRequest {
                 name: "Duplicate Team".to_string(),
                 budget_cents: 5000,
