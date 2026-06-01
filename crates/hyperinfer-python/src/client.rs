@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use hyperinfer_client::HyperInferClient as RustClient;
 use hyperinfer_core::types::Quota;
-use hyperinfer_core::{ChatChunk, ChatResponse, Config, HyperInferError, RoutingRule};
+use hyperinfer_core::{ChatChunk, ChatResponse, Config, Deployment, HyperInferError, RoutingRule};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
@@ -465,6 +465,146 @@ impl HyperInferClient {
                 Ok(Py::new(py, iter)?.into_bound(py).into_any().unbind())
             })
             .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })?
+        })
+    }
+
+    /// Load deployments into the router engine for deployment-based routing.
+    ///
+    /// Args:
+    ///     deployments: A list of deployment dicts, each with keys:
+    ///         - id: str
+    ///         - name: str
+    ///         - provider: str (e.g., "openai", "anthropic")
+    ///         - model: str
+    ///         - api_key_ref: str (optional, defaults to "")
+    ///         - base_url: str
+    ///         - is_active: bool (optional, defaults to True)
+    ///         - weight: int (optional, defaults to 1)
+    ///         - priority: int (optional, defaults to 0)
+    ///         - max_tpm: int (optional)
+    ///         - max_rpm: int (optional)
+    ///         - cost_per_1k_input_tokens: float (optional)
+    ///         - cost_per_1k_output_tokens: float (optional)
+    ///         - sort_order: int (optional, defaults to 0)
+    #[pyo3(name = "load_deployments")]
+    pub fn load_deployments<'a>(
+        &self,
+        py: Python<'a>,
+        deployments: Vec<Py<PyAny>>,
+    ) -> PyResult<Bound<'a, PyAny>> {
+        let inner = self.inner.clone();
+
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let client = inner.read().await;
+            let client = client.as_ref().ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err(
+                    "Client not initialized. Call init() first.",
+                )
+            })?;
+
+            let core_deployments = Python::try_attach(|py| {
+                let mut result = Vec::new();
+                for dict_py in &deployments {
+                    let dict = dict_py.bind(py).cast::<PyDict>()?;
+                    let id: String = dict
+                        .get_item("id")?
+                        .ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err("deployment missing 'id'")
+                        })?
+                        .extract()?;
+                    let name: String = dict
+                        .get_item("name")?
+                        .ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err("deployment missing 'name'")
+                        })?
+                        .extract()?;
+                    let provider: String = dict
+                        .get_item("provider")?
+                        .ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err("deployment missing 'provider'")
+                        })?
+                        .extract()?;
+                    let model: String = dict
+                        .get_item("model")?
+                        .ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err("deployment missing 'model'")
+                        })?
+                        .extract()?;
+                    let api_key_ref: String = dict
+                        .get_item("api_key_ref")?
+                        .map(|v| v.extract())
+                        .transpose()?
+                        .unwrap_or_default();
+                    let base_url: String = dict
+                        .get_item("base_url")?
+                        .ok_or_else(|| {
+                            pyo3::exceptions::PyValueError::new_err("deployment missing 'base_url'")
+                        })?
+                        .extract()?;
+                    let is_active: bool = dict
+                        .get_item("is_active")?
+                        .map(|v| v.extract())
+                        .transpose()?
+                        .unwrap_or(true);
+                    let weight: u32 = dict
+                        .get_item("weight")?
+                        .map(|v| v.extract())
+                        .transpose()?
+                        .unwrap_or(1);
+                    let priority: u32 = dict
+                        .get_item("priority")?
+                        .map(|v| v.extract())
+                        .transpose()?
+                        .unwrap_or(0);
+                    let max_tpm: Option<u32> =
+                        dict.get_item("max_tpm")?.map(|v| v.extract()).transpose()?;
+                    let max_rpm: Option<u32> =
+                        dict.get_item("max_rpm")?.map(|v| v.extract()).transpose()?;
+                    let cost_per_1k_input_tokens: Option<f64> = dict
+                        .get_item("cost_per_1k_input_tokens")?
+                        .map(|v| v.extract())
+                        .transpose()?;
+                    let cost_per_1k_output_tokens: Option<f64> = dict
+                        .get_item("cost_per_1k_output_tokens")?
+                        .map(|v| v.extract())
+                        .transpose()?;
+                    let sort_order: u32 = dict
+                        .get_item("sort_order")?
+                        .map(|v| v.extract())
+                        .transpose()?
+                        .unwrap_or(0);
+
+                    result.push(Deployment {
+                        id,
+                        name,
+                        provider,
+                        model,
+                        api_key_ref,
+                        base_url,
+                        is_active,
+                        weight,
+                        priority,
+                        max_tpm,
+                        max_rpm,
+                        cost_per_1k_input_tokens,
+                        cost_per_1k_output_tokens,
+                        metadata: serde_json::json!({}),
+                        sort_order,
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
+                    });
+                }
+                Ok::<_, PyErr>(result)
+            })
+            .ok_or_else(|| {
+                pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
+            })??;
+
+            client.load_deployments(core_deployments).await;
+
+            Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {
                 pyo3::exceptions::PyRuntimeError::new_err("Failed to attach to Python")
             })?
         })

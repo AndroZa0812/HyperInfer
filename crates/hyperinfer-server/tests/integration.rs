@@ -47,6 +47,11 @@ async fn setup_test_db() -> (SqlxDb, ContainerAsync<Postgres>) {
         .await
         .expect("Failed to run migration 004");
 
+    sqlx::raw_sql(include_str!("../migrations/005_deployments.sql"))
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 005");
+
     (SqlxDb::new(pool), postgres)
 }
 
@@ -846,4 +851,201 @@ async fn test_password_hashing() {
     // Wrong password should not verify
     assert!(!verify_password("wrongpassword", &hash1));
     assert!(!verify_password("wrongpassword", &hash2));
+}
+
+// ── Deployment CRUD Tests ──────────────────────────────────────────────────
+
+#[tokio::test]
+async fn test_deployment_crud() {
+    let (db, _container) = setup_test_db().await;
+
+    // Create
+    let req = hyperinfer_core::CreateDeploymentRequest {
+        name: "test-deployment".to_string(),
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key_ref: Some("sk-test123".to_string()),
+        base_url: "https://api.openai.com/v1".to_string(),
+        is_active: true,
+        weight: 5,
+        priority: 1,
+        max_tpm: Some(100000),
+        max_rpm: Some(1000),
+        cost_per_1k_input_tokens: Some(0.03),
+        cost_per_1k_output_tokens: Some(0.06),
+        metadata: Some(serde_json::json!({"region": "us-east-1"})),
+        sort_order: Some(10),
+    };
+
+    let created = db
+        .create_deployment(req)
+        .await
+        .expect("Failed to create deployment");
+    assert_eq!(created.name, "test-deployment");
+    assert_eq!(created.provider, "openai");
+    assert_eq!(created.model, "gpt-4");
+    assert_eq!(created.weight, 5);
+    assert_eq!(created.sort_order, 10);
+
+    // Get
+    let fetched = db
+        .get_deployment(&created.id)
+        .await
+        .expect("Failed to get deployment")
+        .expect("Deployment not found");
+    assert_eq!(fetched.id, created.id);
+    assert_eq!(fetched.name, "test-deployment");
+
+    // List by model
+    let list = db
+        .list_deployments("gpt-4", None)
+        .await
+        .expect("Failed to list deployments");
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].id, created.id);
+
+    // Update
+    let update_req = hyperinfer_core::CreateDeploymentRequest {
+        name: "test-deployment-updated".to_string(),
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key_ref: None,
+        base_url: "https://api.openai.com/v1".to_string(),
+        is_active: false,
+        weight: 10,
+        priority: 2,
+        max_tpm: None,
+        max_rpm: None,
+        cost_per_1k_input_tokens: None,
+        cost_per_1k_output_tokens: None,
+        metadata: None,
+        sort_order: None,
+    };
+
+    let updated = db
+        .update_deployment(&created.id, update_req)
+        .await
+        .expect("Failed to update deployment");
+    assert_eq!(updated.name, "test-deployment-updated");
+    assert_eq!(updated.weight, 10);
+    assert!(!updated.is_active);
+
+    // Delete
+    db.delete_deployment(&created.id)
+        .await
+        .expect("Failed to delete deployment");
+
+    // Verify deleted
+    let deleted = db
+        .get_deployment(&created.id)
+        .await
+        .expect("Failed to get deployment");
+    assert!(deleted.is_none());
+}
+
+#[tokio::test]
+async fn test_deployment_list_filter_by_active() {
+    let (db, _container) = setup_test_db().await;
+
+    // Create active deployment
+    let req1 = hyperinfer_core::CreateDeploymentRequest {
+        name: "active-deployment".to_string(),
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key_ref: None,
+        base_url: "https://api.openai.com/v1".to_string(),
+        is_active: true,
+        weight: 1,
+        priority: 0,
+        max_tpm: None,
+        max_rpm: None,
+        cost_per_1k_input_tokens: None,
+        cost_per_1k_output_tokens: None,
+        metadata: None,
+        sort_order: None,
+    };
+    db.create_deployment(req1).await.expect("Failed to create");
+
+    // Create inactive deployment
+    let req2 = hyperinfer_core::CreateDeploymentRequest {
+        name: "inactive-deployment".to_string(),
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key_ref: None,
+        base_url: "https://api.openai.com/v1".to_string(),
+        is_active: false,
+        weight: 1,
+        priority: 0,
+        max_tpm: None,
+        max_rpm: None,
+        cost_per_1k_input_tokens: None,
+        cost_per_1k_output_tokens: None,
+        metadata: None,
+        sort_order: None,
+    };
+    db.create_deployment(req2).await.expect("Failed to create");
+
+    // List all
+    let all = db
+        .list_deployments("gpt-4", None)
+        .await
+        .expect("Failed to list");
+    assert_eq!(all.len(), 2);
+
+    // List active only
+    let active = db
+        .list_deployments("gpt-4", Some(true))
+        .await
+        .expect("Failed to list active");
+    assert_eq!(active.len(), 1);
+    assert_eq!(active[0].name, "active-deployment");
+
+    // List inactive only
+    let inactive = db
+        .list_deployments("gpt-4", Some(false))
+        .await
+        .expect("Failed to list inactive");
+    assert_eq!(inactive.len(), 1);
+    assert_eq!(inactive[0].name, "inactive-deployment");
+}
+
+#[tokio::test]
+async fn test_deployment_delete_not_found() {
+    let (db, _container) = setup_test_db().await;
+
+    let fake_id = uuid::Uuid::new_v4().to_string();
+    let result = db.delete_deployment(&fake_id).await;
+    assert!(matches!(result, Err(hyperinfer_core::DbError::NotFound)));
+}
+
+#[tokio::test]
+async fn test_deployment_unique_name_constraint() {
+    let (db, _container) = setup_test_db().await;
+
+    let req = hyperinfer_core::CreateDeploymentRequest {
+        name: "duplicate-name".to_string(),
+        provider: "openai".to_string(),
+        model: "gpt-4".to_string(),
+        api_key_ref: None,
+        base_url: "https://api.openai.com/v1".to_string(),
+        is_active: true,
+        weight: 1,
+        priority: 0,
+        max_tpm: None,
+        max_rpm: None,
+        cost_per_1k_input_tokens: None,
+        cost_per_1k_output_tokens: None,
+        metadata: None,
+        sort_order: None,
+    };
+
+    db.create_deployment(req.clone())
+        .await
+        .expect("First create should succeed");
+
+    let result = db.create_deployment(req).await;
+    assert!(matches!(
+        result,
+        Err(hyperinfer_core::DbError::UniqueViolation(_))
+    ));
 }

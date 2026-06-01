@@ -168,7 +168,7 @@ impl RouterEngine {
         })
     }
 
-    pub async fn route_with_fallback(
+    pub async fn route_with_fallback<T>(
         &self,
         model: &str,
         state: &dyn RoutingState,
@@ -176,9 +176,9 @@ impl RouterEngine {
         executor: impl Fn(
                 Arc<Deployment>,
             )
-                -> Pin<Box<dyn Future<Output = Result<(), hyperinfer_core::HyperInferError>> + Send>>
+                -> Pin<Box<dyn Future<Output = Result<T, hyperinfer_core::HyperInferError>> + Send>>
             + Send,
-    ) -> Result<RoutingResult, RoutingError> {
+    ) -> Result<(RoutingResult, T), RoutingError> {
         let start_time = Instant::now();
         let mut total_attempts: u32 = 0;
 
@@ -281,12 +281,15 @@ impl RouterEngine {
             let _ = state.record_request_start(&selected.id).await;
 
             match executor(Arc::clone(&selected)).await {
-                Ok(()) => {
-                    return Ok(RoutingResult {
-                        deployment: selected,
-                        attempt: total_attempts,
-                        fallback_chain,
-                    });
+                Ok(value) => {
+                    return Ok((
+                        RoutingResult {
+                            deployment: selected,
+                            attempt: total_attempts,
+                            fallback_chain,
+                        },
+                        value,
+                    ));
                 }
                 Err(err) => {
                     let error_kind = ErrorKind::classify(&err);
@@ -456,7 +459,7 @@ mod tests {
             Box<dyn Future<Output = Result<(), hyperinfer_core::HyperInferError>> + Send>,
         > {
             Box::pin(async {
-                Err(hyperinfer_core::HyperInferError::ApiError {
+                Err::<(), _>(hyperinfer_core::HyperInferError::ApiError {
                     status: 500,
                     message: "fail".into(),
                 })
@@ -464,7 +467,7 @@ mod tests {
         };
 
         let result = engine
-            .route_with_fallback("gpt-4", &state, &ctx, executor)
+            .route_with_fallback::<()>("gpt-4", &state, &ctx, executor)
             .await;
 
         assert!(result.is_err());
