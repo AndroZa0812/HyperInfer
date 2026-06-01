@@ -5,7 +5,8 @@ use argon2::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use hyperinfer_core::{
-    ApiKey, ConfigStore, Database, DbError, ModelAlias, PolicyUpdate, Quota, Team, UsageLog, User,
+    ApiKey, ConfigStore, CreateDeploymentRequest, Database, DbError, Deployment, ModelAlias,
+    PolicyUpdate, Quota, RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog, User,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -293,6 +294,178 @@ impl Database for SqlxDb {
             .await?;
         Ok(())
     }
+
+    async fn list_deployments(
+        &self,
+        model: &str,
+        is_active: Option<bool>,
+    ) -> Result<Vec<Deployment>, DbError> {
+        let result: Vec<DeploymentRow> = match is_active {
+            Some(active) => sqlx::query_as(
+                "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE model = $1 AND is_active = $2 ORDER BY sort_order ASC, created_at ASC"
+            )
+            .bind(model)
+            .bind(active)
+            .fetch_all(&self.pool)
+            .await?,
+            None => sqlx::query_as(
+                "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE model = $1 ORDER BY sort_order ASC, created_at ASC"
+            )
+            .bind(model)
+            .fetch_all(&self.pool)
+            .await?,
+        };
+
+        Ok(result.into_iter().map(Deployment::from).collect())
+    }
+
+    async fn get_deployment(&self, id: &str) -> Result<Option<Deployment>, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let result: Option<DeploymentRow> = sqlx::query_as(
+            "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(Deployment::from))
+    }
+
+    async fn create_deployment(&self, req: CreateDeploymentRequest) -> Result<Deployment, DbError> {
+        let result: DeploymentRow = sqlx::query_as(
+            "INSERT INTO deployments (name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at"
+        )
+        .bind(&req.name)
+        .bind(&req.provider)
+        .bind(&req.model)
+        .bind(req.api_key_ref.as_deref().unwrap_or(""))
+        .bind(&req.base_url)
+        .bind(req.is_active)
+        .bind(req.weight)
+        .bind(req.priority)
+        .bind(req.max_tpm)
+        .bind(req.max_rpm)
+        .bind(req.cost_per_1k_input_tokens)
+        .bind(req.cost_per_1k_output_tokens)
+        .bind(req.metadata.unwrap_or(serde_json::json!({})))
+        .bind(req.sort_order.unwrap_or(0))
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|db| db.is_unique_violation())
+                .unwrap_or(false)
+            {
+                DbError::UniqueViolation(format!(
+                    "Deployment with name '{}' already exists",
+                    req.name
+                ))
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
+
+        Ok(Deployment::from(result))
+    }
+
+    async fn update_deployment(
+        &self,
+        id: &str,
+        req: CreateDeploymentRequest,
+    ) -> Result<Deployment, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let result: DeploymentRow = sqlx::query_as(
+            "UPDATE deployments SET name = $1, provider = $2, model = $3, api_key_ref = $4, base_url = $5, is_active = $6, weight = $7, priority = $8, max_tpm = $9, max_rpm = $10, cost_per_1k_input_tokens = $11, cost_per_1k_output_tokens = $12, metadata = $13, sort_order = $14 WHERE id = $15 RETURNING id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at"
+        )
+        .bind(&req.name)
+        .bind(&req.provider)
+        .bind(&req.model)
+        .bind(req.api_key_ref.as_deref().unwrap_or(""))
+        .bind(&req.base_url)
+        .bind(req.is_active)
+        .bind(req.weight)
+        .bind(req.priority)
+        .bind(req.max_tpm)
+        .bind(req.max_rpm)
+        .bind(req.cost_per_1k_input_tokens)
+        .bind(req.cost_per_1k_output_tokens)
+        .bind(req.metadata.unwrap_or(serde_json::json!({})))
+        .bind(req.sort_order.unwrap_or(0))
+        .bind(uuid)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|db| db.is_unique_violation())
+                .unwrap_or(false)
+            {
+                DbError::UniqueViolation(format!(
+                    "Deployment with name '{}' already exists",
+                    req.name
+                ))
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
+
+        Ok(Deployment::from(result))
+    }
+
+    async fn delete_deployment(&self, id: &str) -> Result<(), DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let result = sqlx::query("DELETE FROM deployments WHERE id = $1")
+            .bind(uuid)
+            .execute(&self.pool)
+            .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(DbError::NotFound);
+        }
+        Ok(())
+    }
+
+    async fn get_routing_config(&self) -> Result<Option<RoutingConfig>, DbError> {
+        let result: Option<RoutingConfigRow> = sqlx::query_as(
+            "SELECT id, strategy, strategy_params, fallback_config, routing_groups, updated_at FROM routing_config WHERE id = 1",
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result.map(RoutingConfig::from))
+    }
+
+    async fn update_routing_config(
+        &self,
+        req: UpdateRoutingConfigRequest,
+    ) -> Result<RoutingConfig, DbError> {
+        let existing = self
+            .get_routing_config()
+            .await?
+            .unwrap_or_else(|| RoutingConfig {
+                strategy: "weighted-shuffle".to_string(),
+                strategy_params: serde_json::json!({}),
+                fallback_config: serde_json::json!({}),
+                routing_groups: serde_json::json!([]),
+                updated_at: chrono::Utc::now(),
+            });
+
+        let strategy = req.strategy.unwrap_or(existing.strategy);
+        let strategy_params = req.strategy_params.unwrap_or(existing.strategy_params);
+        let fallback_config = req.fallback_config.unwrap_or(existing.fallback_config);
+        let routing_groups = req.routing_groups.unwrap_or(existing.routing_groups);
+
+        let result: RoutingConfigRow = sqlx::query_as(
+            "UPDATE routing_config SET strategy = $1, strategy_params = $2, fallback_config = $3, routing_groups = $4, updated_at = NOW() WHERE id = 1 RETURNING id, strategy, strategy_params, fallback_config, routing_groups, updated_at",
+        )
+        .bind(&strategy)
+        .bind(&strategy_params)
+        .bind(&fallback_config)
+        .bind(&routing_groups)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(RoutingConfig::from(result))
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -433,6 +606,73 @@ impl From<UsageLogRow> for UsageLog {
             output_tokens: row.output_tokens,
             response_time_ms: row.response_time_ms,
             recorded_at: row.recorded_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+struct DeploymentRow {
+    id: uuid::Uuid,
+    name: String,
+    provider: String,
+    model: String,
+    api_key_ref: String,
+    base_url: String,
+    is_active: bool,
+    weight: i32,
+    priority: i32,
+    max_tpm: Option<i32>,
+    max_rpm: Option<i32>,
+    cost_per_1k_input_tokens: Option<f64>,
+    cost_per_1k_output_tokens: Option<f64>,
+    metadata: serde_json::Value,
+    sort_order: i32,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl From<DeploymentRow> for Deployment {
+    fn from(row: DeploymentRow) -> Self {
+        Deployment {
+            id: row.id.to_string(),
+            name: row.name,
+            provider: row.provider,
+            model: row.model,
+            api_key_ref: row.api_key_ref,
+            base_url: row.base_url,
+            is_active: row.is_active,
+            weight: row.weight as u32,
+            priority: row.priority as u32,
+            max_tpm: row.max_tpm.map(|v| v as u32),
+            max_rpm: row.max_rpm.map(|v| v as u32),
+            cost_per_1k_input_tokens: row.cost_per_1k_input_tokens,
+            cost_per_1k_output_tokens: row.cost_per_1k_output_tokens,
+            metadata: row.metadata,
+            sort_order: row.sort_order as u32,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+struct RoutingConfigRow {
+    id: i32,
+    strategy: String,
+    strategy_params: serde_json::Value,
+    fallback_config: serde_json::Value,
+    routing_groups: serde_json::Value,
+    updated_at: DateTime<Utc>,
+}
+
+impl From<RoutingConfigRow> for RoutingConfig {
+    fn from(row: RoutingConfigRow) -> Self {
+        RoutingConfig {
+            strategy: row.strategy,
+            strategy_params: row.strategy_params,
+            fallback_config: row.fallback_config,
+            routing_groups: row.routing_groups,
+            updated_at: row.updated_at,
         }
     }
 }
