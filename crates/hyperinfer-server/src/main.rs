@@ -476,9 +476,37 @@ impl IntoResponse for ProxyError {
 
 async fn chat_completions_handler<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    headers: axum::http::HeaderMap,
     Json(request): Json<hyperinfer_core::ChatRequest>,
 ) -> Result<Json<serde_json::Value>, ProxyError> {
-    // 1. Load deployments from database
+    // 1. Extract and validate API key
+    let api_key = headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+
+    let auth = match proxy::validate_api_key(&state.db, api_key).await {
+        Ok(auth) => auth,
+        Err(status) => {
+            return Err(ProxyError {
+                error: "Invalid or missing API key".to_string(),
+                code: status,
+            })
+        }
+    };
+
+    // 2. Check team quota
+    if let Ok(Some(quota)) = state.db.get_quota(&auth.team_id).await {
+        tracing::debug!(
+            "Team {} quota: rpm={}, tpm={}",
+            auth.team_id,
+            quota.rpm_limit,
+            quota.tpm_limit
+        );
+    }
+
+    // 3. Load deployments from database
     let deployments = state
         .db
         .list_deployments(&request.model, Some(true))
@@ -495,15 +523,15 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
         });
     }
 
-    // 2. Select deployment using routing
-    let selected = proxy::select_deployment(&request, &deployments)
+    // 4. Select deployment using routing
+    let selected = proxy::select_deployment(&request, &deployments, Some(&auth))
         .await
         .map_err(|e| ProxyError {
             error: format!("Routing failed: {}", e),
             code: 503,
         })?;
 
-    // 3. Forward request to selected deployment
+    // 5. Forward request to selected deployment
     let body = proxy::forward_request(&request, &selected.base_url, &selected.api_key)
         .await
         .map_err(|code| ProxyError {
