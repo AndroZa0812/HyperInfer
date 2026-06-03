@@ -52,7 +52,7 @@ impl Deployment {
         let mut hasher = Sha256::new();
         hasher.update(input.as_bytes());
         let result = hasher.finalize();
-        hex::encode(&result[..8])
+        hex::encode(result)
     }
 
     pub fn with_base_url(mut self, base_url: String) -> Self {

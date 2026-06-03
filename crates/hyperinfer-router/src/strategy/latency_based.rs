@@ -117,6 +117,10 @@ impl RoutingStrategy for LatencyBased {
             .collect();
 
         let total_weight: f64 = weights.iter().sum();
+        if total_weight <= 0.0 {
+            let (i, _) = within_threshold[0];
+            return Ok(&candidates[i]);
+        }
         let mut rng = rand::thread_rng();
         let mut pick = rng.gen_range(0.0..total_weight);
 

@@ -226,6 +226,23 @@ pub struct CreateDeploymentRequest {
     pub sort_order: Option<i32>,
 }
 
+impl CreateDeploymentRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.weight < 0 {
+            return Err("weight must be non-negative".to_string());
+        }
+        if self.priority < 0 {
+            return Err("priority must be non-negative".to_string());
+        }
+        if let Some(sort_order) = self.sort_order {
+            if sort_order < 0 {
+                return Err("sort_order must be non-negative".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Routing configuration (singleton row in routing_config table)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutingConfig {

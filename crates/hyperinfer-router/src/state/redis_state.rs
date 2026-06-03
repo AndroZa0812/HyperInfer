@@ -208,25 +208,20 @@ impl RoutingState for RedisRoutingState {
 
     async fn record_request_start(&self, deployment_id: &str) -> Result<(), RoutingError> {
         let prefix = Self::prefix(deployment_id);
-        let manager = self.manager.clone();
-        let deployment_id = deployment_id.to_string();
+        let mut conn = self.manager.clone();
+        let rpm_key = format!("{}:rpm", prefix);
+        let pipe = redis::pipe()
+            .atomic()
+            .incr(format!("{}:in_flight", prefix), 1)
+            .incr(&rpm_key, 1)
+            .cmd("EXPIRE")
+            .arg(&rpm_key)
+            .arg(60)
+            .clone();
 
-        tokio::spawn(async move {
-            let mut conn = manager.clone();
-            let rpm_key = format!("{}:rpm", prefix);
-            let pipe = redis::pipe()
-                .atomic()
-                .incr(format!("{}:in_flight", prefix), 1)
-                .incr(&rpm_key, 1)
-                .cmd("EXPIRE")
-                .arg(&rpm_key)
-                .arg(60)
-                .clone();
-
-            if let Err(e) = pipe.query_async::<()>(&mut conn).await {
-                warn!(deployment_id = %deployment_id, error = %e, "failed to record request start");
-            }
-        });
+        if let Err(e) = pipe.query_async::<()>(&mut conn).await {
+            warn!(deployment_id = %deployment_id, error = %e, "failed to record request start");
+        }
 
         Ok(())
     }

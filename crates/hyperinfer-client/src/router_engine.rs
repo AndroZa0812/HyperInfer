@@ -3,7 +3,10 @@ use hyperinfer_router::{
     deployment::Deployment as RouterDeployment,
     engine::{GlobalLimits, RouterEngine as HyperInferRouterEngine, RoutingResult},
     error::RoutingError,
-    strategy::{RoutingContext, RoutingState},
+    strategy::{
+        cost_based::CostBased, latency_based::LatencyBased, least_busy::LeastBusy,
+        usage_based::UsageBased, weighted_shuffle::WeightedShuffle, RoutingContext, RoutingState,
+    },
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,9 +18,10 @@ pub struct RouterEngine {
 }
 
 impl RouterEngine {
-    /// Create a new router engine with default configuration
-    pub fn new() -> Self {
+    /// Create a new router engine with default configuration and all built-in strategies
+    pub async fn new() -> Self {
         let engine = HyperInferRouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
         let state = Arc::new(NoopState);
         Self {
             inner: Arc::new(engine),
@@ -26,13 +30,26 @@ impl RouterEngine {
     }
 
     /// Create a new router engine with custom global limits
-    pub fn with_limits(limits: GlobalLimits) -> Self {
+    pub async fn with_limits(limits: GlobalLimits) -> Self {
         let engine = HyperInferRouterEngine::new(limits);
+        Self::register_all_strategies(&engine).await;
         let state = Arc::new(NoopState);
         Self {
             inner: Arc::new(engine),
             state,
         }
+    }
+
+    async fn register_all_strategies(engine: &HyperInferRouterEngine) {
+        engine
+            .register_strategy(Box::new(WeightedShuffle::new()))
+            .await;
+        engine
+            .register_strategy(Box::new(LatencyBased::new()))
+            .await;
+        engine.register_strategy(Box::new(LeastBusy::new())).await;
+        engine.register_strategy(Box::new(UsageBased::new())).await;
+        engine.register_strategy(Box::new(CostBased::new())).await;
     }
 
     /// Load deployments into the routing pool
@@ -112,12 +129,6 @@ impl RouterEngine {
             router_deployment = router_deployment.with_output_cost(cost);
         }
         router_deployment
-    }
-}
-
-impl Default for RouterEngine {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

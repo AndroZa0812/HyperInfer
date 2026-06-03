@@ -4,20 +4,29 @@ use hyperinfer_router::{
     engine::{GlobalLimits, RouterEngine},
     error::RoutingError,
     strategy::{
-        weighted_shuffle::WeightedShuffle, DeploymentMetrics, RecordFailureResult, RoutingContext,
-        RoutingState,
+        cost_based::CostBased, latency_based::LatencyBased, least_busy::LeastBusy,
+        usage_based::UsageBased, weighted_shuffle::WeightedShuffle, DeploymentMetrics,
+        RecordFailureResult, RoutingContext, RoutingState,
     },
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::net::IpAddr;
+use std::sync::LazyLock;
 
-/// Auth context extracted from API key
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+
+const BLOCKED_IP_PREFIXES: &[&str] = &[
+    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
+    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
+    "172.31.", "192.168.", "127.", "0.",
+];
+
 pub struct ProxyAuth {
     pub team_id: String,
     pub api_key_id: String,
 }
 
-/// Noop routing state for server-side proxy (no metrics tracking)
 pub struct NoopState;
 
 #[async_trait::async_trait]
@@ -61,7 +70,6 @@ impl RoutingState for NoopState {
     }
 }
 
-/// Validate API key and extract team info
 pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<ProxyAuth, u16> {
     if api_key.is_empty() {
         return Err(401);
@@ -76,7 +84,7 @@ pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<Prox
     match db.get_api_key_by_hash(&key_hash).await {
         Ok(Some(key)) => {
             if !key.is_active {
-                return Err(403);
+                return Err(401);
             }
             Ok(ProxyAuth {
                 team_id: key.team_id,
@@ -88,15 +96,69 @@ pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<Prox
     }
 }
 
-/// Selected deployment result from routing
+fn validate_base_url(url: &str) -> Result<(), u16> {
+    let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
+    let host = parsed.host_str().ok_or(400u16)?;
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        let ip_str = ip.to_string();
+        for prefix in BLOCKED_IP_PREFIXES {
+            if ip_str.starts_with(prefix) {
+                return Err(400);
+            }
+        }
+    }
+
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err(400);
+    }
+
+    Ok(())
+}
+
+fn default_base_url_for_provider(provider: &Provider) -> String {
+    match provider {
+        Provider::Anthropic => "https://api.anthropic.com/v1".to_string(),
+        Provider::OpenAI => "https://api.openai.com/v1".to_string(),
+        _ => "https://api.openai.com/v1".to_string(),
+    }
+}
+
+fn set_auth_header(
+    headers: &mut reqwest::header::HeaderMap,
+    provider: &Provider,
+    api_key: &str,
+) -> Result<(), u16> {
+    if api_key.is_empty() {
+        return Ok(());
+    }
+    match provider {
+        Provider::Anthropic => {
+            headers.insert("x-api-key", api_key.parse().map_err(|_| 500u16)?);
+            headers.insert(
+                "anthropic-version",
+                "2023-06-01".parse().map_err(|_| 500u16)?,
+            );
+        }
+        _ => {
+            headers.insert(
+                "authorization",
+                format!("Bearer {}", api_key).parse().map_err(|_| 500u16)?,
+            );
+        }
+    }
+    Ok(())
+}
+
 pub struct SelectedDeployment {
     pub deployment: RouterDeployment,
     pub base_url: String,
     pub api_key: String,
+    pub provider: Provider,
 }
 
-/// Select a deployment for the given request using routing strategies
-pub async fn select_deployment(
+pub async fn select_deployment<D: Database>(
+    db: &D,
     request: &ChatRequest,
     deployments: &[hyperinfer_core::Deployment],
     _auth: Option<&ProxyAuth>,
@@ -109,6 +171,16 @@ pub async fn select_deployment(
     engine
         .register_strategy(Box::new(WeightedShuffle::new()))
         .await;
+    engine
+        .register_strategy(Box::new(LatencyBased::new()))
+        .await;
+    engine.register_strategy(Box::new(LeastBusy::new())).await;
+    engine.register_strategy(Box::new(UsageBased::new())).await;
+    engine.register_strategy(Box::new(CostBased::new())).await;
+
+    if let Ok(Some(config)) = db.get_routing_config().await {
+        engine.set_default_strategy(&config.strategy).await;
+    }
 
     for d in deployments {
         let provider = match d.provider.as_str() {
@@ -152,7 +224,7 @@ pub async fn select_deployment(
     let base_url = selected
         .base_url
         .clone()
-        .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+        .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
 
     Ok(SelectedDeployment {
         deployment: RouterDeployment::new(
@@ -163,16 +235,18 @@ pub async fn select_deployment(
         ),
         base_url,
         api_key: selected.api_key_ref.clone(),
+        provider: selected.provider.clone(),
     })
 }
 
-/// Forward a chat request to a specific deployment URL
 pub async fn forward_request(
     request: &ChatRequest,
     base_url: &str,
     api_key: &str,
+    provider: &Provider,
 ) -> Result<serde_json::Value, u16> {
-    let client = reqwest::Client::new();
+    validate_base_url(base_url)?;
+
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     let mut headers = reqwest::header::HeaderMap::new();
@@ -180,14 +254,9 @@ pub async fn forward_request(
         "content-type",
         "application/json".parse().map_err(|_| 500u16)?,
     );
-    if !api_key.is_empty() {
-        headers.insert(
-            "authorization",
-            format!("Bearer {}", api_key).parse().map_err(|_| 500u16)?,
-        );
-    }
+    set_auth_header(&mut headers, provider, api_key)?;
 
-    let response = match client
+    let response = match HTTP_CLIENT
         .post(&url)
         .headers(headers)
         .json(request)

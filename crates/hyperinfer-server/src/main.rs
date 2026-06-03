@@ -511,6 +511,9 @@ async fn create_deployment<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
 ) -> impl IntoResponse {
+    if let Err(msg) = req.validate() {
+        return (StatusCode::BAD_REQUEST, msg).into_response();
+    }
     match state.db.create_deployment(req).await {
         Ok(deployment) => (
             StatusCode::CREATED,
@@ -551,6 +554,9 @@ async fn update_deployment<D: Database, C: ConfigStore>(
     Path(id): Path<String>,
     Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
 ) -> impl IntoResponse {
+    if let Err(msg) = req.validate() {
+        return (StatusCode::BAD_REQUEST, msg).into_response();
+    }
     match state.db.update_deployment(&id, req).await {
         Ok(deployment) => Json(deployment).into_response(),
         Err(e) => match e {
@@ -650,7 +656,7 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
     }
 
     // 4. Select deployment using routing
-    let selected = proxy::select_deployment(&request, &deployments, Some(&auth))
+    let selected = proxy::select_deployment(&state.db, &request, &deployments, Some(&auth))
         .await
         .map_err(|e| ProxyError {
             error: format!("Routing failed: {}", e),
@@ -658,12 +664,17 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
         })?;
 
     // 5. Forward request to selected deployment
-    let body = proxy::forward_request(&request, &selected.base_url, &selected.api_key)
-        .await
-        .map_err(|code| ProxyError {
-            error: "Upstream request failed".to_string(),
-            code,
-        })?;
+    let body = proxy::forward_request(
+        &request,
+        &selected.base_url,
+        &selected.api_key,
+        &selected.provider,
+    )
+    .await
+    .map_err(|code| ProxyError {
+        error: "Upstream request failed".to_string(),
+        code,
+    })?;
 
     Ok(Json(body))
 }

@@ -23,11 +23,14 @@ pub use telemetry_otlp::{
 use futures::{Stream, StreamExt};
 use hyperinfer_core::{
     rate_limiting::RateLimiter, ChatChunk, ChatRequest, ChatResponse, Config, HyperInferError,
+    Provider,
 };
 use hyperinfer_providers::ProviderRegistry;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
 
@@ -174,7 +177,7 @@ impl HyperInferClient {
             config,
             http_caller,
             router,
-            router_engine: Arc::new(RouterEngine::new()),
+            router_engine: Arc::new(RouterEngine::new().await),
             rate_limiter,
             telemetry,
             cache,
@@ -200,8 +203,17 @@ impl HyperInferClient {
     }
 
     /// Subscribe to Redis Pub/Sub for live deployment config changes.
-    /// When a message arrives on "hyperinfer:config_updates", re-fetch deployments.
-    pub async fn subscribe_config_updates(&self, redis_url: &str) -> Result<(), HyperInferError> {
+    /// When a message arrives on "hyperinfer:config_updates", calls the provided
+    /// fetcher function to re-fetch deployments and rebuilds the routing pool.
+    pub async fn subscribe_config_updates<F, Fut>(
+        &self,
+        redis_url: &str,
+        fetcher: F,
+    ) -> Result<(), HyperInferError>
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<Vec<hyperinfer_core::Deployment>, String>> + Send,
+    {
         let client = redis::Client::open(redis_url)
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
         let mut pubsub = client
@@ -214,7 +226,7 @@ impl HyperInferClient {
             .await
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
 
-        // Move pubsub into spawned task so the stream has a 'static lifetime.
+        let engine = self.router_engine.clone();
         let _handle = tokio::spawn(async move {
             let mut stream = pubsub.on_message();
             loop {
@@ -223,6 +235,15 @@ impl HyperInferClient {
                         tracing::info!(
                             "Received config update notification, re-fetching deployments"
                         );
+                        match fetcher().await {
+                            Ok(deployments) => {
+                                engine.rebuild_pool(deployments).await;
+                                tracing::info!("Rebuilt deployment pool after config update");
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to re-fetch deployments after config update");
+                            }
+                        }
                     }
                     None => {
                         tracing::info!("Pub/Sub stream ended");
@@ -280,26 +301,33 @@ impl HyperInferClient {
             let deployment_result = self.router_engine.select_deployment(&request).await;
             if let Ok(routing_result) = deployment_result {
                 let deployment = &routing_result.deployment;
-                let base_url = deployment
-                    .base_url
-                    .as_deref()
-                    .unwrap_or("https://api.openai.com/v1");
+                let default_url = match &deployment.provider {
+                    Provider::Anthropic => "https://api.anthropic.com/v1",
+                    _ => "https://api.openai.com/v1",
+                };
+                let base_url = deployment.base_url.as_deref().unwrap_or(default_url);
                 let api_key = &deployment.api_key_ref;
 
-                // Execute request against deployment
-                let client = reqwest::Client::new();
                 let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
                 let mut headers = reqwest::header::HeaderMap::new();
                 headers.insert("content-type", "application/json".parse().unwrap());
                 if !api_key.is_empty() {
-                    headers.insert(
-                        "authorization",
-                        format!("Bearer {}", api_key).parse().unwrap(),
-                    );
+                    match &deployment.provider {
+                        Provider::Anthropic => {
+                            headers.insert("x-api-key", api_key.parse().unwrap());
+                            headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+                        }
+                        _ => {
+                            headers.insert(
+                                "authorization",
+                                format!("Bearer {}", api_key).parse().unwrap(),
+                            );
+                        }
+                    }
                 }
 
-                match client
+                match HTTP_CLIENT
                     .post(&url)
                     .headers(headers)
                     .json(&request)
