@@ -25,4 +25,7 @@ pub enum RoutingError {
 
     #[error("provider error: status={status}, message={message}")]
     ProviderError { status: u16, message: String },
+
+    #[error("executor panicked during request processing")]
+    ExecutorPanic,
 }

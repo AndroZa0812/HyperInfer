@@ -168,7 +168,7 @@ impl RouterEngine {
         })
     }
 
-    pub async fn route_with_fallback<T>(
+    pub async fn route_with_fallback<T: Send + 'static>(
         &self,
         model: &str,
         state: &dyn RoutingState,
@@ -280,8 +280,12 @@ impl RouterEngine {
             total_attempts += 1;
             let _ = state.record_request_start(&selected.id).await;
 
-            match executor(Arc::clone(&selected)).await {
-                Ok(value) => {
+            let deployment_id = selected.id.clone();
+            let executor_future = executor(Arc::clone(&selected));
+            let join_result = tokio::spawn(executor_future).await;
+
+            match join_result {
+                Ok(Ok(value)) => {
                     return Ok((
                         RoutingResult {
                             deployment: selected,
@@ -291,10 +295,10 @@ impl RouterEngine {
                         value,
                     ));
                 }
-                Err(err) => {
+                Ok(Err(err)) => {
                     let error_kind = ErrorKind::classify(&err);
-                    let _ = state.record_request_failure(&selected.id).await;
-                    excluded_ids.insert(selected.id.clone());
+                    let _ = state.record_request_failure(&deployment_id).await;
+                    excluded_ids.insert(deployment_id);
 
                     let same_model_candidates = {
                         let pool = self.pool.read().await;
@@ -330,6 +334,11 @@ impl RouterEngine {
                             return Err(RoutingError::AllDeploymentsFailed(initial_model));
                         }
                     }
+                }
+                Err(_panic) => {
+                    let _ = state.record_request_failure(&deployment_id).await;
+                    excluded_ids.insert(deployment_id);
+                    return Err(RoutingError::ExecutorPanic);
                 }
             }
         }
