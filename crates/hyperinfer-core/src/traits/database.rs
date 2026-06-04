@@ -79,6 +79,8 @@ pub trait Database: Clone + Send + Sync + 'static {
         &self,
         req: UpdateRoutingConfigRequest,
     ) -> Result<RoutingConfig, DbError>;
+
+    async fn ping(&self) -> Result<(), DbError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

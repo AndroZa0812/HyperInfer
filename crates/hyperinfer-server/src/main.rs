@@ -81,6 +81,28 @@ fn parse_bearer_token(header: &str) -> Option<String> {
     }
 }
 
+async fn healthz_handler<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+) -> impl IntoResponse {
+    let db_ok = state.db.ping().await.is_ok();
+    let redis_ok = state.config_manager.ping().await.is_ok();
+
+    let status = if db_ok && redis_ok {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    (
+        status,
+        Json(serde_json::json!({
+            "status": if db_ok && redis_ok { "ok" } else { "degraded" },
+            "database": if db_ok { "ok" } else { "error" },
+            "redis": if redis_ok { "ok" } else { "error" }
+        })),
+    )
+}
+
 async fn config_sync<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
 ) -> impl IntoResponse {
@@ -1150,7 +1172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         ));
 
     // Auth routes for user/password authentication
-    let auth_public_routes = Router::new().route("/v1/auth/login", post(login_handler));
+    let auth_public_routes = Router::new()
+        .route("/v1/auth/login", post(login_handler))
+        .route("/healthz", get(healthz_handler));
 
     let auth_protected_routes = Router::new()
         .route("/v1/auth/me", get(me_handler))
@@ -1297,6 +1321,9 @@ mod tests {
             async fn create_deployment(&self, req: hyperinfer_core::CreateDeploymentRequest) -> Result<hyperinfer_core::Deployment, DbError>;
             async fn update_deployment(&self, id: &str, req: hyperinfer_core::CreateDeploymentRequest) -> Result<hyperinfer_core::Deployment, DbError>;
             async fn delete_deployment(&self, id: &str) -> Result<(), DbError>;
+            async fn get_routing_config(&self) -> Result<Option<hyperinfer_core::RoutingConfig>, DbError>;
+            async fn update_routing_config(&self, req: hyperinfer_core::UpdateRoutingConfigRequest) -> Result<hyperinfer_core::RoutingConfig, DbError>;
+            async fn ping(&self) -> Result<(), DbError>;
         }
     }
 
@@ -1312,6 +1339,7 @@ mod tests {
             async fn fetch_config(&self) -> Result<Config, ConfigError>;
             async fn publish_config_update(&self, config: &Config) -> Result<(), ConfigError>;
             async fn publish_policy_update(&self, update: &PolicyUpdate) -> Result<(), ConfigError>;
+            async fn ping(&self) -> Result<(), ConfigError>;
         }
     }
 

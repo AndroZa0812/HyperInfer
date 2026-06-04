@@ -466,6 +466,11 @@ impl Database for SqlxDb {
 
         Ok(RoutingConfig::from(result))
     }
+
+    async fn ping(&self) -> Result<(), DbError> {
+        sqlx::query("SELECT 1").execute(&self.pool).await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -694,6 +699,10 @@ impl RedisConfigStore {
     ) -> Result<tokio::task::JoinHandle<()>, hyperinfer_core::ConfigError> {
         self.manager.subscribe_to_config_updates(config).await
     }
+
+    pub async fn ping(&self) -> Result<(), hyperinfer_core::ConfigError> {
+        self.manager.ping().await
+    }
 }
 
 #[async_trait]
@@ -714,5 +723,9 @@ impl ConfigStore for RedisConfigStore {
         update: &PolicyUpdate,
     ) -> Result<(), hyperinfer_core::ConfigError> {
         self.manager.publish_policy_update(update).await
+    }
+
+    async fn ping(&self) -> Result<(), hyperinfer_core::ConfigError> {
+        self.manager.ping().await
     }
 }
