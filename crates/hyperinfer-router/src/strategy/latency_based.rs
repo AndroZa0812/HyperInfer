@@ -276,7 +276,7 @@ mod tests {
         }
 
         assert!(
-            new_count >= 200 && new_count <= 800,
+            (200..=800).contains(&new_count),
             "new deployment should get significant traffic, got {}",
             new_count
         );
