@@ -3,14 +3,18 @@ set -e
 
 PACKAGE_NAME=$1
 PACKAGE_DIR=$2
+BUILD_SDIST=${3:-false}
 
 echo "Building $PACKAGE_NAME in $PACKAGE_DIR"
 
 if [ -f "$PACKAGE_DIR/Cargo.toml" ]; then
   echo "Detected Rust package (maturin)"
-  # Assuming maturin for Rust/Python projects
   cd "$PACKAGE_DIR"
-  uvx maturin build --release --out ../../dist
+  if [ "$BUILD_SDIST" = "true" ]; then
+    uvx maturin build --release --sdist --out ../../dist
+  else
+    uvx maturin build --release --out ../../dist
+  fi
 else
   echo "Detected Python package (pyproject-build)"
   cd "$PACKAGE_DIR"

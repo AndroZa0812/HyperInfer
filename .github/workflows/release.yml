@@ -61,19 +61,28 @@ jobs:
           echo "changed=$BUMPED" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
-  # Build wheels for each changed package
+  # Build wheels for each changed package across platforms
   # ---------------------------------------------------------------------------
   build:
-    name: Build ${{ matrix.package }}
+    name: Build ${{ matrix.package }} (${{ matrix.os }})
     needs: prepare
     if: (success() || failure()) && needs.prepare.outputs.changed != '[]' && needs.prepare.outputs.changed != ''
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         package: ${{ fromJSON(needs.prepare.outputs.changed || '[]') }}
+        os: [ubuntu-latest]
+        include:
+          - package: hyperinfer-python
+            os: macos-latest
+          - package: hyperinfer-python
+            os: windows-latest
     steps:
       - uses: actions/checkout@v6
+
       - name: Setup environment
+        shell: bash
         run: |
           case "${{ matrix.package }}" in
             hyperinfer-python) dir="crates/hyperinfer-python" ;;
@@ -82,6 +91,10 @@ jobs:
             *) echo "Unknown package: ${{ matrix.package }}"; exit 1 ;;
           esac
           echo "PACKAGE_DIR=$dir" >> $GITHUB_ENV
+          echo "BUILD_SDIST=false" >> $GITHUB_ENV
+          if [ "${{ matrix.package }}" = "hyperinfer-python" ] && [ "${{ matrix.os }}" = "ubuntu-latest" ]; then
+            echo "BUILD_SDIST=true" >> $GITHUB_ENV
+          fi
 
       - name: Setup Rust
         if: matrix.package == 'hyperinfer-python'
@@ -102,13 +115,15 @@ jobs:
         uses: astral-sh/setup-uv@v6
 
       - name: Build
+        shell: bash
         run: |
           chmod +x scripts/build-package.sh
-          ./scripts/build-package.sh "${{ matrix.package }}" "$PACKAGE_DIR"
+          ./scripts/build-package.sh "${{ matrix.package }}" "$PACKAGE_DIR" "$BUILD_SDIST"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.package }}-dist
+          name: ${{ matrix.package }}-dist-${{ matrix.os }}
           path: dist/
 
   # ---------------------------------------------------------------------------
