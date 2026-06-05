@@ -40,8 +40,8 @@ pub enum DbError {
     InvalidUuid,
     #[error("Not found")]
     NotFound,
-    #[error("Unique constraint violation")]
-    UniqueViolation,
+    #[error("Unique constraint violation: {0}")]
+    UniqueViolation(String),
     #[error("Validation error: {0}")]
     ValidationError(String),
 }

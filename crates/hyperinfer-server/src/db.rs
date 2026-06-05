@@ -69,7 +69,7 @@ impl Database for SqlxDb {
             Ok(row) => row,
             Err(e) => {
                 if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
-                    return Err(DbError::UniqueViolation);
+                    return Err(DbError::UniqueViolation("Team name already exists".to_string()));
                 }
                 return Err(DbError::Sqlx(e));
             }
@@ -353,10 +353,7 @@ impl Database for SqlxDb {
                 .map(|db| db.is_unique_violation())
                 .unwrap_or(false)
             {
-                DbError::UniqueViolation(format!(
-                    "Deployment with name '{}' already exists",
-                    req.name
-                ))
+                DbError::UniqueViolation("Deployment with this name already exists".to_string())
             } else {
                 DbError::Sqlx(e)
             }
@@ -396,10 +393,7 @@ impl Database for SqlxDb {
                 .map(|db| db.is_unique_violation())
                 .unwrap_or(false)
             {
-                DbError::UniqueViolation(format!(
-                    "Deployment with name '{}' already exists",
-                    req.name
-                ))
+                DbError::UniqueViolation("Deployment with this name already exists".to_string())
             } else {
                 DbError::Sqlx(e)
             }
