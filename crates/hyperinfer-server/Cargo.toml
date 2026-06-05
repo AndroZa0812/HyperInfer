@@ -3,6 +3,7 @@ name = "hyperinfer-server"
 version = "0.1.1"
 edition = "2021"
 license = "MIT"
+publish = false
 
 [lib]
 name = "hyperinfer_server"
