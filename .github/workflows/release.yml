@@ -98,6 +98,9 @@ jobs:
           python-version: "3.11"
           cache: pip
 
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Build
         run: |
           chmod +x scripts/build-package.sh
