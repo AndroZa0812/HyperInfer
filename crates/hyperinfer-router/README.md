@@ -17,7 +17,7 @@ Intelligent request routing engine for HyperInfer with pluggable strategies, dep
 
 ## How It Works
 
-```
+```text
 Incoming Request
       │
       ▼

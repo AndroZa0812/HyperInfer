@@ -30,8 +30,10 @@ pub trait LlmProvider: DynClone + Send + Sync {
 ## Custom Providers
 
 ```rust
-use hyperinfer_providers::{ProviderRegistry, LlmProvider};
-use hyperinfer_core::{ChatRequest, ChatResponse};
+use std::pin::Pin;
+use tokio_stream::Stream;
+use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, Result};
+use hyperinfer_providers::{LlmProvider, ProviderRegistry};
 
 struct MyProvider;
 
