@@ -4,7 +4,7 @@
 
 HyperInfer follows a **data plane / control plane** architecture, inspired by service mesh patterns.
 
-### Control Plane
+## Control Plane
 
 The control plane (`hyperinfer-server`) is a centralized HTTP server that manages configuration, authentication, and state:
 
@@ -14,7 +14,7 @@ The control plane (`hyperinfer-server`) is a centralized HTTP server that manage
 - **MCP hosting** for Model Context Protocol tools
 - **Swagger UI** at `/docs` (opt-in)
 
-### Data Plane
+## Data Plane
 
 The data plane (`hyperinfer-client`) is a thick client library deployed alongside your application:
 
