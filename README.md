@@ -12,7 +12,7 @@
   [![CI](https://img.shields.io/github/actions/workflow/status/AndroZa0812/HyperInfer/rust-ci.yml?style=flat-square&logo=githubactions)](https://github.com/AndroZa0812/HyperInfer/actions)
   [![License](https://img.shields.io/github/license/AndroZa0812/HyperInfer?style=flat-square)](LICENSE)
   [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/AndroZa0812/HyperInfer?style=flat-square&labelColor=171717&color=FF570A&label=CodeRabbit)](https://coderabbit.ai)
-  [![Discord](https://img.shields.io/discord/000000?style=flat-square&logo=discord&label=Community)](https://discord.gg/hyperinfer)
+  [![Community](https://img.shields.io/badge/-Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/hyperinfer)
 
 </div>
 
@@ -75,7 +75,7 @@ docker compose up -d
 
 ## 📦 Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────┐
 │                   Control Plane                      │
 │  ┌──────────────────────────────────────────────┐   │
@@ -126,7 +126,7 @@ hyperinfer/
 
 ## 🤝 Contributing
 
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! See the [contributing guide](docs/contributing.md) on the documentation site.
 
 ## 📄 License
 
