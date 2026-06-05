@@ -168,7 +168,6 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-crates:
     name: Publish Rust crates
-    needs: publish
     if: github.event_name == 'workflow_dispatch' && inputs.rust-bump != 'none'
     runs-on: ubuntu-latest
     environment: crates-io
