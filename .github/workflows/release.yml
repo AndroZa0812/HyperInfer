@@ -180,13 +180,12 @@ jobs:
       - name: Install cargo-workspaces
         run: cargo install cargo-workspaces --locked
 
-      - name: Publish crates
+      - name: Publish crates to crates.io
         run: |
-          if [ "${{ inputs.rust-bump }}" = "alpha" ] || [ "${{ inputs.rust-bump }}" = "beta" ] || [ "${{ inputs.rust-bump }}" = "rc" ]; then
-            cargo ws publish --pre-id ${{ inputs.rust-bump }} --exact --yes --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
-          else
-            cargo ws publish ${{ inputs.rust-bump }} --exact --yes --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
-          fi
+          for crate in hyperinfer-core hyperinfer-providers hyperinfer-router hyperinfer-client hyperinfer-server; do
+            echo "Publishing $crate..."
+            cargo publish -p "$crate" --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-dirty
+          done
 
   # ---------------------------------------------------------------------------
   # Create GitHub Release with all wheels attached
