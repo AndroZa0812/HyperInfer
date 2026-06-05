@@ -180,16 +180,13 @@ jobs:
       - name: Install cargo-workspaces
         run: cargo install cargo-workspaces --locked
 
-      - name: Bump crate versions
+      - name: Publish crates
         run: |
           if [ "${{ inputs.rust-bump }}" = "alpha" ] || [ "${{ inputs.rust-bump }}" = "beta" ] || [ "${{ inputs.rust-bump }}" = "rc" ]; then
-            cargo ws version --preid ${{ inputs.rust-bump }} --exact --yes
+            cargo ws publish --pre-id ${{ inputs.rust-bump }} --exact --yes --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
           else
-            cargo ws version ${{ inputs.rust-bump }} --exact --yes
+            cargo ws publish ${{ inputs.rust-bump }} --exact --yes --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
           fi
-
-      - name: Publish crates
-        run: cargo ws publish --from-git --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
 
   # ---------------------------------------------------------------------------
   # Create GitHub Release with all wheels attached
