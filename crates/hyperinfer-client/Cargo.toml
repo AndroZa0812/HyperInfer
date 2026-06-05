@@ -2,12 +2,19 @@
 name = "hyperinfer-client"
 version = "0.2.0"
 edition = "2021"
+description = "High-level client SDK for HyperInfer LLM Gateway"
 license = "MIT"
+repository = "https://github.com/AndroZa0812/HyperInfer"
+homepage = "https://github.com/AndroZa0812/HyperInfer"
+documentation = "https://docs.rs/hyperinfer-client"
+readme = "README.md"
+keywords = ["llm", "gateway", "client", "sdk"]
+categories = ["api-bindings", "web-programming"]
 
 [dependencies]
-hyperinfer-core = { path = "../hyperinfer-core" }
-hyperinfer-router = { path = "../hyperinfer-router" }
-hyperinfer-providers = { path = "../hyperinfer-providers", features = [
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.1.1" }
+hyperinfer-router = { path = "../hyperinfer-router", version = "0.1.0" }
+hyperinfer-providers = { path = "../hyperinfer-providers", version = "0.1.0", features = [
   "openai",
   "anthropic",
 ] }
