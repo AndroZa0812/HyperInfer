@@ -2,8 +2,14 @@
 name = "hyperinfer-server"
 version = "0.1.1"
 edition = "2021"
+description = "High-performance LLM Gateway server built with Axum"
 license = "MIT"
-publish = false
+repository = "https://github.com/AndroZa0812/HyperInfer"
+homepage = "https://github.com/AndroZa0812/HyperInfer"
+documentation = "https://docs.rs/hyperinfer-server"
+readme = "README.md"
+keywords = ["llm", "gateway", "server", "axum", "api"]
+categories = ["web-programming::http-server", "api-bindings"]
 
 [lib]
 name = "hyperinfer_server"
@@ -14,8 +20,8 @@ name = "hyperinfer-server"
 path = "src/main.rs"
 
 [dependencies]
-hyperinfer-core = { path = "../hyperinfer-core" }
-hyperinfer-router = { path = "../hyperinfer-router" }
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.1.1" }
+hyperinfer-router = { path = "../hyperinfer-router", version = "0.1.0" }
 async-trait = "0.1"
 axum = "0.8"
 tokio = { version = "1.52", features = ["full"] }
@@ -61,7 +67,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 embedded-frontend = ["rust-embed", "mime_guess"]
 
 [dev-dependencies]
-hyperinfer-core = { path = "../hyperinfer-core", features = ["test-mocks"] }
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.1.1", features = ["test-mocks"] }
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres", "redis"] }
