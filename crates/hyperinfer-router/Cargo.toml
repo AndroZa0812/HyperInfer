@@ -2,14 +2,20 @@
 name = "hyperinfer-router"
 version = "0.1.0"
 edition = "2021"
-license = "MIT"
 description = "Intelligent request routing engine for HyperInfer"
+license = "MIT"
+repository = "https://github.com/AndroZa0812/HyperInfer"
+homepage = "https://github.com/AndroZa0812/HyperInfer"
+documentation = "https://docs.rs/hyperinfer-router"
+readme = "README.md"
+keywords = ["llm", "gateway", "routing", "load-balancing"]
+categories = ["api-bindings", "web-programming"]
 
 [features]
 default = []
 
 [dependencies]
-hyperinfer-core = { path = "../hyperinfer-core" }
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.1.1" }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
