@@ -178,6 +178,97 @@ pub struct ChatResponse {
     pub usage: Usage,
 }
 
+/// An API deployment for a model (managed via POST /v1/deployments)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Deployment {
+    pub id: String,
+    pub name: String,
+    pub provider: String,
+    pub model: String,
+    #[serde(skip_serializing)]
+    pub api_key_ref: String,
+    pub base_url: String,
+    pub is_active: bool,
+    pub weight: u32,
+    pub priority: u32,
+    pub max_tpm: Option<u32>,
+    pub max_rpm: Option<u32>,
+    pub cost_per_1k_input_tokens: Option<f64>,
+    pub cost_per_1k_output_tokens: Option<f64>,
+    #[serde(skip_serializing)]
+    pub metadata: serde_json::Value,
+    pub sort_order: u32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Input payload for creating a deployment
+#[derive(Debug, Clone, Deserialize)]
+pub struct CreateDeploymentRequest {
+    pub name: String,
+    pub provider: String,
+    pub model: String,
+    pub api_key_ref: Option<String>,
+    pub base_url: String,
+    #[serde(default = "default_true")]
+    pub is_active: bool,
+    #[serde(default = "default_weight")]
+    pub weight: i32,
+    #[serde(default)]
+    pub priority: i32,
+    pub max_tpm: Option<i32>,
+    pub max_rpm: Option<i32>,
+    pub cost_per_1k_input_tokens: Option<f64>,
+    pub cost_per_1k_output_tokens: Option<f64>,
+    #[serde(default)]
+    pub metadata: Option<serde_json::Value>,
+    #[serde(default)]
+    pub sort_order: Option<i32>,
+}
+
+impl CreateDeploymentRequest {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.weight < 0 {
+            return Err("weight must be non-negative".to_string());
+        }
+        if self.priority < 0 {
+            return Err("priority must be non-negative".to_string());
+        }
+        if let Some(sort_order) = self.sort_order {
+            if sort_order < 0 {
+                return Err("sort_order must be non-negative".to_string());
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Routing configuration (singleton row in routing_config table)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoutingConfig {
+    pub strategy: String,
+    pub strategy_params: serde_json::Value,
+    pub fallback_config: serde_json::Value,
+    pub routing_groups: serde_json::Value,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Input payload for updating routing config
+#[derive(Debug, Clone, Deserialize)]
+pub struct UpdateRoutingConfigRequest {
+    pub strategy: Option<String>,
+    pub strategy_params: Option<serde_json::Value>,
+    pub fallback_config: Option<serde_json::Value>,
+    pub routing_groups: Option<serde_json::Value>,
+}
+
+fn default_true() -> bool {
+    true
+}
+fn default_weight() -> i32 {
+    1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -3,6 +3,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::DbError;
+use crate::types::{
+    CreateDeploymentRequest, Deployment, RoutingConfig, UpdateRoutingConfigRequest,
+};
 
 #[async_trait]
 pub trait Database: Clone + Send + Sync + 'static {
@@ -54,6 +57,29 @@ pub trait Database: Clone + Send + Sync + 'static {
         output_tokens: i32,
         response_time_ms: i64,
     ) -> Result<UsageLog, DbError>;
+
+    // --- Deployment CRUD ---
+    async fn list_deployments(
+        &self,
+        model: &str,
+        is_active: Option<bool>,
+    ) -> Result<Vec<Deployment>, DbError>;
+    async fn get_deployment(&self, id: &str) -> Result<Option<Deployment>, DbError>;
+    async fn create_deployment(&self, req: CreateDeploymentRequest) -> Result<Deployment, DbError>;
+    async fn update_deployment(
+        &self,
+        id: &str,
+        req: CreateDeploymentRequest,
+    ) -> Result<Deployment, DbError>;
+    async fn delete_deployment(&self, id: &str) -> Result<(), DbError>;
+
+    // --- Routing Config ---
+    async fn get_routing_config(&self) -> Result<Option<RoutingConfig>, DbError>;
+    async fn update_routing_config(
+        &self,
+        req: UpdateRoutingConfigRequest,
+    ) -> Result<RoutingConfig, DbError>;
+
     async fn ping(&self) -> Result<(), DbError>;
 }
 

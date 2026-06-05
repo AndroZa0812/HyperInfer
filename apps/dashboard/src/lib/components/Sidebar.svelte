@@ -13,6 +13,7 @@
 	const navItems = [
 		{ path: '/dashboard/teams', label: 'Teams', icon: 'group', admin: true },
 		{ path: '/dashboard/keys', label: 'Keys', icon: 'vpn_key' },
+		{ path: '/dashboard/routing', label: 'Routing', icon: 'route', admin: true },
 		{ path: '/dashboard/conversations', label: 'Conversations', icon: 'forum' },
 		{ path: '/dashboard/settings', label: 'Settings', icon: 'settings' },
 	];

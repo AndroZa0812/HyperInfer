@@ -1,4 +1,4 @@
-import type { User, Team, ApiKey, UsageData } from "./types";
+import type { User, Team, ApiKey, UsageData, Deployment, CreateDeploymentRequest } from "./types";
 
 const API_BASE = "/v1";
 
@@ -76,4 +76,26 @@ export const api = {
     console.warn('getConversation not implemented');
     throw new Error('Not implemented');
   },
+
+  // Deployment management
+  getDeployments: (model: string, isActive?: boolean) => {
+    const params = new URLSearchParams({ model });
+    if (isActive !== undefined) {
+      params.set('is_active', isActive.toString());
+    }
+    return fetchApi<Deployment[]>(`/deployments?${params.toString()}`);
+  },
+  getDeployment: (id: string) => fetchApi<Deployment>(`/deployments/${id}`),
+  createDeployment: (req: CreateDeploymentRequest) =>
+    fetchApi<Deployment>("/deployments", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  updateDeployment: (id: string, req: CreateDeploymentRequest) =>
+    fetchApi<Deployment>(`/deployments/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(req),
+    }),
+  deleteDeployment: (id: string) =>
+    fetchApi<void>(`/deployments/${id}`, { method: "DELETE" }),
 };

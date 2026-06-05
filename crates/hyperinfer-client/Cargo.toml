@@ -6,6 +6,7 @@ license = "MIT"
 
 [dependencies]
 hyperinfer-core = { path = "../hyperinfer-core" }
+hyperinfer-router = { path = "../hyperinfer-router" }
 hyperinfer-providers = { path = "../hyperinfer-providers", features = [
   "openai",
   "anthropic",
@@ -35,6 +36,7 @@ base64 = "0.22"
 futures = "0.3"
 async-stream = "0.3"
 dyn-clone = "1.0.20"
+tokio-util = "0.7"
 
 [dev-dependencies]
 testcontainers = "0.27.3"

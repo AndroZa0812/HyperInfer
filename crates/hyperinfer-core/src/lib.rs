@@ -16,6 +16,7 @@ pub use redis::PolicyUpdate;
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, UsageLog, User};
 pub use types::{
-    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, MessageRole, Provider,
-    RoutingRule, Usage, UsageRecord,
+    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, CreateDeploymentRequest,
+    Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, UpdateRoutingConfigRequest,
+    Usage, UsageRecord,
 };

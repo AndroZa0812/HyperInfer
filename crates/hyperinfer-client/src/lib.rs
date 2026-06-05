@@ -4,6 +4,7 @@ pub mod cache;
 pub mod http_client;
 pub mod mirroring;
 pub mod router;
+pub mod router_engine;
 pub mod telemetry;
 pub mod telemetry_otlp;
 mod util;
@@ -12,20 +13,24 @@ pub use cache::ExactMatchCache;
 pub use http_client::HttpCaller;
 pub use mirroring::{MirrorConfig, MirrorHandle};
 pub use router::Router;
+pub use router_engine::RouterEngine;
 pub use telemetry::Telemetry;
 pub use telemetry_otlp::{
     init_langfuse_telemetry, init_telemetry, init_telemetry_with_headers, set_gen_ai_attributes,
     set_gen_ai_response, set_gen_ai_usage, shutdown_telemetry,
 };
 
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use hyperinfer_core::{
     rate_limiting::RateLimiter, ChatChunk, ChatRequest, ChatResponse, Config, HyperInferError,
+    Provider,
 };
 use hyperinfer_providers::ProviderRegistry;
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
 
@@ -138,6 +143,7 @@ pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
     http_caller: Arc<HttpCaller>,
     router: Arc<Router>,
+    router_engine: Arc<RouterEngine>,
     rate_limiter: RateLimiter,
     telemetry: Telemetry,
     cache: ExactMatchCache,
@@ -171,6 +177,7 @@ impl HyperInferClient {
             config,
             http_caller,
             router,
+            router_engine: Arc::new(RouterEngine::new().await),
             rate_limiter,
             telemetry,
             cache,
@@ -188,6 +195,70 @@ impl HyperInferClient {
     pub async fn inject_provider_registry(&self, external_registry: Arc<ProviderRegistry>) {
         let mut guard = self.provider_registry.write().await;
         *guard = external_registry;
+    }
+
+    /// Load deployments into the router engine for deployment-based routing
+    pub async fn load_deployments(&self, deployments: Vec<hyperinfer_core::Deployment>) {
+        self.router_engine.load_deployments(deployments).await;
+    }
+
+    /// Subscribe to Redis Pub/Sub for live deployment config changes.
+    /// When a message arrives on "hyperinfer:config_updates", calls the provided
+    /// fetcher function to re-fetch deployments and rebuilds the routing pool.
+    pub async fn subscribe_config_updates<F, Fut>(
+        &self,
+        redis_url: &str,
+        fetcher: F,
+    ) -> Result<(), HyperInferError>
+    where
+        F: Fn() -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<Vec<hyperinfer_core::Deployment>, String>> + Send,
+    {
+        let client = redis::Client::open(redis_url)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+        let mut pubsub = client
+            .get_async_pubsub()
+            .await
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+
+        pubsub
+            .subscribe("hyperinfer:config_updates")
+            .await
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+
+        let engine = self.router_engine.clone();
+        let _handle = tokio::spawn(async move {
+            let mut stream = pubsub.on_message();
+            loop {
+                match stream.next().await {
+                    Some(_msg) => {
+                        tracing::info!(
+                            "Received config update notification, re-fetching deployments"
+                        );
+                        match fetcher().await {
+                            Ok(deployments) => {
+                                engine.rebuild_pool(deployments).await;
+                                tracing::info!("Rebuilt deployment pool after config update");
+                            }
+                            Err(e) => {
+                                tracing::warn!(error = %e, "Failed to re-fetch deployments after config update");
+                            }
+                        }
+                    }
+                    None => {
+                        tracing::info!("Pub/Sub stream ended");
+                        break;
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Get a reference to the router engine
+    pub fn router_engine(&self) -> &Arc<RouterEngine> {
+        &self.router_engine
     }
 
     pub async fn chat(
@@ -226,7 +297,86 @@ impl HyperInferClient {
                 ));
             }
 
-            // 2. Resolve model alias
+            // 2. Try deployment-based routing first (if deployments are loaded)
+            let deployment_result = self.router_engine.select_deployment(&request).await;
+            if let Ok(routing_result) = deployment_result {
+                let deployment = &routing_result.deployment;
+                let default_url = match &deployment.provider {
+                    Provider::Anthropic => "https://api.anthropic.com/v1",
+                    _ => "https://api.openai.com/v1",
+                };
+                let base_url = deployment.base_url.as_deref().unwrap_or(default_url);
+                let api_key = &deployment.api_key_ref;
+
+                let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+
+                let mut headers = reqwest::header::HeaderMap::new();
+                headers.insert("content-type", "application/json".parse().unwrap());
+                if !api_key.is_empty() {
+                    match &deployment.provider {
+                        Provider::Anthropic => {
+                            headers.insert("x-api-key", api_key.parse().unwrap());
+                            headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+                        }
+                        _ => {
+                            headers.insert(
+                                "authorization",
+                                format!("Bearer {}", api_key).parse().unwrap(),
+                            );
+                        }
+                    }
+                }
+
+                match HTTP_CLIENT
+                    .post(&url)
+                    .headers(headers)
+                    .json(&request)
+                    .send()
+                    .await
+                {
+                    Ok(response) => {
+                        let status = response.status();
+                        if status.is_success() {
+                            if let Ok(body) = response.json::<ChatResponse>().await {
+                                // Record success metrics
+                                let latency = start.elapsed().as_secs_f64() * 1000.0;
+                                let tokens =
+                                    (body.usage.input_tokens + body.usage.output_tokens) as u64;
+                                self.router_engine
+                                    .record_success(&deployment.id, latency, tokens)
+                                    .await;
+
+                                // Record telemetry
+                                let elapsed = start.elapsed().as_millis() as u64;
+                                let telemetry = self.telemetry.clone();
+                                let key_owned = key.to_string();
+                                let model_owned = request.model.clone();
+                                tokio::spawn(async move {
+                                    let _ = telemetry
+                                        .record_with_tokens(
+                                            &key_owned,
+                                            &model_owned,
+                                            body.usage.input_tokens,
+                                            body.usage.output_tokens,
+                                            elapsed,
+                                        )
+                                        .await;
+                                });
+
+                                return Ok(body);
+                            }
+                        }
+                        // If request failed, record failure and fall through to fallback
+                        self.router_engine.record_failure(&deployment.id).await;
+                    }
+                    Err(_) => {
+                        // Request failed, record failure and fall through to fallback
+                        self.router_engine.record_failure(&deployment.id).await;
+                    }
+                }
+            }
+
+            // 3. Fallback to existing Router-based flow
             let (model, provider, api_key, config_snapshot) = {
                 let config = self.config.read().await;
                 let resolved = self.router.resolve(&request.model, &config);
