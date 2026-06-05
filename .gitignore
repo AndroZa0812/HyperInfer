@@ -209,3 +209,6 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/json
+
+# MkDocs build output
+site/
