@@ -1,12 +1,24 @@
 name: Release
 
-# Triggered by a changeset-generated version bump:
-#   npx changeset version → commits + pushes a "Version Packages" tag
-
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: "Comma-separated package names (e.g. hyperinfer-python,hyperinfer-langchain)"
+        required: true
+        type: string
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+        default: patch
 
 permissions: {}
 
@@ -15,33 +27,50 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  detect:
-    name: Detect changed packages
+  # ---------------------------------------------------------------------------
+  # Prepare: detect changed packages (push) or bump versions (dispatch)
+  # ---------------------------------------------------------------------------
+  prepare:
+    name: Prepare release
     runs-on: ubuntu-latest
     outputs:
-      changed: ${{ steps.detect.outputs.changed }}
+      changed: ${{ steps.detect.outputs.changed || steps.bump.outputs.changed || '[]' }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
       - name: Detect changed packages
+        if: github.event_name == 'push'
         id: detect
         run: |
           bun install
           CHANGED=$(bun scripts/get-changed-packages.js)
           echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
 
+      - name: Bump versions
+        if: github.event_name == 'workflow_dispatch'
+        id: bump
+        run: |
+          bun install
+          BUMPED=$(bun scripts/bump-versions.js "${{ inputs.packages }}" "${{ inputs.bump }}")
+          echo "changed=$BUMPED" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # Build wheels for each changed package
+  # ---------------------------------------------------------------------------
   build:
     name: Build ${{ matrix.package }}
-    needs: detect
-    if: needs.detect.outputs.changed != '[]'
+    needs: prepare
+    if: (success() || failure()) && needs.prepare.outputs.changed != '[]' && needs.prepare.outputs.changed != ''
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package: ${{ fromJSON(needs.detect.outputs.changed) }}
+        package: ${{ fromJSON(needs.prepare.outputs.changed || '[]') }}
     steps:
       - uses: actions/checkout@v6
       - name: Setup environment
@@ -86,9 +115,9 @@ jobs:
     name: Publish to TestPyPI
     needs: build
     runs-on: ubuntu-latest
-    environment: testpypi # GitHub environment gate (optional approval)
+    environment: testpypi
     permissions:
-      id-token: write # required for OIDC trusted publishing
+      id-token: write
     steps:
       - name: Download all wheels
         uses: actions/download-artifact@v8
@@ -104,14 +133,14 @@ jobs:
           skip-existing: true
 
   # ---------------------------------------------------------------------------
-  # Create GitHub Release with changelog body and all wheels attached
+  # Create GitHub Release with all wheels attached
   # ---------------------------------------------------------------------------
   github-release:
     name: Create GitHub Release
     needs: publish
     runs-on: ubuntu-latest
     permissions:
-      contents: write # required to create releases
+      contents: write
     steps:
       - name: Download all wheels
         uses: actions/download-artifact@v8
@@ -122,7 +151,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: "v${{ github.sha }}" # Temporary tag based on sha, changesets usually handles tag creation
+          tag_name: "v${{ github.sha }}"
           name: "Release ${{ github.sha }}"
           files: dist/*
           draft: false
