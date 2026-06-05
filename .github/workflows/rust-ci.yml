@@ -48,7 +48,7 @@ jobs:
       - name: Upload Test Results to Trunk.io
         if: ${{ !cancelled() && env.TRUNK_API_TOKEN != '' }}
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@v2.0.9
+        uses: trunk-io/analytics-uploader@v2.1.1
         with:
           junit-paths: "target/nextest/ci/junit.xml"
           org-slug: androza-corp
@@ -123,7 +123,7 @@ jobs:
           contains(github.event.pull_request.labels.*.name, 'needs-integration-tests') ||
           steps.changes.outputs.integration == 'true') && !cancelled() && env.TRUNK_API_TOKEN != ''
         continue-on-error: true
-        uses: trunk-io/analytics-uploader@v2.0.9
+        uses: trunk-io/analytics-uploader@v2.1.1
         with:
           junit-paths: "target/nextest/ci/junit.xml"
           org-slug: androza-corp
