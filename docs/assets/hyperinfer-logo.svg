@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 200">
+  <defs>
+    <linearGradient id="purple-glow-logo" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#945DED"/>
+      <stop offset="100%" stop-color="#7C3FDE"/>
+    </linearGradient>
+  </defs>
+  <!-- Icon (scaled down) -->
+  <g transform="translate(10, 20) scale(0.5)">
+    <path d="M 140 100 C 180 40, 260 50, 280 100 C 290 130, 280 170, 260 190 C 230 220, 180 230, 140 210 C 100 195, 80 170, 70 140 C 60 110, 100 80, 140 100 Z" fill="url(#purple-glow-logo)"/>
+    <path d="M 120 200 C 100 240, 80 280, 100 310" stroke="url(#purple-glow-logo)" stroke-width="4" fill="none" opacity="0.7"/>
+    <path d="M 150 210 C 140 250, 150 290, 160 320" stroke="url(#purple-glow-logo)" stroke-width="4" fill="none" opacity="0.8"/>
+    <path d="M 180 200 C 190 235, 210 270, 200 300" stroke="url(#purple-glow-logo)" stroke-width="4" fill="none" opacity="0.7"/>
+    <path d="M 210 180 C 230 210, 240 250, 220 290" stroke="url(#purple-glow-logo)" stroke-width="4" fill="none" opacity="0.6"/>
+  </g>
+  <!-- Text -->
+  <text x="180" y="140" font-family="'Inter', 'SF Pro Display', system-ui, sans-serif" font-size="60" font-weight="700" fill="#070D1D" letter-spacing="-1.5">
+    Hyper<tspan fill="#945DED">Infer</tspan>
+  </text>
+</svg>
