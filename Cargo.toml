@@ -17,3 +17,9 @@ default-members = [
   "crates/hyperinfer-router",
 ]
 resolver = "3"
+
+[workspace.dependencies]
+hyperinfer-core = { path = "crates/hyperinfer-core", version = "0.1.1" }
+hyperinfer-providers = { path = "crates/hyperinfer-providers", version = "0.1.0" }
+hyperinfer-router = { path = "crates/hyperinfer-router", version = "0.1.0" }
+hyperinfer-client = { path = "crates/hyperinfer-client", version = "0.2.0" }
