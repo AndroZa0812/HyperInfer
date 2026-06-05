@@ -678,12 +678,19 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
     }
 
     // 4. Select deployment using routing
-    let selected = proxy::select_deployment(&state.db, &request, &deployments, Some(&auth))
-        .await
-        .map_err(|e| ProxyError {
-            error: format!("Routing failed: {}", e),
-            code: 503,
-        })?;
+    let config = state.config.read().await;
+    let selected = proxy::select_deployment(
+        &state.db,
+        &request,
+        &deployments,
+        &config.model_aliases,
+        Some(&auth),
+    )
+    .await
+    .map_err(|e| ProxyError {
+        error: format!("Routing failed: {}", e),
+        code: 503,
+    })?;
 
     // 5. Forward request to selected deployment
     let body = proxy::forward_request(

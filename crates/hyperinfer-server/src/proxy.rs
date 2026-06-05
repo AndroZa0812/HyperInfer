@@ -161,6 +161,7 @@ pub async fn select_deployment<D: Database>(
     db: &D,
     request: &ChatRequest,
     deployments: &[hyperinfer_core::Deployment],
+    model_aliases: &std::collections::HashMap<String, String>,
     _auth: Option<&ProxyAuth>,
 ) -> Result<SelectedDeployment, RoutingError> {
     if deployments.is_empty() {
@@ -178,8 +179,20 @@ pub async fn select_deployment<D: Database>(
     engine.register_strategy(Box::new(UsageBased::new())).await;
     engine.register_strategy(Box::new(CostBased::new())).await;
 
+    for (alias, target) in model_aliases {
+        engine.set_alias(alias, target).await;
+    }
+
     if let Ok(Some(config)) = db.get_routing_config().await {
         engine.set_default_strategy(&config.strategy).await;
+
+        if let Ok(groups) = serde_json::from_value::<std::collections::HashMap<String, String>>(
+            config.routing_groups,
+        ) {
+            for (model, strategy_name) in groups {
+                engine.set_routing_group(&model, &strategy_name).await;
+            }
+        }
     }
 
     for d in deployments {
