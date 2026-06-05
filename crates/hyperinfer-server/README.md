@@ -1,6 +1,7 @@
 # hyperinfer-server
 
 [![Crates.io](https://img.shields.io/crates/v/hyperinfer-server?style=flat-square)](https://crates.io/crates/hyperinfer-server)
+[![docs.rs](https://img.shields.io/docsrs/hyperinfer-server?style=flat-square)](https://docs.rs/hyperinfer-server)
 
 The HyperInfer control plane server. An Axum-based HTTP server providing configuration management, user/team/API-key administration, MCP hosting, and an OpenAI-compatible proxy.
 
