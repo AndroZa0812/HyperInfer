@@ -212,3 +212,7 @@ vite.config.ts.timestamp-*
 
 # MkDocs build output
 site/
+
+# Internal planning documents (superpowers specs/plans)
+# These are private working files - do not publish or commit
+docs/superpowers/
