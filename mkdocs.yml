@@ -71,8 +71,12 @@ nav:
   - Guides:
     - Data Plane: guides/data-plane.md
     - Control Plane: guides/control-plane.md
-    - Routing: guides/routing.md
-    - Providers: guides/providers.md
+    - Routing:
+      - Overview: guides/routing.md
+      - Custom Router Policies: guides/custom-router-policies.md
+    - Providers:
+      - Overview: guides/providers.md
+      - Custom LLM Providers: guides/custom-llm-providers.md
     - Monitoring: guides/monitoring.md
     - Python: guides/python.md
   - Deployment:
