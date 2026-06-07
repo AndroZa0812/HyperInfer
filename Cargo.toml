@@ -23,3 +23,4 @@ hyperinfer-core = { path = "crates/hyperinfer-core", version = "0.1.1" }
 hyperinfer-providers = { path = "crates/hyperinfer-providers", version = "0.1.0" }
 hyperinfer-router = { path = "crates/hyperinfer-router", version = "0.1.0" }
 hyperinfer-client = { path = "crates/hyperinfer-client", version = "0.2.0" }
+hyperinfer-server = { path = "crates/hyperinfer-server", version = "0.1.1" }
