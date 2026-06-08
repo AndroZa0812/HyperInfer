@@ -11,16 +11,10 @@ use hyperinfer_router::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::sync::LazyLock;
 
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
-
-const BLOCKED_IP_PREFIXES: &[&str] = &[
-    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
-    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-    "172.31.", "192.168.", "127.", "0.",
-];
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -100,11 +94,28 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
     let host = parsed.host_str().ok_or(400u16)?;
 
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        let ip_str = ip.to_string();
-        for prefix in BLOCKED_IP_PREFIXES {
-            if ip_str.starts_with(prefix) {
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    if let Ok(addrs) = format!("{}:{}", host, port).to_socket_addrs() {
+        for addr in addrs {
+            let ip = addr.ip();
+            if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
                 return Err(400);
+            }
+            if let IpAddr::V4(ipv4) = ip {
+                let octets = ipv4.octets();
+                if octets[0] == 10
+                    || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                    || (octets[0] == 192 && octets[1] == 168)
+                    || (octets[0] == 169 && octets[1] == 254)
+                    || octets[0] == 0
+                {
+                    return Err(400);
+                }
+            } else if let IpAddr::V6(ipv6) = ip {
+                let segments = ipv6.segments();
+                if (segments[0] & 0xfe00) == 0xfc00 || (segments[0] & 0xffc0) == 0xfe80 {
+                    return Err(400);
+                }
             }
         }
     }
