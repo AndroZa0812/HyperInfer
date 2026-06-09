@@ -9,12 +9,53 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Addrs, Name, Resolve};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+struct SafeResolver;
+
+impl Resolve for SafeResolver {
+    fn resolve(&self, name: Name) -> reqwest::dns::Resolving {
+        let name_str = name.as_str().to_string();
+        Box::pin(async move {
+            let addrs = tokio::net::lookup_host(format!("{}:0", name_str)).await?;
+            let mut safe_addrs = Vec::new();
+            for addr in addrs {
+                let ip_str = addr.ip().to_string();
+                let mut is_blocked = false;
+                for prefix in BLOCKED_IP_PREFIXES {
+                    if ip_str.starts_with(prefix) {
+                        is_blocked = true;
+                        break;
+                    }
+                }
+                if !is_blocked {
+                    safe_addrs.push(addr);
+                }
+            }
+            if safe_addrs.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "DNS resolution blocked: IP address is in a forbidden range.",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+            let addrs: Addrs = Box::new(safe_addrs.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(SafeResolver))
+        .build()
+        .unwrap()
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
@@ -100,6 +141,8 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
     let host = parsed.host_str().ok_or(400u16)?;
 
+    // Basic syntax validation to catch explicit IPs early.
+    // The main SSRF protection is in SafeResolver which intercepts all DNS lookups.
     if let Ok(ip) = host.parse::<IpAddr>() {
         let ip_str = ip.to_string();
         for prefix in BLOCKED_IP_PREFIXES {
