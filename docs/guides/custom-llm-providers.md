@@ -46,7 +46,15 @@ The `LlmProvider` trait defines how the engine interacts with an LLM backend. Th
     use hyperinfer_providers::LlmProvider;
     use hyperinfer_core::{ChatRequest, ChatResponse, HyperInferError};
 
-    pub struct MyCustomProvider;
+    pub struct MyCustomProvider {
+        base_url: String,
+    }
+
+    impl MyCustomProvider {
+        pub fn new(base_url: impl Into<String>) -> Self {
+            Self { base_url: base_url.into() }
+        }
+    }
 
     #[async_trait]
     impl LlmProvider for MyCustomProvider {
@@ -55,7 +63,7 @@ The `LlmProvider` trait defines how the engine interacts with an LLM backend. Th
         }
 
         fn base_url(&self) -> &str {
-            "https://api.my-ai-service.com/v1"
+            &self.base_url
         }
 
         async fn chat(

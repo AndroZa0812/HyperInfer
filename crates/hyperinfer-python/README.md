@@ -14,41 +14,41 @@ pip install hyperinfer
 ## Usage
 
 ```python
-from hyperinfer import Config, HyperInferClient
+import asyncio
+from hyperinfer import Config, Client
 
-# Configure with your API keys
-config = (
-    Config()
-    .with_api_key("openai", "sk-...")
-    .with_api_key("anthropic", "sk-ant-...")
-    .with_alias("fast", "gpt-4o-mini")
-    .with_alias("smart", "claude-sonnet-4-20250514")
-)
+async def main():
+    # Configure with your API keys
+    config = (
+        Config()
+        .with_api_key("openai", "sk-...")
+        .with_api_key("anthropic", "sk-ant-...")
+        .with_alias("fast", "gpt-4o-mini")
+        .with_alias("smart", "claude-3-5-sonnet-20241022")
+    )
 
-# Create the client
-client = HyperInferClient(config)
+    # Create the client (async wrapper)
+    client = Client(redis_url="redis://localhost:6379", config=config)
 
-# Non-streaming chat
-response = client.chat("fast", "What is HyperInfer?")
-print(response)
+    # Non-streaming chat
+    response = await client.chat(
+        key="my-key",
+        model="fast",
+        messages=[{"role": "user", "content": "What is HyperInfer?"}]
+    )
+    print(response)
 
-# Streaming chat
-for chunk in client.chat_stream("smart", "Tell me a story"):
-    print(chunk, end="", flush=True)
-```
+    # Streaming chat
+    async for chunk in client.stream(
+        key="my-key",
+        model="smart",
+        messages=[{"role": "user", "content": "Tell me a story"}]
+    ):
+        print(chunk["delta"], end="", flush=True)
 
-## Custom Python Providers
+    await client.close()
 
-```python
-from hyperinfer import ProviderRegistry
-
-def my_custom_provider(request):
-    # Your custom LLM logic
-    return {"content": "Hello from Python!"}
-
-registry = ProviderRegistry()
-registry.register_provider("my-provider", my_custom_provider)
-client = HyperInferClient(config, registry)
+asyncio.run(main())
 ```
 
 ## License
