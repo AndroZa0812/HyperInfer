@@ -35,7 +35,7 @@ jobs:
           pip install mkdocs mkdocs-material pygments pymdown-extensions mkdocs-git-revision-date-localized-plugin
 
       - name: Build site
-        run: mkdocs build --strict
+        run: zensical build --strict
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
