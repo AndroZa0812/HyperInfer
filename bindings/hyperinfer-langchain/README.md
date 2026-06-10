@@ -1,6 +1,9 @@
 # hyperinfer-langchain
 
-LangChain integration for HyperInfer LLM Gateway.
+[![PyPI](https://img.shields.io/pypi/v/hyperinfer-langchain?style=flat-square)](https://pypi.org/project/hyperinfer-langchain/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/hyperinfer-langchain?style=flat-square)](https://pypi.org/project/hyperinfer-langchain/)
+
+LangChain integration for HyperInfer LLM Gateway — wraps `HyperInferClient` as a drop-in LangChain `BaseChatModel`.
 
 ## Installation
 
@@ -15,25 +18,22 @@ import asyncio
 
 from hyperinfer import Config
 from hyperinfer_langchain import HyperInferChatModel
+from langchain_core.messages import HumanMessage
 
 async def main():
-    # Build a config with your API keys and routing rules.
     config = (
         Config()
         .with_api_key("openai", "sk-...")
         .with_alias("fast", "gpt-4o-mini")
     )
 
-    # Create the chat model (async factory — respects existing event loops).
     llm = await HyperInferChatModel.from_config(
         config=config,
         model="fast",
         virtual_key="my-team",
     )
 
-    # Use like any LangChain chat model.
-    from langchain_core.messages import HumanMessage
-
+    # Non-streaming
     response = llm.invoke([HumanMessage(content="Hello!")])
     print(response.content)
 
@@ -43,3 +43,7 @@ async def main():
 
 asyncio.run(main())
 ```
+
+## License
+
+MIT

@@ -209,3 +209,10 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/json
+
+# MkDocs build output
+site/
+
+# Internal planning documents (superpowers specs/plans)
+# These are private working files - do not publish or commit
+docs/superpowers/

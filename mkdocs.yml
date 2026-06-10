@@ -1,0 +1,88 @@
+site_name: HyperInfer
+site_description: Next-generation LLM Gateway — high-performance AI infrastructure
+site_url: https://docs.hyperinfer.dev
+repo_url: https://github.com/AndroZa0812/HyperInfer
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: en
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+
+docs_dir: docs
+
+exclude_docs:
+  superpowers/
+
+plugins:
+  - search
+  - git-revision-date-localized
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/AndroZa0812/HyperInfer
+    - icon: fontawesome/brands/discord
+      link: https://discord.gg/hyperinfer
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/hyperinfer/
+
+nav:
+  - Home: index.md
+  - Get Started: get-started.md
+  - Architecture: architecture.md
+  - Guides:
+    - Data Plane: guides/data-plane.md
+    - Control Plane: guides/control-plane.md
+    - Routing:
+      - Overview: guides/routing.md
+      - Custom Router Policies: guides/custom-router-policies.md
+    - Providers:
+      - Overview: guides/providers.md
+      - Custom LLM Providers: guides/custom-llm-providers.md
+    - Monitoring: guides/monitoring.md
+    - Python: guides/python.md
+  - Deployment:
+    - Docker: deployment/docker.md
+    - Configuration: deployment/configuration.md
+    - Kubernetes: deployment/kubernetes.md
+  - Contributing: contributing.md
