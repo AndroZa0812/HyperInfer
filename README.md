@@ -11,8 +11,6 @@
   [![PyPI](https://img.shields.io/pypi/v/hyperinfer?style=flat-square&logo=pypi)](https://pypi.org/project/hyperinfer/)
   [![CI](https://img.shields.io/github/actions/workflow/status/AndroZa0812/HyperInfer/rust-ci.yml?style=flat-square&logo=githubactions)](https://github.com/AndroZa0812/HyperInfer/actions)
   [![License](https://img.shields.io/github/license/AndroZa0812/HyperInfer?style=flat-square)](LICENSE)
-  [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/AndroZa0812/HyperInfer?style=flat-square&labelColor=171717&color=FF570A&label=CodeRabbit)](https://coderabbit.ai)
-  [![Community](https://img.shields.io/badge/-Community-5865F2?style=flat-square&logo=discord&logoColor=white)](https://discord.gg/hyperinfer)
 
 </div>
 
