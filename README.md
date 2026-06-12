@@ -6,11 +6,11 @@
 
   **The open-source LLM gateway for high-performance AI infrastructure.**
 
-  [![GitHub Stars](https://img.shields.io/github/stars/AndroZa0812/HyperInfer?style=flat-square&logo=github)](https://github.com/AndroZa0812/HyperInfer)
-  [![Crates.io](https://img.shields.io/crates/v/hyperinfer-core?style=flat-square&logo=rust)](https://crates.io/crates/hyperinfer-core)
-  [![PyPI](https://img.shields.io/pypi/v/hyperinfer?style=flat-square&logo=pypi)](https://pypi.org/project/hyperinfer/)
-  [![CI](https://img.shields.io/github/actions/workflow/status/AndroZa0812/HyperInfer/rust-ci.yml?style=flat-square&logo=githubactions)](https://github.com/AndroZa0812/HyperInfer/actions)
-  [![License](https://img.shields.io/github/license/AndroZa0812/HyperInfer?style=flat-square)](LICENSE)
+   [![GitHub Stars](https://img.shields.io/github/stars/AndroZa0812/HyperInfer?style=flat-square&logo=github)](https://github.com/AndroZa0812/HyperInfer)
+   [![Crates.io](https://img.shields.io/crates/v/hyperinfer-core?style=flat-square&logo=rust)](https://crates.io/crates/hyperinfer-core)
+   [![PyPI](https://img.shields.io/pypi/v/hyperinfer?style=flat-square&logo=pypi)](https://pypi.org/project/hyperinfer/)
+   [![CI](https://img.shields.io/github/actions/workflow/status/AndroZa0812/HyperInfer/rust-ci.yml?style=flat-square&logo=githubactions)](https://github.com/AndroZa0812/HyperInfer/actions)
+   [![License](https://img.shields.io/github/license/AndroZa0812/HyperInfer?style=flat-square)](LICENSE)
 
 </div>
 
