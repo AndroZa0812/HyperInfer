@@ -53,7 +53,7 @@ jobs:
       url: ${{ steps.deployment.outputs.url }}
     steps:
       - name: Download artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: docs-site
           path: site/
