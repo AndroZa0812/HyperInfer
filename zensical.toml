@@ -1,0 +1,101 @@
+[project]
+site_name = "HyperInfer"
+site_description = "Next-generation LLM Gateway — high-performance AI infrastructure"
+site_url = "https://docs.hyperinfer.dev"
+repo_url = "https://github.com/AndroZa0812/HyperInfer"
+docs_dir = "docs"
+
+edit_uri = "edit/main/docs/"
+
+nav = [
+  "index.md",
+  "get-started.md",
+  "architecture.md",
+  {"Guides" = [
+    "guides/data-plane.md",
+    "guides/control-plane.md",
+    {"Routing" = [
+      "guides/routing.md",
+      "guides/custom-router-policies.md",
+    ]},
+    {"Providers" = [
+      "guides/providers.md",
+      "guides/custom-llm-providers.md",
+    ]},
+    "guides/monitoring.md",
+    "guides/python.md",
+  ]},
+  {"Deployment" = [
+    "deployment/docker.md",
+    "deployment/configuration.md",
+    "deployment/kubernetes.md",
+  ]},
+  "contributing.md",
+]
+
+[project.theme]
+name = "material"
+variant = "classic"
+language = "en"
+features = [
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.expand",
+  "navigation.top",
+  "search.suggest",
+  "search.highlight",
+  "content.code.copy",
+  "content.tabs.link",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "deep purple"
+accent = "deep purple"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "deep purple"
+accent = "deep purple"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/github"
+link = "https://github.com/AndroZa0812/HyperInfer"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/discord"
+link = "https://discord.gg/hyperinfer"
+
+[[project.extra.social]]
+icon = "fontawesome/brands/python"
+link = "https://pypi.org/project/hyperinfer/"
+
+[project.markdown_extensions.admonition]
+
+[project.markdown_extensions.pymdownx.details]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.snippets]
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "zensical.extensions.emoji.twemoji"
+emoji_generator = "zensical.extensions.emoji.to_svg"
+
+[project.markdown_extensions.attr_list]
+
+[project.markdown_extensions.md_in_html]
