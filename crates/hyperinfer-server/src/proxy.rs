@@ -14,13 +14,56 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to build HTTP client with SafeResolver")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
     "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
     "172.31.", "192.168.", "127.", "0.",
 ];
+
+#[derive(Clone)]
+struct SafeResolver;
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            let mut safe_addrs = Vec::new();
+            for addr in addrs {
+                let ip = addr.ip();
+                let ip_str = ip.to_string();
+
+                // Block IPv4 using the original prefixes, but also explicitly block IPv6 loopback
+                let mut blocked = ip.is_loopback() || ip.is_unspecified() || ip.is_multicast();
+
+                if !blocked {
+                    for prefix in BLOCKED_IP_PREFIXES {
+                        if ip_str.starts_with(prefix) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                }
+
+                if blocked {
+                    let err: Box<dyn std::error::Error + Send + Sync> = Box::new(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Blocked IP via DNS",
+                    ));
+                    return Err(err);
+                }
+                safe_addrs.push(addr);
+            }
+            Ok(Box::new(safe_addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -101,6 +144,9 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let host = parsed.host_str().ok_or(400u16)?;
 
     if let Ok(ip) = host.parse::<IpAddr>() {
+        if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
+            return Err(400);
+        }
         let ip_str = ip.to_string();
         for prefix in BLOCKED_IP_PREFIXES {
             if ip_str.starts_with(prefix) {
