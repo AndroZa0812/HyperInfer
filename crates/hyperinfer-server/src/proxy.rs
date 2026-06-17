@@ -9,18 +9,52 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Name, Resolve, Resolving};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to build HTTP client with SafeResolver")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
     "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
     "172.31.", "192.168.", "127.", "0.",
 ];
+
+#[derive(Clone)]
+struct SafeResolver;
+
+impl Resolve for SafeResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            let safe_addrs: Vec<SocketAddr> = addrs
+                .filter(|addr| {
+                    let ip_str = addr.ip().to_string();
+                    !BLOCKED_IP_PREFIXES.iter().any(|p| ip_str.starts_with(p))
+                })
+                .collect();
+
+            if safe_addrs.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Blocked IP",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            let iter: reqwest::dns::Addrs = Box::new(safe_addrs.into_iter());
+            Ok(iter)
+        })
+    }
+}
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -100,7 +134,7 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
     let host = parsed.host_str().ok_or(400u16)?;
 
-    if let Ok(ip) = host.parse::<IpAddr>() {
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         let ip_str = ip.to_string();
         for prefix in BLOCKED_IP_PREFIXES {
             if ip_str.starts_with(prefix) {
