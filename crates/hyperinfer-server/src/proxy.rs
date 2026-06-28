@@ -9,12 +9,51 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Name, Resolve, Resolving};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 use std::sync::LazyLock;
+use tokio::net::lookup_host;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+struct SafeResolver;
+
+impl Resolve for SafeResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        Box::pin(async move {
+            let host = name.as_str();
+            let addrs = lookup_host((host, 0)).await?;
+            let mut resolved = Vec::new();
+            for addr in addrs {
+                let ip_str = addr.ip().to_string();
+                let mut is_blocked = false;
+                for prefix in BLOCKED_IP_PREFIXES {
+                    if ip_str.starts_with(prefix) {
+                        is_blocked = true;
+                        break;
+                    }
+                }
+                if is_blocked {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::PermissionDenied,
+                        "Blocked IP address",
+                    ))
+                        as Box<dyn std::error::Error + Send + Sync>);
+                }
+                resolved.push(addr);
+            }
+            Ok(Box::new(resolved.into_iter()) as Box<dyn Iterator<Item = SocketAddr> + Send>)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to build secure HTTP client")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
