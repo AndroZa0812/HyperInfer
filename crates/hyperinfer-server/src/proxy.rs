@@ -9,12 +9,12 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Name, Resolve, Resolving};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::LazyLock;
-use reqwest::dns::{Name, Resolve, Resolving};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::net::lookup_host;
 
 struct SafeResolver;
@@ -38,7 +38,8 @@ impl Resolve for SafeResolver {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         "Blocked IP address",
-                    )) as Box<dyn std::error::Error + Send + Sync>);
+                    ))
+                        as Box<dyn std::error::Error + Send + Sync>);
                 }
                 resolved.push(addr);
             }
