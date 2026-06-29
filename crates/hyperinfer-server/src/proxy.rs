@@ -39,7 +39,8 @@ impl reqwest::dns::Resolve for SafeResolver {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
                     "Blocked IP",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
             let res: Box<dyn Iterator<Item = std::net::SocketAddr> + Send> =
                 Box::new(filtered.into_iter());
