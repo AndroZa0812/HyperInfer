@@ -14,13 +14,65 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
-
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
     "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
     "172.31.", "192.168.", "127.", "0.",
 ];
+
+#[derive(Clone)]
+struct SafeResolver;
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
+            let mut safe_addrs = Vec::new();
+            for addr in addrs {
+                let ip = addr.ip();
+                let ip_str = ip.to_string();
+
+                let is_blocked_v4 = BLOCKED_IP_PREFIXES
+                    .iter()
+                    .any(|prefix| ip_str.starts_with(prefix));
+
+                let is_loopback = ip.is_loopback();
+
+                let is_private_v6 = match ip {
+                    IpAddr::V6(v6) => {
+                        // Unique Local Addresses (fc00::/7) or Link-Local (fe80::/10)
+                        let segments = v6.segments();
+                        (segments[0] & 0xfe00) == 0xfc00 || (segments[0] & 0xffc0) == 0xfe80
+                    }
+                    _ => false,
+                };
+
+                let is_unspecified = ip.is_unspecified(); // e.g. 0.0.0.0 or ::
+
+                if !is_blocked_v4 && !is_loopback && !is_private_v6 && !is_unspecified {
+                    safe_addrs.push(addr);
+                }
+            }
+            if safe_addrs.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Blocked IP",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+            let iter: Box<dyn Iterator<Item = std::net::SocketAddr> + Send> =
+                Box::new(safe_addrs.into_iter());
+            Ok(iter)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to build HTTP client")
+});
 
 pub struct ProxyAuth {
     pub team_id: String,
