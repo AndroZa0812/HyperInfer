@@ -39,11 +39,7 @@ impl reqwest::dns::Resolve for SafeResolver {
                 if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
                     blocked = true;
                 } else if let std::net::IpAddr::V4(ipv4) = ip {
-                    if ipv4.is_private()
-                        || ipv4.is_link_local()
-                        || ipv4.is_broadcast()
-
-                    {
+                    if ipv4.is_private() || ipv4.is_link_local() || ipv4.is_broadcast() {
                         blocked = true;
                     }
                 } else if let std::net::IpAddr::V6(ipv6) = ip {
@@ -55,7 +51,6 @@ impl reqwest::dns::Resolve for SafeResolver {
                             || ipv4.is_loopback()
                             || ipv4.is_link_local()
                             || ipv4.is_broadcast()
-
                             || ipv4.is_unspecified()
                         {
                             blocked = true;
