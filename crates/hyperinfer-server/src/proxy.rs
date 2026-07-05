@@ -14,7 +14,85 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+#[derive(Clone, Default)]
+struct SafeResolver {}
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            // A simple blocking resolution since we don't have async one easily available without tokio/trust-dns
+            // Or we can use tokio::net::lookup_host
+
+            let host_str = name.as_str();
+            // tokio::net::lookup_host needs a port, we'll append :0 for resolution
+            let lookup_str = format!("{}:0", host_str);
+
+            let addrs = tokio::net::lookup_host(&lookup_str)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            let mut safe_addrs = Vec::new();
+            for mut addr in addrs {
+                addr.set_port(0); // Optional: not really used by reqwest directly but good to clean up
+                let ip_str = addr.ip().to_string();
+                let mut blocked = false;
+                let ip = addr.ip();
+                if ip.is_loopback() || ip.is_unspecified() || ip.is_multicast() {
+                    blocked = true;
+                } else if let std::net::IpAddr::V4(ipv4) = ip {
+                    if ipv4.is_private()
+                        || ipv4.is_link_local()
+                        || ipv4.is_broadcast()
+
+                    {
+                        blocked = true;
+                    }
+                } else if let std::net::IpAddr::V6(ipv6) = ip {
+                    if ipv6.is_multicast() || (ipv6.segments()[0] & 0xffc0) == 0xfe80 {
+                        blocked = true;
+                    }
+                    if let Some(ipv4) = ipv6.to_ipv4_mapped() {
+                        if ipv4.is_private()
+                            || ipv4.is_loopback()
+                            || ipv4.is_link_local()
+                            || ipv4.is_broadcast()
+
+                            || ipv4.is_unspecified()
+                        {
+                            blocked = true;
+                        }
+                    }
+                }
+
+                // Fallback to string prefixes for extra safety
+                if !blocked {
+                    for prefix in BLOCKED_IP_PREFIXES {
+                        if ip_str.starts_with(prefix) {
+                            blocked = true;
+                            break;
+                        }
+                    }
+                }
+                if !blocked {
+                    safe_addrs.push(addr);
+                }
+            }
+            if safe_addrs.is_empty() {
+                return Err(
+                    Box::new(std::io::Error::other("All resolved IPs are blocked"))
+                        as Box<dyn std::error::Error + Send + Sync>,
+                );
+            }
+            Ok(Box::new(safe_addrs.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(SafeResolver::default()))
+        .build()
+        .expect("Failed to build HTTP client")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
