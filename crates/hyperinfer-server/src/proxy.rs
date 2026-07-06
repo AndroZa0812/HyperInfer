@@ -9,11 +9,11 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Name, Resolve, Resolving};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::LazyLock;
-use reqwest::dns::{Name, Resolve, Resolving};
 
 fn is_blocked_ip(ip: IpAddr) -> bool {
     match ip {
@@ -44,7 +44,8 @@ impl Resolve for SafeResolver {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
                     "Blocked IP",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
             let addrs: Box<dyn Iterator<Item = SocketAddr> + Send> = Box::new(valid.into_iter());
             Ok(addrs)
