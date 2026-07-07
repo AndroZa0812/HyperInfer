@@ -9,11 +9,11 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Name, Resolve, Resolving};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, LazyLock};
-use reqwest::dns::{Name, Resolve, Resolving};
 
 struct SafeResolver;
 
@@ -36,9 +36,7 @@ impl Resolve for SafeResolver {
                             || ipv4.is_multicast()
                     }
                     IpAddr::V6(ipv6) => {
-                        ipv6.is_loopback()
-                            || ipv6.is_unspecified()
-                            || ipv6.is_multicast()
+                        ipv6.is_loopback() || ipv6.is_unspecified() || ipv6.is_multicast()
                     }
                 };
 
@@ -46,7 +44,8 @@ impl Resolve for SafeResolver {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         "Blocked IP address (SSRF protection)",
-                    )) as Box<dyn std::error::Error + Send + Sync>);
+                    ))
+                        as Box<dyn std::error::Error + Send + Sync>);
                 }
                 valid.push(addr);
             }
