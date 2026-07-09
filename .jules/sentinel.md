@@ -1,8 +1,4 @@
-## 2025-02-24 - [Fix Reflected User Input in InvalidUuid Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the invalid UUID string) directly in the `400 Bad Request` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `InvalidUuid(String)`. Use static error messages like `InvalidUuid` for malformed input unless specific, sanitized context is required and safe to expose.
-## 2025-02-25 - [Fix Reflected User Input in Unique Violation Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2025-07-09 - [Prevented SSRF Bypass in reqwest HTTP client via IPv6]
+**Vulnerability:** The HTTP client configuration for external API requests relied on a string-matching prefix filter (e.g., `ip_str.starts_with("127.")`) within a custom DNS resolver. This was vulnerable to bypasses using IPv6 loopback addresses (`::1`), IPv6 unique local addresses (`fc00::`), or IPv4-mapped IPv6 addresses (e.g., `::ffff:127.0.0.1`), allowing potential Server-Side Request Forgery (SSRF) against internal services.
+**Learning:** String-matching for IP validation is inherently fragile and fails to account for the diverse valid representations of IPs, particularly in IPv6. Security controls for IP addresses must rely on structured, native type methods (`IpAddr`'s `is_private()`, `is_loopback()`, etc.) rather than string serialization.
+**Prevention:** Always parse untrusted hosts into an `std::net::IpAddr` and use its built-in classification methods to validate whether an IP is routable or falls within restricted/private blocks, avoiding regex or string prefix checking entirely.
