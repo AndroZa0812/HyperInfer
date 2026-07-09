@@ -9,18 +9,89 @@ use hyperinfer_router::{
         RecordFailureResult, RoutingContext, RoutingState,
     },
 };
+use reqwest::dns::{Addrs, Name, Resolve};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::Arc;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+struct SafeResolver;
 
-const BLOCKED_IP_PREFIXES: &[&str] = &[
-    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
-    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-    "172.31.", "192.168.", "127.", "0.",
-];
+impl SafeResolver {
+    fn new() -> Self {
+        Self
+    }
+}
+
+impl Resolve for SafeResolver {
+    fn resolve(&self, name: Name) -> reqwest::dns::Resolving {
+        let name_str = name.as_str().to_string();
+
+        Box::pin(async move {
+            let task = tokio::task::spawn_blocking(move || {
+                std::net::ToSocketAddrs::to_socket_addrs(&(name_str.as_str(), 0))
+            });
+            let addrs = task
+                .await
+                .map_err(|_| std::io::Error::other("Spawn blocking failed"))??;
+
+            let mut safe_addrs = Vec::new();
+            for addr in addrs {
+                let ip = addr.ip();
+
+                let is_ipv4_private = match ip {
+                    IpAddr::V4(ipv4) => {
+                        ipv4.is_private()
+                            || ipv4.is_loopback()
+                            || ipv4.is_link_local()
+                            || ipv4.is_broadcast()
+                            || ipv4.is_documentation()
+                            || ipv4.is_unspecified()
+                    }
+                    IpAddr::V6(ipv6) => {
+                        ipv6.is_loopback()
+                            || ipv6.is_multicast()
+                            || ipv6.is_unspecified()
+                            // IPv4-mapped IPv6 addresses for loopback/private
+                            || match ipv6.to_ipv4_mapped() {
+                                Some(ipv4) => {
+                                    ipv4.is_private()
+                                        || ipv4.is_loopback()
+                                        || ipv4.is_link_local()
+                                        || ipv4.is_broadcast()
+                                        || ipv4.is_documentation()
+                                        || ipv4.is_unspecified()
+                                },
+                                None => false,
+                            }
+                    }
+                };
+
+                if !is_ipv4_private {
+                    safe_addrs.push(addr);
+                }
+            }
+
+            if safe_addrs.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Blocked IP",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            Ok(Box::new(safe_addrs.into_iter()) as Addrs)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(SafeResolver::new()))
+        .build()
+        .expect("Failed to build HTTP_CLIENT")
+});
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -101,11 +172,35 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let host = parsed.host_str().ok_or(400u16)?;
 
     if let Ok(ip) = host.parse::<IpAddr>() {
-        let ip_str = ip.to_string();
-        for prefix in BLOCKED_IP_PREFIXES {
-            if ip_str.starts_with(prefix) {
-                return Err(400);
+        let is_private = match ip {
+            IpAddr::V4(ipv4) => {
+                ipv4.is_private()
+                    || ipv4.is_loopback()
+                    || ipv4.is_link_local()
+                    || ipv4.is_broadcast()
+                    || ipv4.is_documentation()
+                    || ipv4.is_unspecified()
             }
+            IpAddr::V6(ipv6) => {
+                ipv6.is_loopback()
+                    || ipv6.is_multicast()
+                    || ipv6.is_unspecified()
+                    || match ipv6.to_ipv4_mapped() {
+                        Some(ipv4) => {
+                            ipv4.is_private()
+                                || ipv4.is_loopback()
+                                || ipv4.is_link_local()
+                                || ipv4.is_broadcast()
+                                || ipv4.is_documentation()
+                                || ipv4.is_unspecified()
+                        }
+                        None => false,
+                    }
+            }
+        };
+
+        if is_private {
+            return Err(400);
         }
     }
 
