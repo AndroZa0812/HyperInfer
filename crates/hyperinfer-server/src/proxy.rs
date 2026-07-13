@@ -45,10 +45,10 @@ impl reqwest::dns::Resolve for SafeResolver {
             }
 
             if valid_addrs.is_empty() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Blocked IP",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                return Err(
+                    Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Blocked IP"))
+                        as Box<dyn std::error::Error + Send + Sync>,
+                );
             }
 
             let addrs: reqwest::dns::Addrs = Box::new(valid_addrs.into_iter());
