@@ -11,10 +11,58 @@ use hyperinfer_router::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::net::IpAddr;
-use std::sync::LazyLock;
+use std::net::{IpAddr, ToSocketAddrs};
+use std::sync::{Arc, LazyLock};
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+struct SafeResolver;
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            let addrs = tokio::task::spawn_blocking(move || (host.as_str(), 0).to_socket_addrs())
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let mut valid_addrs = Vec::new();
+            for addr in addrs {
+                let ip = addr.ip();
+                let is_blocked = match ip {
+                    IpAddr::V4(ipv4) => {
+                        ipv4.is_private()
+                            || ipv4.is_loopback()
+                            || ipv4.is_link_local()
+                            || ipv4.is_broadcast()
+                            || ipv4.is_documentation()
+                            || ipv4.is_unspecified()
+                    }
+                    IpAddr::V6(ipv6) => ipv6.is_loopback() || ipv6.is_unspecified(),
+                };
+                if !is_blocked {
+                    valid_addrs.push(addr);
+                }
+            }
+
+            if valid_addrs.is_empty() {
+                return Err(
+                    Box::new(std::io::Error::other("Blocked IP"))
+                        as Box<dyn std::error::Error + Send + Sync>,
+                );
+            }
+
+            let addrs: reqwest::dns::Addrs = Box::new(valid_addrs.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::ClientBuilder::new()
+        .dns_resolver(Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to build HTTP client")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
