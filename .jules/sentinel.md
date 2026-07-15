@@ -1,8 +1,4 @@
-## 2025-02-24 - [Fix Reflected User Input in InvalidUuid Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the invalid UUID string) directly in the `400 Bad Request` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `InvalidUuid(String)`. Use static error messages like `InvalidUuid` for malformed input unless specific, sanitized context is required and safe to expose.
-## 2025-02-25 - [Fix Reflected User Input in Unique Violation Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2024-05-18 - Prevent SSRF with Asynchronous IP Resolution via Custom DNS Resolver
+**Vulnerability:** A TOCTOU (DNS Rebinding) SSRF vulnerability was identified in the outbound `reqwest::Client` request layer. The original implementation validated host strings synchronously *prior* to resolving the DNS, allowing attackers to bypass validation using domains that dynamically resolve to blocked internal or private IP addresses.
+**Learning:** In Rust applications using `reqwest`, synchronous pre-flight host validation is insufficient. The security boundary must exist at the transport level where DNS resolution actually occurs to prevent TOCTOU flaws and ensure robust IP blocking.
+**Prevention:** Always implement a custom `reqwest::dns::Resolve` trait to resolve and filter IP addresses asynchronously *post-resolution*, blocking the connection attempt dynamically if the resolved IP points to private/internal networks (e.g., using `std::net::ToSocketAddrs` within a non-blocking `spawn_blocking` closure and enforcing blocklist checks on `SocketAddr::ip()`).

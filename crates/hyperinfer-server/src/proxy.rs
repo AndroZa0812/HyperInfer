@@ -11,10 +11,49 @@ use hyperinfer_router::{
 };
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
+use std::sync::Arc;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+struct SafeResolver;
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let host = name.as_str().to_string();
+            let addrs = tokio::task::spawn_blocking(move || {
+                let mut resolved = vec![];
+                let resolved_addrs = (host.as_str(), 0).to_socket_addrs()?;
+                for addr in resolved_addrs {
+                    let ip = addr.ip();
+                    let ip_str = ip.to_string();
+                    let is_blocked = BLOCKED_IP_PREFIXES.iter().any(|prefix| ip_str.starts_with(prefix));
+                    if is_blocked {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "DNS resolved to blocked IP",
+                        ));
+                    }
+                    resolved.push(addr);
+                }
+                Ok(resolved.into_iter())
+            })
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let iter: Box<dyn Iterator<Item = SocketAddr> + Send> = Box::new(addrs);
+            Ok(iter)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(SafeResolver))
+        .build()
+        .expect("Failed to initialize HTTP_CLIENT with SafeResolver")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
