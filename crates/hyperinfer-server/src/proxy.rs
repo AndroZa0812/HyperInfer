@@ -31,10 +31,7 @@ impl reqwest::dns::Resolve for SafeResolver {
                         .iter()
                         .any(|prefix| ip_str.starts_with(prefix));
                     if is_blocked {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::Other,
-                            "DNS resolved to blocked IP",
-                        ));
+                        return Err(std::io::Error::other("DNS resolved to blocked IP"));
                     }
                     resolved.push(addr);
                 }
