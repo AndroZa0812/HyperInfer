@@ -27,7 +27,9 @@ impl reqwest::dns::Resolve for SafeResolver {
                 for addr in resolved_addrs {
                     let ip = addr.ip();
                     let ip_str = ip.to_string();
-                    let is_blocked = BLOCKED_IP_PREFIXES.iter().any(|prefix| ip_str.starts_with(prefix));
+                    let is_blocked = BLOCKED_IP_PREFIXES
+                        .iter()
+                        .any(|prefix| ip_str.starts_with(prefix));
                     if is_blocked {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::Other,
