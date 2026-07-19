@@ -22,12 +22,11 @@ impl Resolve for SafeResolver {
     fn resolve(&self, name: Name) -> reqwest::dns::Resolving {
         let name_str = name.as_str().to_string();
         Box::pin(async move {
-            let addrs = tokio::task::spawn_blocking(move || {
-                (name_str.as_str(), 0).to_socket_addrs()
-            })
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            let addrs =
+                tokio::task::spawn_blocking(move || (name_str.as_str(), 0).to_socket_addrs())
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
             let mut filtered = Vec::new();
             for addr in addrs {
@@ -42,9 +41,7 @@ impl Resolve for SafeResolver {
                             || ipv4.is_unspecified()
                             || ipv4.is_documentation()
                     }
-                    IpAddr::V6(ipv6) => {
-                        ipv6.is_loopback() || ipv6.is_unspecified()
-                    }
+                    IpAddr::V6(ipv6) => ipv6.is_loopback() || ipv6.is_unspecified(),
                 };
 
                 if !is_restricted {
@@ -56,7 +53,8 @@ impl Resolve for SafeResolver {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
                     "Access to restricted IP address denied",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
 
             Ok(Box::new(filtered.into_iter()) as Addrs)
