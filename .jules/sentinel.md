@@ -1,8 +1,5 @@
-## 2025-02-24 - [Fix Reflected User Input in InvalidUuid Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the invalid UUID string) directly in the `400 Bad Request` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `InvalidUuid(String)`. Use static error messages like `InvalidUuid` for malformed input unless specific, sanitized context is required and safe to expose.
-## 2025-02-25 - [Fix Reflected User Input in Unique Violation Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2024-05-18 - SSRF bypass via DNS Rebinding in Proxy
+
+**Vulnerability:** The OpenAI-compatible proxy endpoint (`/v1/chat/completions`) parsed the base URL from incoming requests and validated the parsed hostname string against a hardcoded blocked IP list. If the hostname was not an IP address (e.g. `example.com`), it bypassed this check entirely and `reqwest` would perform a DNS lookup at request time. This allowed for SSRF via DNS Rebinding: an attacker could provide a domain name (`rebind.attacker.com`) that initially resolves to a safe public IP, but responds with a private IP (`127.0.0.1`, `169.254.169.254`) when the HTTP client actually makes the connection.
+**Learning:** Checking for SSRF manually prior to initializing an HTTP client is insufficient because of the Time-Of-Check to Time-Of-Use (TOCTOU) gap caused by system DNS caching and TTL variations.
+**Prevention:** Always mitigate SSRF at the socket connection level. In `reqwest`, this means implementing a custom `reqwest::dns::Resolve` trait, overriding the default DNS resolver (`.dns_resolver(Arc::new(SafeResolver))`), doing the resolution via `tokio::task::spawn_blocking`, and ensuring the resulting IPs from the lookup strictly conform to the expected security policy before handing them back to `reqwest` to connect to.
