@@ -47,7 +47,7 @@ impl reqwest::dns::Resolve for SafeResolver {
                 std::net::ToSocketAddrs::to_socket_addrs(&(name.as_str(), 0))
             })
             .await
-            .unwrap_or_else(|e| Err(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .unwrap_or_else(|e| Err(std::io::Error::other(e)))?;
 
             let mut valid = Vec::new();
             for a in addrs {
@@ -57,10 +57,10 @@ impl reqwest::dns::Resolve for SafeResolver {
             }
 
             if valid.is_empty() {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Blocked IP",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                return Err(
+                    Box::new(std::io::Error::other("Blocked IP"))
+                        as Box<dyn std::error::Error + Send + Sync>,
+                );
             }
             Ok(Box::new(valid.into_iter()) as reqwest::dns::Addrs)
         })
