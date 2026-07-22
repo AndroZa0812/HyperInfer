@@ -14,13 +14,64 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+fn is_blocked_ip(ip: &IpAddr) -> bool {
+    if ip.is_loopback() || ip.is_unspecified() {
+        return true;
+    }
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_private() || v4.is_link_local() || v4.is_broadcast() || v4.is_documentation()
+        }
+        IpAddr::V6(v6) => {
+            // Check for IPv4-mapped IPv6 addresses (::ffff:192.168.1.1)
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked_ip(&IpAddr::V4(v4));
+            }
 
-const BLOCKED_IP_PREFIXES: &[&str] = &[
-    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
-    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-    "172.31.", "192.168.", "127.", "0.",
-];
+            let segments = v6.segments();
+            // Check for IPv6 Unique Local Addresses (fc00::/7)
+            let is_ula = (segments[0] & 0xfe00) == 0xfc00;
+            // Check for IPv6 Link-Local Addresses (fe80::/10)
+            let is_link_local = (segments[0] & 0xffc0) == 0xfe80;
+            is_ula || is_link_local
+        }
+    }
+}
+
+struct SafeResolver;
+
+impl reqwest::dns::Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        Box::pin(async move {
+            let addrs = tokio::task::spawn_blocking(move || {
+                std::net::ToSocketAddrs::to_socket_addrs(&(name.as_str(), 0))
+            })
+            .await
+            .unwrap_or_else(|e| Err(std::io::Error::other(e)))?;
+
+            let mut valid = Vec::new();
+            for a in addrs {
+                if !is_blocked_ip(&a.ip()) {
+                    valid.push(a);
+                }
+            }
+
+            if valid.is_empty() {
+                return Err(Box::new(std::io::Error::other("Blocked IP"))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+            Ok(Box::new(valid.into_iter()) as reqwest::dns::Addrs)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(std::sync::Arc::new(SafeResolver))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Failed to build HTTP client")
+});
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -98,12 +149,13 @@ pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<Prox
 
 fn validate_base_url(url: &str) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
-    let host = parsed.host_str().ok_or(400u16)?;
 
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        let ip_str = ip.to_string();
-        for prefix in BLOCKED_IP_PREFIXES {
-            if ip_str.starts_with(prefix) {
+    // Explicit literal IP check because hyper bypasses the custom resolver for these
+    if let Some(host) = parsed.host_str() {
+        // Handle IPv6 bracket notation e.g., [::1]
+        let clean_host = host.trim_start_matches('[').trim_end_matches(']');
+        if let Ok(ip) = clean_host.parse::<IpAddr>() {
+            if is_blocked_ip(&ip) {
                 return Err(400);
             }
         }
