@@ -14,13 +14,81 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+use reqwest::dns::{Addrs, Resolve, Resolving};
+use std::net::ToSocketAddrs;
+use std::sync::Arc;
 
-const BLOCKED_IP_PREFIXES: &[&str] = &[
-    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
-    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-    "172.31.", "192.168.", "127.", "0.",
-];
+fn is_blocked_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || v4.is_unspecified()
+        }
+        IpAddr::V6(v6) => {
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || if let Some(v4) = v6.to_ipv4_mapped() {
+                    v4.is_private()
+                        || v4.is_loopback()
+                        || v4.is_link_local()
+                        || v4.is_broadcast()
+                        || v4.is_documentation()
+                        || v4.is_unspecified()
+                } else {
+                    false
+                }
+        }
+    }
+}
+
+struct SafeResolver;
+
+impl Resolve for SafeResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> Resolving {
+        let name_str = name.as_str().to_string();
+        Box::pin(async move {
+            let addrs = tokio::task::spawn_blocking(move || {
+                let addrs = (name_str.as_str(), 0).to_socket_addrs()?;
+                let mut safe_addrs = Vec::new();
+                for addr in addrs {
+                    let ip = addr.ip();
+                    if is_blocked_ip(ip) {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            format!("Blocked IP address resolved: {}", ip),
+                        ));
+                    }
+                    safe_addrs.push(addr);
+                }
+                if safe_addrs.is_empty() {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "No safe IP addresses found",
+                    ));
+                }
+                Ok(safe_addrs)
+            })
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let addrs_iter: Addrs = Box::new(addrs.into_iter());
+            Ok(addrs_iter)
+        })
+    }
+}
+
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(SafeResolver))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Failed to build HTTP client")
+});
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -101,11 +169,8 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let host = parsed.host_str().ok_or(400u16)?;
 
     if let Ok(ip) = host.parse::<IpAddr>() {
-        let ip_str = ip.to_string();
-        for prefix in BLOCKED_IP_PREFIXES {
-            if ip_str.starts_with(prefix) {
-                return Err(400);
-            }
+        if is_blocked_ip(ip) {
+            return Err(400);
         }
     }
 
