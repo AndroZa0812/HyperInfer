@@ -52,10 +52,7 @@ The data plane is available in both Rust and Python.
     ```python
     from hyperinfer import Client, Config
 
-    config = (Config()
-        .with_api_key("openai", "sk-...")
-        .with_alias("fast", "gpt-4o-mini")
-    )
+    config = Config().with_api_key("openai", "sk-...").with_alias("fast", "gpt-4o-mini")
 
     client = Client(redis_url="redis://localhost:6379", config=config)
     await client.init()
@@ -93,9 +90,7 @@ Use unary chat when you need the complete response before proceeding.
 
     ```python
     response = await client.chat(
-        key="my-team-key",
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "Hello!"}]
+        key="my-team-key", model="gpt-4o-mini", messages=[{"role": "user", "content": "Hello!"}]
     )
     print(response["choices"][0]["message"]["content"])
     ```
@@ -117,7 +112,7 @@ Streaming is essential for chat UIs and long-form generation. It reduces **Time-
     async for chunk in client.stream(
         key="my-team-key",
         model="gpt-4o-mini",
-        messages=[{"role": "user", "content": "Tell me a story"}]
+        messages=[{"role": "user", "content": "Tell me a story"}],
     ):
         # chunk is a dict with: id, model, delta, finish_reason, usage
         print(chunk["delta"], end="", flush=True)
