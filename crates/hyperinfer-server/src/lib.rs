@@ -6,3 +6,4 @@ pub mod proxy;
 pub mod seeding;
 
 pub use db::{RedisConfigStore, SqlxDb};
+pub mod safe_resolver;
