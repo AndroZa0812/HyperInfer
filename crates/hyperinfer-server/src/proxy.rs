@@ -12,8 +12,8 @@ use hyperinfer_router::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::{Arc, LazyLock};
 use std::net::ToSocketAddrs;
+use std::sync::{Arc, LazyLock};
 
 struct SafeResolver;
 
@@ -21,12 +21,11 @@ impl reqwest::dns::Resolve for SafeResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let name_str = name.as_str().to_string();
         Box::pin(async move {
-            let addrs = tokio::task::spawn_blocking(move || {
-                format!("{}:0", name_str).to_socket_addrs()
-            })
-            .await
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            let addrs =
+                tokio::task::spawn_blocking(move || format!("{}:0", name_str).to_socket_addrs())
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
             let mut safe_addrs = Vec::new();
             for addr in addrs {
@@ -34,25 +33,39 @@ impl reqwest::dns::Resolve for SafeResolver {
                 let is_blocked = match ip {
                     IpAddr::V4(v4) => {
                         let o = v4.octets();
-                        let is_private = o[0] == 10 || (o[0] == 172 && (o[1] >= 16 && o[1] <= 31)) || (o[0] == 192 && o[1] == 168);
+                        let is_private = o[0] == 10
+                            || (o[0] == 172 && (o[1] >= 16 && o[1] <= 31))
+                            || (o[0] == 192 && o[1] == 168);
                         let is_loopback = o[0] == 127;
                         let is_link_local = o[0] == 169 && o[1] == 254;
                         let is_broadcast = o == [255, 255, 255, 255];
                         let is_unspecified = o == [0, 0, 0, 0];
                         is_private || is_loopback || is_link_local || is_broadcast || is_unspecified
-                    },
+                    }
                     IpAddr::V6(v6) => {
                         let is_v4_mapped = if let Some(v4) = v6.to_ipv4_mapped() {
                             let o = v4.octets();
-                            let is_private = o[0] == 10 || (o[0] == 172 && (o[1] >= 16 && o[1] <= 31)) || (o[0] == 192 && o[1] == 168);
+                            let is_private = o[0] == 10
+                                || (o[0] == 172 && (o[1] >= 16 && o[1] <= 31))
+                                || (o[0] == 192 && o[1] == 168);
                             let is_loopback = o[0] == 127;
                             let is_link_local = o[0] == 169 && o[1] == 254;
                             let is_broadcast = o == [255, 255, 255, 255];
                             let is_unspecified = o == [0, 0, 0, 0];
-                            is_private || is_loopback || is_link_local || is_broadcast || is_unspecified
-                        } else { false };
+                            is_private
+                                || is_loopback
+                                || is_link_local
+                                || is_broadcast
+                                || is_unspecified
+                        } else {
+                            false
+                        };
                         let o = v6.octets();
-                        is_v4_mapped || v6.is_loopback() || v6.is_unspecified() || (o[0] & 0xfe == 0xfc) || (o[0] == 0xfe && (o[1] & 0xc0) == 0x80)
+                        is_v4_mapped
+                            || v6.is_loopback()
+                            || v6.is_unspecified()
+                            || (o[0] & 0xfe == 0xfc)
+                            || (o[0] == 0xfe && (o[1] & 0xc0) == 0x80)
                     }
                 };
                 if !is_blocked {
@@ -60,7 +73,11 @@ impl reqwest::dns::Resolve for SafeResolver {
                 }
             }
             if safe_addrs.is_empty() {
-                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "SSRF attempt blocked")) as Box<dyn std::error::Error + Send + Sync>);
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "SSRF attempt blocked",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
             Ok(Box::new(safe_addrs.into_iter()) as reqwest::dns::Addrs)
         })
