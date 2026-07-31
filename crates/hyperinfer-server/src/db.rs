@@ -117,7 +117,17 @@ impl Database for SqlxDb {
         .bind(role)
         .bind(password_hash)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|db| db.is_unique_violation())
+                .unwrap_or(false)
+            {
+                DbError::UniqueViolation("User with this email already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(User::from(result))
     }
@@ -162,7 +172,17 @@ impl Database for SqlxDb {
         .bind(team_uuid)
         .bind(name.as_deref())
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|db| db.is_unique_violation())
+                .unwrap_or(false)
+            {
+                DbError::UniqueViolation("API key with this hash already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(ApiKey::from(result))
     }
@@ -207,7 +227,17 @@ impl Database for SqlxDb {
         .bind(target_model)
         .bind(provider)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error()
+                .map(|db| db.is_unique_violation())
+                .unwrap_or(false)
+            {
+                DbError::UniqueViolation("Model alias with this name already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(ModelAlias::from(result))
     }
