@@ -68,7 +68,7 @@ impl Database for SqlxDb {
         {
             Ok(row) => row,
             Err(e) => {
-                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                if e.as_database_error().map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation).unwrap_or(false) {
                     return Err(DbError::UniqueViolation("Team name already exists".to_string()));
                 }
                 return Err(DbError::Sqlx(e));
@@ -119,7 +119,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+            if e.as_database_error().map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation).unwrap_or(false) {
                 DbError::UniqueViolation("User already exists".to_string())
             } else {
                 DbError::Sqlx(e)
@@ -171,7 +171,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+            if e.as_database_error().map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation).unwrap_or(false) {
                 DbError::UniqueViolation("API key already exists".to_string())
             } else {
                 DbError::Sqlx(e)
@@ -223,7 +223,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+            if e.as_database_error().map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation).unwrap_or(false) {
                 DbError::UniqueViolation("Model alias already exists".to_string())
             } else {
                 DbError::Sqlx(e)
@@ -261,7 +261,7 @@ impl Database for SqlxDb {
         .fetch_one(&self.pool)
         .await
         .map_err(|e| {
-            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+            if e.as_database_error().map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation).unwrap_or(false) {
                 DbError::UniqueViolation("Quota already exists".to_string())
             } else {
                 DbError::Sqlx(e)
@@ -378,7 +378,7 @@ impl Database for SqlxDb {
         .await
         .map_err(|e| {
             if e.as_database_error()
-                .map(|db| db.is_unique_violation())
+                .map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation)
                 .unwrap_or(false)
             {
                 DbError::UniqueViolation("Deployment with this name already exists".to_string())
@@ -418,7 +418,7 @@ impl Database for SqlxDb {
         .await
         .map_err(|e| {
             if e.as_database_error()
-                .map(|db| db.is_unique_violation())
+                .map(|db| db.kind() == sqlx::error::ErrorKind::UniqueViolation)
                 .unwrap_or(false)
             {
                 DbError::UniqueViolation("Deployment with this name already exists".to_string())
