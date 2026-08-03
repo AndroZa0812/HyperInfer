@@ -109,7 +109,7 @@ impl Database for SqlxDb {
         password_hash: Option<String>,
     ) -> Result<User, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
-        let result: UserRow = sqlx::query_as(
+        let result: UserRow = match sqlx::query_as(
             "INSERT INTO users (team_id, email, role, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, team_id, email, role, password_hash, created_at"
         )
         .bind(team_uuid)
@@ -117,7 +117,16 @@ impl Database for SqlxDb {
         .bind(role)
         .bind(password_hash)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("User email already exists".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
+            }
+        };
 
         Ok(User::from(result))
     }
@@ -154,7 +163,7 @@ impl Database for SqlxDb {
     ) -> Result<ApiKey, DbError> {
         let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| DbError::InvalidUuid)?;
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
-        let result: ApiKeyRow = sqlx::query_as(
+        let result: ApiKeyRow = match sqlx::query_as(
             "INSERT INTO api_keys (key_hash, user_id, team_id, name) VALUES ($1, $2, $3, $4) RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
         )
         .bind(key_hash)
@@ -162,7 +171,16 @@ impl Database for SqlxDb {
         .bind(team_uuid)
         .bind(name.as_deref())
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("API key already exists".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
+            }
+        };
 
         Ok(ApiKey::from(result))
     }
@@ -199,7 +217,7 @@ impl Database for SqlxDb {
         provider: &str,
     ) -> Result<ModelAlias, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
-        let result: ModelAliasRow = sqlx::query_as(
+        let result: ModelAliasRow = match sqlx::query_as(
             "INSERT INTO model_aliases (team_id, alias, target_model, provider) VALUES ($1, $2, $3, $4) RETURNING id, team_id, alias, target_model, provider, created_at"
         )
         .bind(team_uuid)
@@ -207,7 +225,16 @@ impl Database for SqlxDb {
         .bind(target_model)
         .bind(provider)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("Model alias already exists for this team".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
+            }
+        };
 
         Ok(ModelAlias::from(result))
     }
@@ -231,14 +258,23 @@ impl Database for SqlxDb {
         tpm_limit: i32,
     ) -> Result<Quota, DbError> {
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
-        let result: QuotaRow = sqlx::query_as(
+        let result: QuotaRow = match sqlx::query_as(
             "INSERT INTO quotas (team_id, rpm_limit, tpm_limit) VALUES ($1, $2, $3) RETURNING id, team_id, rpm_limit, tpm_limit, updated_at"
         )
         .bind(team_uuid)
         .bind(rpm_limit)
         .bind(tpm_limit)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("Quota already exists for this team".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
+            }
+        };
 
         Ok(Quota::from(result))
     }
@@ -329,7 +365,7 @@ impl Database for SqlxDb {
     }
 
     async fn create_deployment(&self, req: CreateDeploymentRequest) -> Result<Deployment, DbError> {
-        let result: DeploymentRow = sqlx::query_as(
+        let result: DeploymentRow = match sqlx::query_as(
             "INSERT INTO deployments (name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at"
         )
         .bind(&req.name)
@@ -348,16 +384,15 @@ impl Database for SqlxDb {
         .bind(req.sort_order.unwrap_or(0))
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| {
-            if e.as_database_error()
-                .map(|db| db.is_unique_violation())
-                .unwrap_or(false)
-            {
-                DbError::UniqueViolation("Deployment with this name already exists".to_string())
-            } else {
-                DbError::Sqlx(e)
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("Deployment with this name already exists".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
             }
-        })?;
+        };
 
         Ok(Deployment::from(result))
     }
@@ -368,7 +403,7 @@ impl Database for SqlxDb {
         req: CreateDeploymentRequest,
     ) -> Result<Deployment, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
-        let result: DeploymentRow = sqlx::query_as(
+        let result: DeploymentRow = match sqlx::query_as(
             "UPDATE deployments SET name = $1, provider = $2, model = $3, api_key_ref = $4, base_url = $5, is_active = $6, weight = $7, priority = $8, max_tpm = $9, max_rpm = $10, cost_per_1k_input_tokens = $11, cost_per_1k_output_tokens = $12, metadata = $13, sort_order = $14 WHERE id = $15 RETURNING id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at"
         )
         .bind(&req.name)
@@ -388,16 +423,15 @@ impl Database for SqlxDb {
         .bind(uuid)
         .fetch_one(&self.pool)
         .await
-        .map_err(|e| {
-            if e.as_database_error()
-                .map(|db| db.is_unique_violation())
-                .unwrap_or(false)
-            {
-                DbError::UniqueViolation("Deployment with this name already exists".to_string())
-            } else {
-                DbError::Sqlx(e)
+        {
+            Ok(row) => row,
+            Err(e) => {
+                if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                    return Err(DbError::UniqueViolation("Deployment with this name already exists".to_string()));
+                }
+                return Err(DbError::Sqlx(e));
             }
-        })?;
+        };
 
         Ok(Deployment::from(result))
     }
