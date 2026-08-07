@@ -12,8 +12,8 @@ use hyperinfer_router::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::{IpAddr, ToSocketAddrs};
-use std::sync::LazyLock;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 #[derive(Clone)]
 struct SafeResolver;
@@ -45,10 +45,11 @@ impl reqwest::dns::Resolve for SafeResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let name_str = name.as_str().to_string();
         Box::pin(async move {
-            let addrs = tokio::task::spawn_blocking(move || (name_str.as_str(), 0).to_socket_addrs())
-                .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            let addrs =
+                tokio::task::spawn_blocking(move || (name_str.as_str(), 0).to_socket_addrs())
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
             let mut valid_addrs = Vec::new();
             for addr in addrs {
@@ -56,7 +57,8 @@ impl reqwest::dns::Resolve for SafeResolver {
                     return Err(Box::new(std::io::Error::new(
                         std::io::ErrorKind::PermissionDenied,
                         "Blocked IP address",
-                    )) as Box<dyn std::error::Error + Send + Sync>);
+                    ))
+                        as Box<dyn std::error::Error + Send + Sync>);
                 }
                 valid_addrs.push(addr);
             }
@@ -65,7 +67,8 @@ impl reqwest::dns::Resolve for SafeResolver {
                 return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     "No valid IP addresses found",
-                )) as Box<dyn std::error::Error + Send + Sync>);
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
             }
 
             let iter: reqwest::dns::Addrs = Box::new(valid_addrs.into_iter());
