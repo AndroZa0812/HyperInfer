@@ -93,9 +93,7 @@ Fallbacks ensure high availability by routing to a secondary model when a primar
     # via the Control Plane API.
     # Python clients consume them automatically.
     response = await client.chat(
-        key="my-key",
-        model="gpt-4o",
-        messages=[{"role": "user", "content": "Hello!"}]
+        key="my-key", model="gpt-4o", messages=[{"role": "user", "content": "Hello!"}]
     )
     # If gpt-4o fails (rate limit, content policy, etc.),
     # the router transparently retries on the configured fallback.
