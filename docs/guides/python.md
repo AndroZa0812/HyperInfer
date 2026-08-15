@@ -54,7 +54,8 @@ The `Config` class uses a **fluent builder API**. You chain `.with_*` methods to
 ```python
 from hyperinfer import Config
 
-config = (Config()
+config = (
+    Config()
     .with_api_key("openai", "sk-...")
     .with_api_key("anthropic", "sk-ant-...")
     .with_alias("fast", "gpt-4o-mini")
@@ -87,10 +88,7 @@ client = Client(redis_url="redis://localhost:6379")
 ```python
 from hyperinfer import Client, Config
 
-config = (Config()
-    .with_api_key("openai", "sk-...")
-    .with_alias("fast", "gpt-4o-mini")
-)
+config = Config().with_api_key("openai", "sk-...").with_alias("fast", "gpt-4o-mini")
 
 client = Client(redis_url="redis://localhost:6379", config=config)
 await client.init()
@@ -104,9 +102,7 @@ Always use the `async with` syntax to ensure the client is properly initialized 
 async def main():
     async with Client(redis_url="redis://localhost:6379", config=config) as client:
         response = await client.chat(
-            key="my-team-key",
-            model="fast",
-            messages=[{"role": "user", "content": "Hello!"}]
+            key="my-team-key", model="fast", messages=[{"role": "user", "content": "Hello!"}]
         )
         print(response)
 ```
@@ -132,11 +128,11 @@ response = await client.chat(
     model="gpt-4o",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain quantum entanglement in 3 sentences."}
+        {"role": "user", "content": "Explain quantum entanglement in 3 sentences."},
     ],
     temperature=0.7,
     max_tokens=150,
-    stop=["\n\n"]  # Stop generation at double newline
+    stop=["\n\n"],  # Stop generation at double newline
 )
 ```
 
@@ -147,17 +143,9 @@ The response is a `dict` with the standard OpenAI-style shape:
     "id": "chatcmpl-abc123",
     "model": "gpt-4o",
     "choices": [
-        {
-            "index": 0,
-            "message": {"role": "assistant", "content": "..."},
-            "finish_reason": "stop"
-        }
+        {"index": 0, "message": {"role": "assistant", "content": "..."}, "finish_reason": "stop"}
     ],
-    "usage": {
-        "prompt_tokens": 42,
-        "completion_tokens": 150,
-        "total_tokens": 192
-    }
+    "usage": {"prompt_tokens": 42, "completion_tokens": 150, "total_tokens": 192},
 }
 ```
 
@@ -169,7 +157,7 @@ Use `client.stream` to receive tokens as soon as they are generated.
 async for chunk in client.stream(
     key="my-team-key",
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Write a poem about Rust."}]
+    messages=[{"role": "user", "content": "Write a poem about Rust."}],
 ):
     # Each chunk is a dict with the following keys:
     #   "id", "model", "delta", "finish_reason", "usage"
@@ -218,9 +206,7 @@ The Python client surfaces errors as standard exceptions. You should wrap your c
 ```python
 try:
     response = await client.chat(
-        key="my-team-key",
-        model="gpt-4o",
-        messages=[{"role": "user", "content": "Hello!"}]
+        key="my-team-key", model="gpt-4o", messages=[{"role": "user", "content": "Hello!"}]
     )
 except Exception as e:
     # The underlying Rust core raises HyperInferError, which surfaces
