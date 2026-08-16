@@ -26,15 +26,14 @@ The `LlmProvider` trait defines how the engine interacts with an LLM backend. Th
     ```python
     from hyperinfer import Client, Config
 
+
     async def main():
         client = Client(config=Config())
         await client.init()
 
         # Use a provider by its registered name
         response = await client.chat(
-            key="my-key",
-            model="my-custom-provider",
-            messages=[{"role": "user", "content": "Hello!"}]
+            key="my-key", model="my-custom-provider", messages=[{"role": "user", "content": "Hello!"}]
         )
         print(response)
     ```
@@ -90,6 +89,7 @@ Implementing streaming requires careful management of asynchronous streams to en
     ```python
     from hyperinfer import Client, Config
 
+
     async def main():
         client = Client(config=Config())
         await client.init()
@@ -97,11 +97,7 @@ Implementing streaming requires careful management of asynchronous streams to en
         messages = [{"role": "user", "content": "Tell me a story."}]
 
         # Stream chunks as they arrive
-        async for chunk in client.stream(
-            key="my-key",
-            model="my-custom-provider",
-            messages=messages
-        ):
+        async for chunk in client.stream(key="my-key", model="my-custom-provider", messages=messages):
             print(chunk.delta, end="", flush=True)
     ```
 
@@ -141,12 +137,14 @@ If you are running a local model that is OpenAI-compatible (e.g., Ollama, vLLM),
 
     # Configure the alias to point to your local model
     # and provide the API key for the local server
-    config = (Config()
+    config = (
+        Config()
         .with_api_key("openai", "ollama")  # Local servers often accept any key
         .with_alias("local-llama", "llama3")
     )
 
     client = Client(redis_url="redis://localhost:6379", config=config)
+
 
     async def main():
         await client.init()
@@ -154,12 +152,14 @@ If you are running a local model that is OpenAI-compatible (e.g., Ollama, vLLM),
         response = await client.chat(
             key="local-key",
             model="local-llama",
-            messages=[{"role": "user", "content": "Explain quantum physics."}]
+            messages=[{"role": "user", "content": "Explain quantum physics."}],
         )
         print(response["choices"][0]["message"]["content"])
 
+
     if __name__ == "__main__":
         import asyncio
+
         asyncio.run(main())
     ```
 
