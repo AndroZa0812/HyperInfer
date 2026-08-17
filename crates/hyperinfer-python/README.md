@@ -17,6 +17,7 @@ pip install hyperinfer
 import asyncio
 from hyperinfer import Config, Client
 
+
 async def main():
     # Configure with your API keys
     config = (
@@ -32,21 +33,18 @@ async def main():
 
     # Non-streaming chat
     response = await client.chat(
-        key="my-key",
-        model="fast",
-        messages=[{"role": "user", "content": "What is HyperInfer?"}]
+        key="my-key", model="fast", messages=[{"role": "user", "content": "What is HyperInfer?"}]
     )
     print(response)
 
     # Streaming chat
     async for chunk in client.stream(
-        key="my-key",
-        model="smart",
-        messages=[{"role": "user", "content": "Tell me a story"}]
+        key="my-key", model="smart", messages=[{"role": "user", "content": "Tell me a story"}]
     ):
         print(chunk["delta"], end="", flush=True)
 
     await client.close()
+
 
 asyncio.run(main())
 ```

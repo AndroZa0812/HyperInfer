@@ -28,14 +28,14 @@ The `RoutingStrategy` trait defines how a strategy selects a deployment from a l
     ```python
     from hyperinfer import Client, Config
 
+
     async def main():
         # Build a config with aliases and routing rules
-        config = (Config()
+        config = (
+            Config()
             .with_alias("smart-model", "gpt-4o")
             .with_routing_rule(
-                name="default",
-                priority=1,
-                fallbacks=["gpt-4o-mini", "claude-3-haiku-20240307"]
+                name="default", priority=1, fallbacks=["gpt-4o-mini", "claude-3-haiku-20240307"]
             )
         )
 
@@ -44,9 +44,7 @@ The `RoutingStrategy` trait defines how a strategy selects a deployment from a l
 
         # "smart-model" resolves to "gpt-4o" at the router level
         response = await client.chat(
-            key="my-key",
-            model="smart-model",
-            messages=[{"role": "user", "content": "Hello!"}]
+            key="my-key", model="smart-model", messages=[{"role": "user", "content": "Hello!"}]
         )
         print(response)
     ```
@@ -133,13 +131,10 @@ The `RoutingState` trait provides methods to query and update deployment metrics
     Python users benefit from stateful routing automatically — the engine feeds metrics back into the strategy after every request. The `Config` only declares the *rules*; the engine handles the *feedback loop*.
 
     ```python
-    config = (Config()
+    config = (
+        Config()
         .with_alias("api-v1", "gpt-4o")
-        .with_routing_rule(
-            name="production-cluster",
-            priority=1,
-            fallbacks=["gpt-4o-mini"]
-        )
+        .with_routing_rule(name="production-cluster", priority=1, fallbacks=["gpt-4o-mini"])
         .with_quota(key="my-team", rpm=1000, tpm=500_000)
     )
     ```
