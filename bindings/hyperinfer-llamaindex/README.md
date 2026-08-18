@@ -17,11 +17,7 @@ pip install hyperinfer-llamaindex
 from hyperinfer import Config
 from hyperinfer_llamaindex import HyperInferLLM
 
-config = (
-    Config()
-    .with_api_key("openai", "sk-...")
-    .with_alias("fast", "gpt-4o-mini")
-)
+config = Config().with_api_key("openai", "sk-...").with_alias("fast", "gpt-4o-mini")
 
 llm = HyperInferLLM.from_config(
     config=config,
