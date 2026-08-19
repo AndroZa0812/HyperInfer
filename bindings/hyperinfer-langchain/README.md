@@ -20,12 +20,9 @@ from hyperinfer import Config
 from hyperinfer_langchain import HyperInferChatModel
 from langchain_core.messages import HumanMessage
 
+
 async def main():
-    config = (
-        Config()
-        .with_api_key("openai", "sk-...")
-        .with_alias("fast", "gpt-4o-mini")
-    )
+    config = Config().with_api_key("openai", "sk-...").with_alias("fast", "gpt-4o-mini")
 
     llm = await HyperInferChatModel.from_config(
         config=config,
@@ -40,6 +37,7 @@ async def main():
     # Streaming
     for chunk in llm.stream([HumanMessage(content="Tell me a joke")]):
         print(chunk.content, end="", flush=True)
+
 
 asyncio.run(main())
 ```
