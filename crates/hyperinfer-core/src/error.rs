@@ -34,7 +34,7 @@ pub enum HyperInferError {
 
 #[derive(Debug, Error)]
 pub enum DbError {
-    #[error("Database error: {0}")]
+    #[error("Database error")]
     Sqlx(#[from] sqlx::Error),
     #[error("Invalid UUID")]
     InvalidUuid,
