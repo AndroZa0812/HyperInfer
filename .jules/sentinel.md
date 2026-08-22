@@ -6,3 +6,7 @@
 **Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
 **Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
 **Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2026-08-22 - SSRF Prevention via Custom DNS Resolver
+**Vulnerability:** Server-Side Request Forgery (SSRF) bypasses (e.g., DNS Rebinding) on user-facing HTTP clients.
+**Learning:** Simply validating hostnames synchronously before sending a request is insufficient because attackers can use DNS rebinding to resolve to a private IP after the check passes. However, applying a custom `SafeResolver` to all `reqwest::Client` instances globally breaks internal clients (like OpenTelemetry exporters) which must legitimately connect to local or internal IPs.
+**Prevention:** Implement a custom `reqwest::dns::Resolve` trait (`SafeResolver`) that filters out private, loopback, and local network IPs *during* DNS resolution. Apply this secure resolver **only** to HTTP clients that handle user-supplied URLs (e.g., the proxy client), and leave internal system clients (e.g., telemetry exporters) using standard resolvers.

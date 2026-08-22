@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::net::IpAddr;
 use std::sync::LazyLock;
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).dns_resolver(std::sync::Arc::new(hyperinfer_core::SafeResolver)).build().expect("Failed to build client"));
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",

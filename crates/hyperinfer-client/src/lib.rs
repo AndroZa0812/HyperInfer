@@ -30,7 +30,7 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).dns_resolver(std::sync::Arc::new(hyperinfer_core::SafeResolver)).build().expect("Failed to build client"));
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
 
