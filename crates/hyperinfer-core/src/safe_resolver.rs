@@ -54,10 +54,7 @@ impl Resolve for SafeResolver {
                     }
                 }
                 if safe_addrs.is_empty() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "All resolved IPs are blocked",
-                    ));
+                    return Err(std::io::Error::other("All resolved IPs are blocked"));
                 }
                 Ok(safe_addrs)
             })
