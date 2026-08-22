@@ -10,3 +10,7 @@
 **Vulnerability:** Server-Side Request Forgery (SSRF) bypasses (e.g., DNS Rebinding) on user-facing HTTP clients.
 **Learning:** Simply validating hostnames synchronously before sending a request is insufficient because attackers can use DNS rebinding to resolve to a private IP after the check passes. However, applying a custom `SafeResolver` to all `reqwest::Client` instances globally breaks internal clients (like OpenTelemetry exporters) which must legitimately connect to local or internal IPs.
 **Prevention:** Implement a custom `reqwest::dns::Resolve` trait (`SafeResolver`) that filters out private, loopback, and local network IPs *during* DNS resolution. Apply this secure resolver **only** to HTTP clients that handle user-supplied URLs (e.g., the proxy client), and leave internal system clients (e.g., telemetry exporters) using standard resolvers.
+## 2026-08-22 - Fix manual_filter clippy lint in Python bindings
+**Vulnerability:** None (Code quality/Linting)
+**Learning:** Rust `clippy` will flag manual implementations of `Option::filter`, such as `.and_then(|v| if v.is_none() { None } else { Some(v) })`.
+**Prevention:** Use the built-in `.filter(|v| !v.is_none())` or `.filter(|v| v.is_some())` to ensure clean, idiomatic code and avoid breaking CI jobs running with `-D warnings`.
