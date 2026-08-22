@@ -6,6 +6,7 @@
 pub mod error;
 pub mod rate_limiting;
 pub mod redis;
+pub mod safe_resolver;
 pub mod telemetry_consumer;
 pub mod traits;
 pub mod types;
@@ -13,6 +14,7 @@ pub mod types;
 pub use error::{ConfigError, DbError, HyperInferError};
 pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY_PREFIX};
 pub use redis::PolicyUpdate;
+pub use safe_resolver::SafeResolver;
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, UsageLog, User};
 pub use types::{
