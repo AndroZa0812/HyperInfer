@@ -14,3 +14,7 @@
 **Vulnerability:** None (Code quality/Linting)
 **Learning:** Rust `clippy` will flag manual implementations of `Option::filter`, such as `.and_then(|v| if v.is_none() { None } else { Some(v) })`.
 **Prevention:** Use the built-in `.filter(|v| !v.is_none())` or `.filter(|v| v.is_some())` to ensure clean, idiomatic code and avoid breaking CI jobs running with `-D warnings`.
+## 2026-08-22 - Fix Python Code Formatting
+**Vulnerability:** None (Code quality/Formatting)
+**Learning:** Python snippets in Markdown files and Python code need to be formatted correctly, otherwise the CI step `Format & Lint` will fail because `uv run ruff format --check .` enforces it.
+**Prevention:** Always run `uv run ruff format .` prior to submission to automatically format the code and markdown snippets.
