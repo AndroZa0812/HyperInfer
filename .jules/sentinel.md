@@ -1,8 +1,4 @@
-## 2025-02-24 - [Fix Reflected User Input in InvalidUuid Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the invalid UUID string) directly in the `400 Bad Request` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `InvalidUuid(String)`. Use static error messages like `InvalidUuid` for malformed input unless specific, sanitized context is required and safe to expose.
-## 2025-02-25 - [Fix Reflected User Input in Unique Violation Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2025-02-12 - Prevent SSRF via Custom reqwest DNS Resolver
+**Vulnerability:** Server-Side Request Forgery (SSRF) bypass due to synchronous DNS resolution (Time-Of-Check to Time-Of-Use vulnerability / DNS Rebinding).
+**Learning:** `proxy.rs` attempted to validate URLs against private subnets using synchronous string parsing of hostnames before sending them to a standard `reqwest::Client`. This fails against DNS Rebinding, where an attacker's DNS server responds with a safe IP first, and an internal IP during the actual `reqwest` connection.
+**Prevention:** Always implement `reqwest::dns::Resolve` to enforce SSRF protection. Filtering private IPs *after* the client resolves the IP but *before* the connection is established eliminates the TOCTOU gap. Additionally, explicitly disable redirects (`reqwest::redirect::Policy::none()`) on external-facing proxy clients to prevent attackers from bypassing the initial IP checks by redirecting to `127.0.0.1` after a successful connection.

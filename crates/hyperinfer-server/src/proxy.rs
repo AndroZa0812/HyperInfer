@@ -12,9 +12,15 @@ use hyperinfer_router::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(crate::safe_resolver::SafeResolver))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Failed to build secure reqwest HTTP client")
+});
 
 const BLOCKED_IP_PREFIXES: &[&str] = &[
     "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
