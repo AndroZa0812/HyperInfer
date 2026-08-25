@@ -5,6 +5,7 @@ pub mod http_client;
 pub mod mirroring;
 pub mod router;
 pub mod router_engine;
+pub mod safe_resolver;
 pub mod telemetry;
 pub mod telemetry_otlp;
 mod util;
@@ -30,7 +31,13 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
 use std::task::{Context, Poll};
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(safe_resolver::SafeResolver))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Failed to build secure reqwest HTTP client")
+});
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
 
