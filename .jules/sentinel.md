@@ -1,8 +1,8 @@
-## 2025-02-24 - [Fix Reflected User Input in InvalidUuid Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the invalid UUID string) directly in the `400 Bad Request` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `InvalidUuid(String)`. Use static error messages like `InvalidUuid` for malformed input unless specific, sanitized context is required and safe to expose.
-## 2025-02-25 - [Fix Reflected User Input in Unique Violation Error]
-**Vulnerability:** The application was reflecting untrusted, unsanitized user input (the team name) directly in the `409 Conflict` HTTP error response.
-**Learning:** Returning unvalidated input directly in error messages can lead to Reflected XSS (if rendered by a client) or log forging. Rust's `thiserror` makes it easy to format strings, but we must be careful what strings we are formatting.
-**Prevention:** Avoid allocating and reflecting raw user input in error enum variants like `UniqueViolation(String)`. Use static error messages like `UniqueViolation` for malformed input unless specific, sanitized context is required and safe to expose.
+## 2024-08-29 - Prevent Information Exposure via Error Messages
+**Vulnerability:** Information Exposure (CWE-209) in `crates/hyperinfer-core/src/error.rs`.
+**Learning:** The `thiserror` crate's `#[error(...)]` attribute was formatting inner errors (like `sqlx::Error` and `redis::RedisError`) directly into the `Display` string. This could expose raw error messages, stack traces, internal paths, or SQL syntax to clients or log aggregators that serialize `Display` output.
+**Prevention:** Ensure enum variants that wrap underlying infrastructure errors omit the `{0}` placeholder from their `#[error(...)]` definitions. This allows the internal application to use `std::error::Error::source()` or `Debug` (`{:?}`) for detailed logging while presenting a safe, generic string to external interfaces.
+## 2024-08-29 - Fixed Python bindings syntax issue
+**Vulnerability:** N/A (Build fix)
+**Learning:** `Option::filter` should be used instead of manual `.and_then` when just checking for `is_none()`. This keeps the code clippy-compliant (`clippy::manual_filter`).
+**Prevention:** Follow `cargo clippy` warnings and ensure to test workspace build issues across all packages including Python bindings.
