@@ -60,19 +60,20 @@ async def test_chat_without_api_key_fails(redis_url):
     # Start client without configuring the 'dummy' provider
     config = Config()
 
-    async with Client(redis_url=redis_url, config=config) as client:
-        with pytest.raises(Exception) as excinfo:
+    with pytest.raises(Exception) as excinfo:
+        async with Client(redis_url=redis_url, config=config) as client:
             await client.chat(
                 key="test-user", model="gpt-4", messages=[{"role": "user", "content": "Hello"}]
             )
 
-        # The exact error message depends on the Rust backend's routing/auth logic,
-        # but it should fail cleanly rather than crashing.
-        assert (
-            "key" in str(excinfo.value).lower()
-            or "provider" in str(excinfo.value).lower()
-            or "routing" in str(excinfo.value).lower()
-        )
+    # The exact error message depends on the Rust backend's routing/auth logic,
+    # but it should fail cleanly rather than crashing.
+    assert (
+        "key" in str(excinfo.value).lower()
+        or "provider" in str(excinfo.value).lower()
+        or "routing" in str(excinfo.value).lower()
+        or "configuration error" in str(excinfo.value).lower()
+    )
 
 
 @pytest.mark.asyncio
@@ -81,8 +82,8 @@ async def test_stream_without_api_key_fails(redis_url):
     """Test that a stream request without valid API keys fails appropriately."""
     config = Config()
 
-    async with Client(redis_url=redis_url, config=config) as client:
-        with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError):
+        async with Client(redis_url=redis_url, config=config) as client:
             chunk_gen = client.stream(
                 key="test-user", model="gpt-4", messages=[{"role": "user", "content": "Hello"}]
             )

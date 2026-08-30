@@ -7,13 +7,13 @@ use thiserror::Error;
 /// The main error type for HyperInfer
 #[derive(Error, Debug)]
 pub enum HyperInferError {
-    #[error("Configuration error: {0}")]
+    #[error("Configuration error")]
     Config(#[from] std::io::Error),
 
     #[error("Rate limiting error: {0}")]
     RateLimit(String),
 
-    #[error("HTTP request failed: {0}")]
+    #[error("HTTP request failed")]
     Http(#[from] reqwest::Error),
 
     #[error("API error ({status}): {message}")]
@@ -28,19 +28,19 @@ pub enum HyperInferError {
     #[error("Redis error")]
     Redis(#[from] redis::RedisError),
 
-    #[error("Streaming not supported by provider: {0}")]
+    #[error("Streaming not supported by provider")]
     UnsupportedStreaming(String),
 }
 
 #[derive(Debug, Error)]
 pub enum DbError {
-    #[error("Database error: {0}")]
+    #[error("Database error")]
     Sqlx(#[from] sqlx::Error),
     #[error("Invalid UUID")]
     InvalidUuid,
     #[error("Not found")]
     NotFound,
-    #[error("Unique constraint violation: {0}")]
+    #[error("Unique constraint violation")]
     UniqueViolation(String),
     #[error("Validation error: {0}")]
     ValidationError(String),
@@ -48,10 +48,10 @@ pub enum DbError {
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
-    #[error("Redis error: {0}")]
+    #[error("Redis error")]
     Redis(#[from] redis::RedisError),
-    #[error("Serialization error: {0}")]
+    #[error("Serialization error")]
     Serialization(#[from] serde_json::Error),
-    #[error("Configuration error: {0}")]
+    #[error("Configuration error")]
     Other(String),
 }
