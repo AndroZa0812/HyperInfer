@@ -6,6 +6,24 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 
+/// A tool (function) definition exposed to an LLM.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolDefinition {
+    pub name: String,
+    pub description: String,
+    /// JSON Schema object describing the tool's input parameters.
+    pub parameters: serde_json::Value,
+}
+
+/// A tool (function) invocation requested by an LLM.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    /// JSON-serialized arguments object (e.g. `{"path": "Cargo.toml"}`).
+    pub arguments: String,
+}
+
 /// A chat request to an LLM provider
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ChatRequest {
@@ -21,6 +39,9 @@ pub struct ChatRequest {
     /// Stop sequences: generation halts when any of these strings is produced.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
+    /// Tools available for the model to call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<ToolDefinition>>,
 }
 
 /// A single streamed token delta from a provider SSE event.
@@ -40,6 +61,9 @@ pub struct ChatChunk {
     /// Token usage — only populated on the final chunk (OpenAI `usage` field
     /// with `stream_options: {include_usage: true}`, or Anthropic `message_delta`).
     pub usage: Option<Usage>,
+    /// Tool calls emitted during streaming (if any).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 impl ChatRequest {
@@ -64,7 +88,77 @@ impl ChatRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ChatMessage {
     pub role: MessageRole,
+    #[serde(default)]
     pub content: String,
+    /// Tool calls requested by an Assistant message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    /// ID of the `ToolCall` that a `MessageRole::Tool` message is responding to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+    /// Optional tool name for `MessageRole::Tool` messages (used by Gemini `functionResponse` and OpenAI).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+impl ChatMessage {
+    pub fn system(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::System,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::User,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self {
+            role: MessageRole::Assistant,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    pub fn assistant_with_tools(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> Self {
+        Self {
+            role: MessageRole::Assistant,
+            content: content.into(),
+            tool_calls: if tool_calls.is_empty() {
+                None
+            } else {
+                Some(tool_calls)
+            },
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    pub fn tool_result(
+        tool_call_id: impl Into<String>,
+        name: impl Into<String>,
+        content: impl Into<String>,
+    ) -> Self {
+        Self {
+            role: MessageRole::Tool,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.into()),
+            name: Some(name.into()),
+        }
+    }
 }
 
 /// The role of a message in a chat
@@ -74,6 +168,7 @@ pub enum MessageRole {
     System,
     User,
     Assistant,
+    Tool,
 }
 
 /// A token bucket for rate limiting
@@ -119,6 +214,8 @@ pub struct Quota {
 pub enum Provider {
     OpenAI,
     Anthropic,
+    Gemini,
+    Antigravity,
     #[serde(other)]
     Other,
 }
@@ -128,6 +225,8 @@ impl std::fmt::Display for Provider {
         match self {
             Provider::OpenAI => write!(f, "openai"),
             Provider::Anthropic => write!(f, "anthropic"),
+            Provider::Gemini => write!(f, "gemini"),
+            Provider::Antigravity => write!(f, "antigravity"),
             Provider::Other => write!(f, "other"),
         }
     }
@@ -277,14 +376,12 @@ mod tests {
     fn test_chat_request_validate_empty_model() {
         let request = ChatRequest {
             model: "".to_string(),
-            messages: vec![ChatMessage {
-                role: MessageRole::User,
-                content: "test".to_string(),
-            }],
+            messages: vec![ChatMessage::user("test")],
             temperature: None,
             max_tokens: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         assert!(request.validate().is_err());
@@ -299,6 +396,7 @@ mod tests {
             max_tokens: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         assert!(request.validate().is_err());
@@ -308,14 +406,12 @@ mod tests {
     fn test_chat_request_validate_success() {
         let request = ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![ChatMessage {
-                role: MessageRole::User,
-                content: "Hello".to_string(),
-            }],
+            messages: vec![ChatMessage::user("Hello")],
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: None,
             stop: None,
+            tools: None,
         };
 
         assert!(request.validate().is_ok());
@@ -325,6 +421,8 @@ mod tests {
     fn test_provider_display() {
         assert_eq!(Provider::OpenAI.to_string(), "openai");
         assert_eq!(Provider::Anthropic.to_string(), "anthropic");
+        assert_eq!(Provider::Gemini.to_string(), "gemini");
+        assert_eq!(Provider::Antigravity.to_string(), "antigravity");
         assert_eq!(Provider::Other.to_string(), "other");
     }
 
@@ -341,19 +439,38 @@ mod tests {
         let role = MessageRole::System;
         let json = serde_json::to_string(&role).unwrap();
         assert_eq!(json, "\"system\"");
+
+        let role = MessageRole::Tool;
+        let json = serde_json::to_string(&role).unwrap();
+        assert_eq!(json, "\"tool\"");
     }
 
     #[test]
     fn test_chat_message_serialization() {
-        let message = ChatMessage {
-            role: MessageRole::User,
-            content: "Hello".to_string(),
-        };
+        let message = ChatMessage::user("Hello");
 
         let json = serde_json::to_string(&message).unwrap();
         let deserialized: ChatMessage = serde_json::from_str(&json).unwrap();
 
         assert_eq!(message, deserialized);
+    }
+
+    #[test]
+    fn test_tool_call_and_tool_result_serialization() {
+        let tc = ToolCall {
+            id: "call_1".to_string(),
+            name: "read_file".to_string(),
+            arguments: r#"{"path":"Cargo.toml"}"#.to_string(),
+        };
+        let assistant_msg = ChatMessage::assistant_with_tools("", vec![tc.clone()]);
+        let json = serde_json::to_string(&assistant_msg).unwrap();
+        let roundtrip: ChatMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(roundtrip.tool_calls, Some(vec![tc]));
+
+        let tool_msg = ChatMessage::tool_result("call_1", "read_file", "[package]\nname = \"x\"");
+        assert_eq!(tool_msg.role, MessageRole::Tool);
+        assert_eq!(tool_msg.tool_call_id.as_deref(), Some("call_1"));
+        assert_eq!(tool_msg.name.as_deref(), Some("read_file"));
     }
 
     #[test]
@@ -390,6 +507,14 @@ mod tests {
         let json = "\"anthropic\"";
         let provider: Provider = serde_json::from_str(json).unwrap();
         assert_eq!(provider, Provider::Anthropic);
+
+        let json = "\"gemini\"";
+        let provider: Provider = serde_json::from_str(json).unwrap();
+        assert_eq!(provider, Provider::Gemini);
+
+        let json = "\"antigravity\"";
+        let provider: Provider = serde_json::from_str(json).unwrap();
+        assert_eq!(provider, Provider::Antigravity);
 
         let json = "\"unknown\"";
         let provider: Provider = serde_json::from_str(json).unwrap();
@@ -433,10 +558,7 @@ mod tests {
     fn test_choice_structure() {
         let choice = Choice {
             index: 0,
-            message: ChatMessage {
-                role: MessageRole::Assistant,
-                content: "Response".to_string(),
-            },
+            message: ChatMessage::assistant("Response"),
             finish_reason: Some("stop".to_string()),
         };
 

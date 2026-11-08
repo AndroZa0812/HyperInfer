@@ -12,9 +12,10 @@ keywords = ["llm", "gateway", "ai", "openai", "anthropic"]
 categories = ["api-bindings", "web-programming"]
 
 [features]
-default = ["openai", "anthropic"]
+default = ["openai", "anthropic", "gemini"]
 openai = []
 anthropic = []
+gemini = []
 azure = []
 
 [dependencies]

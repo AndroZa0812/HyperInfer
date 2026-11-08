@@ -124,6 +124,9 @@ impl HttpCaller {
                             }
                         },
                         content: c.message.content,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
                     },
                     finish_reason: c.finish_reason,
                 })
@@ -242,6 +245,9 @@ impl HttpCaller {
                 message: ChatMessage {
                     role: MessageRole::Assistant,
                     content,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
                 },
                 finish_reason: Some("stop".to_string()),
             }],
@@ -388,6 +394,7 @@ impl HttpCaller {
                                 delta,
                                 finish_reason,
                                 usage,
+                                tool_calls: None,
                             };
                         }
                         Err(parse_err) => {
@@ -584,6 +591,7 @@ impl HttpCaller {
                                             delta: delta.text,
                                             finish_reason: None,
                                             usage: None,
+                                            tool_calls: None,
                                         };
                                     }
                                 }
@@ -604,6 +612,7 @@ impl HttpCaller {
                                     delta: String::new(),
                                     finish_reason,
                                     usage,
+                                    tool_calls: None,
                                 };
                             }
                             "message_stop" => return,
@@ -742,14 +751,12 @@ mod tests {
     async fn test_call_openai_request_structure() {
         let request = ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![ChatMessage {
-                role: MessageRole::User,
-                content: "Hello".to_string(),
-            }],
+            messages: vec![ChatMessage::user("Hello")],
             temperature: Some(0.7),
             max_tokens: Some(100),
             stream: None,
             stop: None,
+            tools: None,
         };
 
         // We can't actually call OpenAI without a real API key and network,
@@ -771,19 +778,14 @@ mod tests {
         let request = ChatRequest {
             model: "claude-3".to_string(),
             messages: vec![
-                ChatMessage {
-                    role: MessageRole::System,
-                    content: "You are helpful".to_string(),
-                },
-                ChatMessage {
-                    role: MessageRole::User,
-                    content: "Hello".to_string(),
-                },
+                ChatMessage::system("You are helpful"),
+                ChatMessage::user("Hello"),
             ],
             temperature: Some(0.5),
             max_tokens: Some(200),
             stream: None,
             stop: None,
+            tools: None,
         };
 
         // Extract system message

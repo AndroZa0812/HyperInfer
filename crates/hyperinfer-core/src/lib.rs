@@ -19,6 +19,6 @@ pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, UsageLog, User};
 pub use types::{
     ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, CreateDeploymentRequest,
-    Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, UpdateRoutingConfigRequest,
-    Usage, UsageRecord,
+    Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, ToolCall, ToolDefinition,
+    UpdateRoutingConfigRequest, Usage, UsageRecord,
 };

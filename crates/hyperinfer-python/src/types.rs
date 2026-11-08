@@ -22,6 +22,7 @@ pub fn message_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ChatMessage> {
         "system" => MessageRole::System,
         "user" => MessageRole::User,
         "assistant" => MessageRole::Assistant,
+        "tool" => MessageRole::Tool,
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "invalid role: {}",
@@ -30,7 +31,13 @@ pub fn message_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ChatMessage> {
         }
     };
 
-    Ok(ChatMessage { role, content })
+    Ok(ChatMessage {
+        role,
+        content,
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    })
 }
 
 pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest> {
@@ -72,6 +79,7 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         max_tokens,
         stream: None,
         stop,
+        tools: None,
     })
 }
 
@@ -80,6 +88,7 @@ fn message_role_to_py(py: Python<'_>, role: &MessageRole) -> PyResult<Py<PyAny>>
         MessageRole::System => Ok("system".into_py_any(py)?),
         MessageRole::User => Ok("user".into_py_any(py)?),
         MessageRole::Assistant => Ok("assistant".into_py_any(py)?),
+        MessageRole::Tool => Ok("tool".into_py_any(py)?),
     }
 }
 

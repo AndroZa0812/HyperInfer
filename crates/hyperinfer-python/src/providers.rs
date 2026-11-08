@@ -37,6 +37,7 @@ impl PythonProvider {
                 hyperinfer_core::MessageRole::System => "system",
                 hyperinfer_core::MessageRole::User => "user",
                 hyperinfer_core::MessageRole::Assistant => "assistant",
+                hyperinfer_core::MessageRole::Tool => "tool",
             };
             msg_dict.set_item("role", role_str)?;
             msg_dict.set_item("content", &msg.content)?;
@@ -122,7 +123,13 @@ impl PythonProvider {
 
             choices.push(hyperinfer_core::Choice {
                 index: idx as u32,
-                message: hyperinfer_core::ChatMessage { role, content },
+                message: hyperinfer_core::ChatMessage {
+                    role,
+                    content,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
                 finish_reason,
             });
         }

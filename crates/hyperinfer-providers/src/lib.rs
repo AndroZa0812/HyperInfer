@@ -5,6 +5,8 @@ pub mod registry;
 
 #[cfg(feature = "anthropic")]
 pub mod anthropic;
+#[cfg(feature = "gemini")]
+pub mod gemini;
 #[cfg(feature = "openai")]
 pub mod openai;
 
@@ -58,6 +60,20 @@ pub fn init_default_registry(registry: &ProviderRegistry) {
     #[cfg(feature = "anthropic")]
     {
         if let Ok(provider) = anthropic::AnthropicProvider::new() {
+            if !registry.contains(provider.name()) {
+                registry.register(provider);
+            }
+        }
+    }
+
+    #[cfg(feature = "gemini")]
+    {
+        if let Ok(provider) = gemini::GeminiProvider::new() {
+            if !registry.contains(provider.name()) {
+                registry.register(provider);
+            }
+        }
+        if let Ok(provider) = gemini::GeminiProvider::new_antigravity() {
             if !registry.contains(provider.name()) {
                 registry.register(provider);
             }

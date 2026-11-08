@@ -208,14 +208,12 @@ mod tests {
 
         let request = hyperinfer_core::ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![hyperinfer_core::types::ChatMessage {
-                role: hyperinfer_core::types::MessageRole::User,
-                content: "hello".to_string(),
-            }],
+            messages: vec![hyperinfer_core::types::ChatMessage::user("hello")],
             max_tokens: Some(10),
             temperature: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
@@ -233,14 +231,12 @@ mod tests {
 
         let request = hyperinfer_core::ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![hyperinfer_core::types::ChatMessage {
-                role: hyperinfer_core::types::MessageRole::User,
-                content: "hello".to_string(),
-            }],
+            messages: vec![hyperinfer_core::types::ChatMessage::user("hello")],
             max_tokens: Some(10),
             temperature: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
@@ -260,14 +256,12 @@ mod tests {
 
         let request = hyperinfer_core::ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![hyperinfer_core::types::ChatMessage {
-                role: hyperinfer_core::types::MessageRole::User,
-                content: "hello".to_string(),
-            }],
+            messages: vec![hyperinfer_core::types::ChatMessage::user("hello")],
             max_tokens: Some(10),
             temperature: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
@@ -304,14 +298,12 @@ mod tests {
 
         let request = hyperinfer_core::ChatRequest {
             model: "gpt-4".to_string(),
-            messages: vec![hyperinfer_core::types::ChatMessage {
-                role: hyperinfer_core::types::MessageRole::User,
-                content: "hello".to_string(),
-            }],
+            messages: vec![hyperinfer_core::types::ChatMessage::user("hello")],
             max_tokens: Some(10),
             temperature: None,
             stream: None,
             stop: None,
+            tools: None,
         };
 
         maybe_mirror(handle, http, router, config, "key".to_string(), request);
