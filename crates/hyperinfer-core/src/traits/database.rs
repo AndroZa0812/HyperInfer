@@ -8,6 +8,7 @@ use crate::types::{
 };
 
 #[async_trait]
+#[allow(clippy::double_must_use)]
 pub trait Database: Clone + Send + Sync + 'static {
     async fn get_team(&self, id: &str) -> Result<Option<Team>, DbError>;
     async fn create_team(&self, name: &str, budget_cents: i64) -> Result<Team, DbError>;

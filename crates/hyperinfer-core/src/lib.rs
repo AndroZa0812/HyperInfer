@@ -3,6 +3,8 @@
 //! This crate contains shared data structures, traits, and error definitions
 //! used across the entire HyperInfer monorepo.
 
+#![allow(clippy::double_must_use)]
+
 pub mod error;
 pub mod rate_limiting;
 pub mod redis;
