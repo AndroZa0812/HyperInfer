@@ -69,7 +69,7 @@ impl Database for SqlxDb {
             Ok(row) => row,
             Err(e) => {
                 if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
-                    return Err(DbError::UniqueViolation("Team name already exists".to_string()));
+                    return Err(DbError::UniqueViolation("Resource already exists".to_string()));
                 }
                 return Err(DbError::Sqlx(e));
             }
@@ -117,7 +117,14 @@ impl Database for SqlxDb {
         .bind(role)
         .bind(password_hash)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                DbError::UniqueViolation("Resource already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(User::from(result))
     }
@@ -162,7 +169,14 @@ impl Database for SqlxDb {
         .bind(team_uuid)
         .bind(name.as_deref())
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                DbError::UniqueViolation("Resource already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(ApiKey::from(result))
     }
@@ -207,7 +221,14 @@ impl Database for SqlxDb {
         .bind(target_model)
         .bind(provider)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                DbError::UniqueViolation("Resource already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(ModelAlias::from(result))
     }
@@ -238,7 +259,14 @@ impl Database for SqlxDb {
         .bind(rpm_limit)
         .bind(tpm_limit)
         .fetch_one(&self.pool)
-        .await?;
+        .await
+        .map_err(|e| {
+            if e.as_database_error().map(|db| db.is_unique_violation()).unwrap_or(false) {
+                DbError::UniqueViolation("Resource already exists".to_string())
+            } else {
+                DbError::Sqlx(e)
+            }
+        })?;
 
         Ok(Quota::from(result))
     }
@@ -353,7 +381,7 @@ impl Database for SqlxDb {
                 .map(|db| db.is_unique_violation())
                 .unwrap_or(false)
             {
-                DbError::UniqueViolation("Deployment with this name already exists".to_string())
+                DbError::UniqueViolation("Resource already exists".to_string())
             } else {
                 DbError::Sqlx(e)
             }
@@ -393,7 +421,7 @@ impl Database for SqlxDb {
                 .map(|db| db.is_unique_violation())
                 .unwrap_or(false)
             {
-                DbError::UniqueViolation("Deployment with this name already exists".to_string())
+                DbError::UniqueViolation("Resource already exists".to_string())
             } else {
                 DbError::Sqlx(e)
             }

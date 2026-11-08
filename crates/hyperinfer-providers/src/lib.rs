@@ -1,3 +1,5 @@
+#![allow(clippy::double_must_use)]
+
 pub mod provider_trait;
 pub mod registry;
 

@@ -12,15 +12,15 @@ use hyperinfer_router::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(reqwest::Client::new);
-
-const BLOCKED_IP_PREFIXES: &[&str] = &[
-    "169.254.", "10.", "172.16.", "172.17.", "172.18.", "172.19.", "172.20.", "172.21.", "172.22.",
-    "172.23.", "172.24.", "172.25.", "172.26.", "172.27.", "172.28.", "172.29.", "172.30.",
-    "172.31.", "192.168.", "127.", "0.",
-];
+static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
+    reqwest::Client::builder()
+        .dns_resolver(Arc::new(crate::safe_resolver::SafeResolver))
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("Failed to build secure reqwest HTTP client")
+});
 
 pub struct ProxyAuth {
     pub team_id: String,
@@ -101,11 +101,8 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let host = parsed.host_str().ok_or(400u16)?;
 
     if let Ok(ip) = host.parse::<IpAddr>() {
-        let ip_str = ip.to_string();
-        for prefix in BLOCKED_IP_PREFIXES {
-            if ip_str.starts_with(prefix) {
-                return Err(400);
-            }
+        if crate::safe_resolver::is_blocked(ip) {
+            return Err(400);
         }
     }
 

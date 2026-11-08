@@ -1,3 +1,5 @@
+#![allow(clippy::double_must_use)]
+
 pub mod deployment;
 pub mod engine;
 pub mod error;

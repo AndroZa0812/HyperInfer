@@ -1,8 +1,11 @@
+#![allow(clippy::double_must_use)]
+
 pub mod auth;
 pub mod db;
 pub mod frontend;
 pub mod mcp;
 pub mod proxy;
+pub mod safe_resolver;
 pub mod seeding;
 
 pub use db::{RedisConfigStore, SqlxDb};
