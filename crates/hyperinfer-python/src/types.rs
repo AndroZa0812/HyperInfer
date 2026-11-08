@@ -34,7 +34,7 @@ pub fn message_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ChatMessage> {
 }
 
 pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest> {
-    let dict = obj.downcast_bound::<PyDict>(_py)?;
+    let dict = obj.cast_bound::<PyDict>(_py)?;
 
     let model: String = dict
         .get_item("model")?
@@ -44,11 +44,11 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
     let messages_list: Bound<'_, pyo3::types::PyList> = dict
         .get_item("messages")?
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("request missing 'messages' field"))?
-        .downcast_into()?;
+        .cast_into()?;
 
     let mut messages = Vec::new();
     for item in messages_list.iter() {
-        let msg_dict: Bound<'_, PyDict> = item.downcast_into()?;
+        let msg_dict: Bound<'_, PyDict> = item.cast_into()?;
         messages.push(message_from_py(&msg_dict)?);
     }
 
