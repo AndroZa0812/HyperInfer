@@ -64,17 +64,17 @@ fn parse_quotas(dict: &Bound<'_, PyDict>) -> PyResult<HashMap<String, Quota>> {
             let q_inner = v.cast::<PyDict>()?;
             let max_requests_per_minute: Option<u64> = q_inner
                 .get_item("max_requests_per_minute")?
-                .and_then(|v| if v.is_none() { None } else { Some(v) })
+                .filter(|v| !v.is_none())
                 .map(|v| v.extract())
                 .transpose()?;
             let max_tokens_per_minute: Option<u64> = q_inner
                 .get_item("max_tokens_per_minute")?
-                .and_then(|v| if v.is_none() { None } else { Some(v) })
+                .filter(|v| !v.is_none())
                 .map(|v| v.extract())
                 .transpose()?;
             let budget_cents: Option<u64> = q_inner
                 .get_item("budget_cents")?
-                .and_then(|v| if v.is_none() { None } else { Some(v) })
+                .filter(|v| !v.is_none())
                 .map(|v| v.extract())
                 .transpose()?;
             quotas.insert(
