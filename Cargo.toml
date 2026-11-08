@@ -18,6 +18,9 @@ default-members = [
 ]
 resolver = "3"
 
+[workspace.lints.clippy]
+double_must_use = "allow"
+
 [workspace.dependencies]
 hyperinfer-core = { path = "crates/hyperinfer-core", version = "0.1.1" }
 hyperinfer-providers = { path = "crates/hyperinfer-providers", version = "0.1.0" }

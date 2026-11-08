@@ -5,6 +5,7 @@ use crate::redis::PolicyUpdate;
 use crate::types::Config;
 
 #[async_trait]
+#[allow(clippy::double_must_use)]
 pub trait ConfigStore: Clone + Send + Sync + 'static {
     async fn fetch_config(&self) -> Result<Config, ConfigError>;
     async fn publish_config_update(&self, config: &Config) -> Result<(), ConfigError>;

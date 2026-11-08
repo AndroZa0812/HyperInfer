@@ -1,5 +1,7 @@
 //! HyperInfer Client Library - Data Plane
 
+#![allow(clippy::double_must_use)]
+
 pub mod cache;
 pub mod http_client;
 pub mod mirroring;
