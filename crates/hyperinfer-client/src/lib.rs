@@ -195,6 +195,50 @@ impl HyperInferClient {
         })
     }
 
+    /// Create a standalone in-memory `HyperInferClient` that requires no Redis or external server.
+    pub async fn new_local(config: Config) -> Result<Self, HyperInferError> {
+        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
+        let router = Arc::new(
+            Router::new(config.routing_rules.clone())
+                .with_aliases(config.model_aliases.clone())
+                .with_default_provider(config.default_provider.clone()),
+        );
+        let rate_limiter = RateLimiter::new(None)
+            .await
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+        let telemetry = Telemetry::disabled();
+        let cache = ExactMatchCache::disabled("local");
+        let mirror: MirrorHandle = Arc::new(RwLock::new(None));
+        let config = Arc::new(RwLock::new(config));
+
+        let provider_registry_inner = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&provider_registry_inner);
+        let provider_registry = Arc::new(RwLock::new(provider_registry_inner));
+
+        Ok(Self {
+            config,
+            http_caller,
+            router,
+            router_engine: Arc::new(RouterEngine::new().await),
+            rate_limiter,
+            telemetry,
+            cache,
+            mirror,
+            provider_registry,
+        })
+    }
+
+    /// Register or replace a custom `LlmProvider` in this client's registry
+    /// (for example, a local Ollama/vLLM endpoint or mock provider).
+    pub async fn register_provider<P: hyperinfer_providers::LlmProvider + 'static>(
+        &self,
+        provider: P,
+    ) {
+        let guard = self.provider_registry.read().await;
+        let _ = guard.unregister(provider.name());
+        guard.register(provider);
+    }
+
     /// Configure traffic mirroring.  Pass `None` to disable.
     pub async fn set_mirror(&self, cfg: Option<MirrorConfig>) {
         let mut guard = self.mirror.write().await;

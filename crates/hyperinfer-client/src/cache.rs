@@ -31,6 +31,15 @@ pub struct ExactMatchCache {
 }
 
 impl ExactMatchCache {
+    /// Construct a disabled cache that never connects to Redis.
+    pub fn disabled(namespace: &str) -> Self {
+        Self {
+            conn: None,
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: namespace.to_string(),
+        }
+    }
+
     /// Connect to Redis at `redis_url`.  On failure the cache is disabled and
     /// all operations become no-ops.
     pub async fn new(redis_url: &str, namespace: &str) -> Self {
@@ -156,21 +165,19 @@ impl ExactMatchCache {
 mod tests {
     use super::*;
     use hyperinfer_core::{
-        types::{ChatMessage, Choice, MessageRole, Usage},
+        types::{ChatMessage, Choice, Usage},
         ChatRequest, ChatResponse,
     };
 
     fn sample_request(model: &str) -> ChatRequest {
         ChatRequest {
             model: model.to_string(),
-            messages: vec![ChatMessage {
-                role: MessageRole::User,
-                content: "hello".to_string(),
-            }],
+            messages: vec![ChatMessage::user("hello")],
             max_tokens: Some(100),
             temperature: None,
             stream: None,
             stop: None,
+            tools: None,
         }
     }
 
@@ -179,10 +186,7 @@ mod tests {
             id: "resp-test".to_string(),
             model: model_unused(),
             choices: vec![Choice {
-                message: ChatMessage {
-                    role: MessageRole::Assistant,
-                    content: "Hi there!".to_string(),
-                },
+                message: ChatMessage::assistant("Hi there!"),
                 finish_reason: Some("stop".to_string()),
                 index: 0,
             }],

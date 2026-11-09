@@ -103,6 +103,8 @@ impl RouterEngine {
         let provider = match d.provider.as_str() {
             "openai" => Provider::OpenAI,
             "anthropic" => Provider::Anthropic,
+            "gemini" => Provider::Gemini,
+            "antigravity" => Provider::Antigravity,
             _ => Provider::Other,
         };
         let mut router_deployment = RouterDeployment::new(

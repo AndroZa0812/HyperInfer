@@ -124,6 +124,8 @@ fn config_from_py(py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<Config> {
                 match s.to_lowercase().as_str() {
                     "openai" => Some(hyperinfer_core::Provider::OpenAI),
                     "anthropic" => Some(hyperinfer_core::Provider::Anthropic),
+                    "gemini" => Some(hyperinfer_core::Provider::Gemini),
+                    "antigravity" => Some(hyperinfer_core::Provider::Antigravity),
                     _ => {
                         return Err(pyo3::exceptions::PyValueError::new_err(format!(
                             "Unknown provider: '{}'",

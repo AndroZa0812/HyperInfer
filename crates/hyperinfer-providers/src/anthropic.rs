@@ -2,17 +2,18 @@ use super::provider_trait::LlmProvider;
 use async_trait::async_trait;
 use futures::{Stream, StreamExt};
 use hyperinfer_core::{
-    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, HyperInferError, MessageRole, Usage,
+    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, HyperInferError, MessageRole,
+    ToolCall, Usage,
 };
 use reqwest::Client;
 use std::pin::Pin;
 
 pub struct AnthropicProvider {
     http_client: Client,
-    base_url: &'static str,
+    base_url: String,
 }
 
-fn build_anthropic_request_body(
+pub(crate) fn build_anthropic_request_body(
     request: &ChatRequest,
     stream: bool,
 ) -> (
@@ -33,21 +34,74 @@ fn build_anthropic_request_body(
         Some(system_messages.join("\n"))
     };
 
-    let messages: Vec<_> = request
+    let mut messages: Vec<serde_json::Value> = Vec::new();
+    let non_system: Vec<&ChatMessage> = request
         .messages
         .iter()
         .filter(|m| m.role != MessageRole::System)
-        .map(|m| {
-            serde_json::json!({
-                "role": match m.role {
-                    MessageRole::User => "user",
-                    MessageRole::Assistant => "assistant",
-                    _ => "user",
-                },
-                "content": m.content
-            })
-        })
         .collect();
+
+    let mut i = 0;
+    while i < non_system.len() {
+        let m = non_system[i];
+        match m.role {
+            MessageRole::Tool => {
+                // Coalesce consecutive tool results into a single `user` message with `tool_result` blocks.
+                let mut blocks = Vec::new();
+                while i < non_system.len() && non_system[i].role == MessageRole::Tool {
+                    let tm = non_system[i];
+                    blocks.push(serde_json::json!({
+                        "type": "tool_result",
+                        "tool_use_id": tm.tool_call_id.clone().unwrap_or_default(),
+                        "content": tm.content,
+                    }));
+                    i += 1;
+                }
+                messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": blocks,
+                }));
+            }
+            MessageRole::Assistant => {
+                if let Some(ref calls) = m.tool_calls {
+                    let mut blocks = Vec::new();
+                    if !m.content.is_empty() {
+                        blocks.push(serde_json::json!({
+                            "type": "text",
+                            "text": m.content,
+                        }));
+                    }
+                    for tc in calls {
+                        let input: serde_json::Value = serde_json::from_str(&tc.arguments)
+                            .unwrap_or_else(|_| serde_json::json!({}));
+                        blocks.push(serde_json::json!({
+                            "type": "tool_use",
+                            "id": tc.id,
+                            "name": tc.name,
+                            "input": input,
+                        }));
+                    }
+                    messages.push(serde_json::json!({
+                        "role": "assistant",
+                        "content": blocks,
+                    }));
+                } else {
+                    messages.push(serde_json::json!({
+                        "role": "assistant",
+                        "content": m.content,
+                    }));
+                }
+                i += 1;
+            }
+            _ => {
+                messages.push(serde_json::json!({
+                    "role": "user",
+                    "content": m.content,
+                }));
+                i += 1;
+            }
+        }
+    }
 
     let mut body = serde_json::Map::new();
     body.insert("model".to_string(), serde_json::json!(request.model));
@@ -69,17 +123,36 @@ fn build_anthropic_request_body(
     if let Some(stop) = &request.stop {
         body.insert("stop_sequences".to_string(), serde_json::json!(stop));
     }
+    if let Some(tools) = &request.tools {
+        if !tools.is_empty() {
+            let anthropic_tools: Vec<serde_json::Value> = tools
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "name": t.name,
+                        "description": t.description,
+                        "input_schema": t.parameters,
+                    })
+                })
+                .collect();
+            body.insert("tools".to_string(), serde_json::json!(anthropic_tools));
+        }
+    }
 
     (system, messages, body)
 }
 
 impl AnthropicProvider {
     pub fn new() -> Result<Self, reqwest::Error> {
+        Self::with_base_url("https://api.anthropic.com")
+    }
+
+    pub fn with_base_url(base_url: impl Into<String>) -> Result<Self, reqwest::Error> {
         Ok(Self {
             http_client: Client::builder()
                 .timeout(std::time::Duration::from_secs(60))
                 .build()?,
-            base_url: "https://api.anthropic.com",
+            base_url: base_url.into().trim_end_matches('/').to_string(),
         })
     }
 }
@@ -89,19 +162,19 @@ impl Clone for AnthropicProvider {
     fn clone(&self) -> Self {
         Self {
             http_client: self.http_client.clone(),
-            base_url: self.base_url,
+            base_url: self.base_url.clone(),
         }
     }
 }
 
 #[async_trait]
 impl LlmProvider for AnthropicProvider {
-    fn name(&self) -> &'static str {
+    fn name(&self) -> &str {
         "anthropic"
     }
 
-    fn base_url(&self) -> &'static str {
-        self.base_url
+    fn base_url(&self) -> &str {
+        &self.base_url
     }
 
     async fn chat(
@@ -143,7 +216,12 @@ impl LlmProvider for AnthropicProvider {
 
         #[derive(serde::Deserialize)]
         struct ContentBlock {
+            #[serde(default, rename = "type")]
+            block_type: String,
             text: Option<String>,
+            id: Option<String>,
+            name: Option<String>,
+            input: Option<serde_json::Value>,
         }
 
         #[derive(serde::Deserialize)]
@@ -154,12 +232,27 @@ impl LlmProvider for AnthropicProvider {
 
         let data: AnthropicResponse = response.json().await?;
 
-        let content = data
-            .content
-            .into_iter()
-            .filter_map(|b| b.text)
-            .collect::<Vec<_>>()
-            .join("\n");
+        let mut text_parts = Vec::new();
+        let mut tool_calls = Vec::new();
+        for b in data.content {
+            if b.block_type == "tool_use" {
+                if let (Some(id), Some(name)) = (b.id, b.name) {
+                    let arguments = b
+                        .input
+                        .map(|v| v.to_string())
+                        .unwrap_or_else(|| "{}".to_string());
+                    tool_calls.push(ToolCall {
+                        id,
+                        name,
+                        arguments,
+                    });
+                }
+            } else if let Some(text) = b.text {
+                text_parts.push(text);
+            }
+        }
+
+        let content = text_parts.join("\n");
 
         Ok(ChatResponse {
             id: data.id,
@@ -169,6 +262,13 @@ impl LlmProvider for AnthropicProvider {
                 message: ChatMessage {
                     role: MessageRole::Assistant,
                     content,
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls)
+                    },
+                    tool_call_id: None,
+                    name: None,
                 },
                 finish_reason: data.stop_reason,
             }],
@@ -295,6 +395,7 @@ impl LlmProvider for AnthropicProvider {
                                             delta: delta.text,
                                             finish_reason: None,
                                             usage: None,
+                                            tool_calls: None,
                                         };
                                     }
                                 }
@@ -313,6 +414,7 @@ impl LlmProvider for AnthropicProvider {
                                     delta: String::new(),
                                     finish_reason,
                                     usage,
+                                    tool_calls: None,
                                 };
                             }
                             "message_stop" => return,
@@ -337,6 +439,7 @@ impl LlmProvider for AnthropicProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hyperinfer_core::ToolDefinition;
 
     #[test]
     fn test_anthropic_provider_name() {
@@ -354,5 +457,46 @@ mod tests {
     fn test_anthropic_provider_supports_streaming() {
         let provider = AnthropicProvider::new().unwrap();
         assert!(provider.supports_streaming());
+    }
+
+    #[test]
+    fn test_anthropic_tool_request_translation() {
+        let req = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![
+                ChatMessage::system("You are a coding assistant."),
+                ChatMessage::user("Read Cargo.toml"),
+                ChatMessage::assistant_with_tools(
+                    "Checking file",
+                    vec![ToolCall {
+                        id: "toolu_01".to_string(),
+                        name: "read_file".to_string(),
+                        arguments: r#"{"path":"Cargo.toml"}"#.to_string(),
+                    }],
+                ),
+                ChatMessage::tool_result("toolu_01", "read_file", "[workspace]"),
+            ],
+            tools: Some(vec![ToolDefinition {
+                name: "read_file".to_string(),
+                description: "Read a file".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": { "path": { "type": "string" } }
+                }),
+            }]),
+            ..Default::default()
+        };
+
+        let (_system, messages, body) = build_anthropic_request_body(&req, false);
+        assert_eq!(body["system"], "You are a coding assistant.");
+        assert_eq!(body["tools"][0]["name"], "read_file");
+        assert!(body["tools"][0].get("input_schema").is_some());
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1]["role"], "assistant");
+        assert_eq!(messages[1]["content"][1]["type"], "tool_use");
+        assert_eq!(messages[1]["content"][1]["id"], "toolu_01");
+        assert_eq!(messages[2]["role"], "user");
+        assert_eq!(messages[2]["content"][0]["type"], "tool_result");
+        assert_eq!(messages[2]["content"][0]["tool_use_id"], "toolu_01");
     }
 }

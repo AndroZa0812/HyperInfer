@@ -24,6 +24,13 @@ impl Telemetry {
             hex_hash
         }
     }
+    pub fn disabled() -> Self {
+        Self {
+            manager: None,
+            stream_key: DEFAULT_STREAM_KEY.to_string(),
+        }
+    }
+
     pub async fn new(redis_url: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let manager = match redis::Client::open(redis_url) {
             Ok(client) => match redis::aio::ConnectionManager::new(client).await {

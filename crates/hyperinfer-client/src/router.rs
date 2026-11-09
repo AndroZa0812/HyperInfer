@@ -43,6 +43,8 @@ impl Router {
             let provider = match provider_str.to_lowercase().as_str() {
                 "openai" => Some(Provider::OpenAI),
                 "anthropic" => Some(Provider::Anthropic),
+                "gemini" => Some(Provider::Gemini),
+                "antigravity" => Some(Provider::Antigravity),
                 unknown => return Err(format!("Unknown provider: '{}'", unknown)),
             };
             Ok((model, provider))
@@ -56,6 +58,8 @@ impl Router {
             Some(Provider::OpenAI)
         } else if model.starts_with("claude-") {
             Some(Provider::Anthropic)
+        } else if model.starts_with("gemini-") {
+            Some(Provider::Gemini)
         } else {
             None
         }

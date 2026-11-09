@@ -35,14 +35,12 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
     async fn health_check(&self, api_key: &str) -> Result<(), hyperinfer_core::HyperInferError> {
         let request = ChatRequest {
             model: "health-check-probe".to_string(),
-            messages: vec![hyperinfer_core::ChatMessage {
-                role: hyperinfer_core::MessageRole::User,
-                content: "ping".to_string(),
-            }],
+            messages: vec![hyperinfer_core::ChatMessage::user("ping")],
             temperature: None,
             max_tokens: Some(1),
             stream: None,
             stop: None,
+            tools: None,
         };
         self.chat(&request, api_key).await?;
         Ok(())
