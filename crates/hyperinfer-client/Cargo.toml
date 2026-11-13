@@ -26,7 +26,7 @@ tracing = "0.1"
 tracing-opentelemetry = "0.33"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
 opentelemetry = "0.32"
-opentelemetry-http = "0.32"
+opentelemetry-http = "0.33"
 opentelemetry-otlp = { version = "0.32", features = ["http-proto"] }
 opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
 http = "1"
