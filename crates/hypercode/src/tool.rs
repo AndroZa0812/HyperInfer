@@ -91,26 +91,23 @@ impl ToolContext {
             }
         }
 
-        // If the target or its parent already exists on disk, canonicalize it to
-        // prevent symlink escapes outside `workspace_root`.
-        let effective = if normalized.exists() {
-            std::fs::canonicalize(&normalized)
-                .map_err(|e| format!("Invalid path '{}': {}", raw_path, e))?
-        } else if let Some(parent) = normalized.parent() {
-            if parent.exists() {
-                let canon_parent = std::fs::canonicalize(parent)
-                    .map_err(|e| format!("Invalid parent path for '{}': {}", raw_path, e))?;
-                if let Some(name) = normalized.file_name() {
-                    canon_parent.join(name)
-                } else {
-                    canon_parent
-                }
-            } else {
-                normalized
+        // Walk up ancestors to find the deepest existing path on disk, canonicalize it
+        // to resolve any intermediate symlinks (even when nested subdirectories do not
+        // exist yet), and re-join the remaining non-existent tail components.
+        let mut effective = normalized.clone();
+        for ancestor in normalized.ancestors() {
+            if ancestor.exists() {
+                let canon_ancestor = std::fs::canonicalize(ancestor)
+                    .map_err(|e| format!("Invalid path '{}': {}", raw_path, e))?;
+                effective = match normalized.strip_prefix(ancestor) {
+                    Ok(rel_tail) if !rel_tail.as_os_str().is_empty() => {
+                        canon_ancestor.join(rel_tail)
+                    }
+                    _ => canon_ancestor,
+                };
+                break;
             }
-        } else {
-            normalized
-        };
+        }
 
         if !effective.starts_with(&self.workspace_root) {
             return Err(format!(

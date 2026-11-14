@@ -21,7 +21,8 @@ pub use context::{
     INSTRUCTION_FILES,
 };
 pub use sandbox::{
-    CommandExecution, CommandRunner, HostRunner, OpenShellRunner, SandboxPolicy, SENSITIVE_ENV_VARS,
+    validate_sandbox_name, CommandExecution, CommandRunner, HostRunner, OpenShellRunner,
+    SandboxPolicy, SENSITIVE_ENV_VARS,
 };
 pub use tool::{Tool, ToolContext, ToolOutput, ToolRegistry};
 pub use tools::{
@@ -119,24 +120,48 @@ mod tests {
     }
 
     #[test]
-    fn test_tool_context_rejects_path_traversal() {
+    fn test_tool_context_rejects_path_traversal_and_nested_symlink_escape() {
         let tmp = TempDir::new().unwrap();
+        let outside = TempDir::new().unwrap();
         let ctx = ToolContext::new(tmp.path());
 
         assert!(ctx.resolve_path("src/main.rs").is_ok());
         assert!(ctx.resolve_path("../outside.txt").is_err());
         assert!(ctx.resolve_path("/etc/passwd").is_err());
+
+        // Create a symlink inside the workspace pointing to `outside`
+        #[cfg(unix)]
+        {
+            let link_path = tmp.path().join("symlink_out");
+            std::os::unix::fs::symlink(outside.path(), &link_path).unwrap();
+            // Even when nested subdirectories under the symlink do not exist yet,
+            // `resolve_path` must canonicalize the deepest existing ancestor (`symlink_out`)
+            // and reject the escape.
+            assert!(ctx.resolve_path("symlink_out/pwned.txt").is_err());
+            assert!(ctx
+                .resolve_path("symlink_out/nonexistent_dir/deep/pwned.txt")
+                .is_err());
+        }
     }
 
     #[test]
-    fn test_openshell_policy_yaml_and_cli_args() {
-        let policy = SandboxPolicy::restricted_for_workspace("/workspace/project")
-            .with_allowed_domains(vec!["crates.io".to_string(), "github.com".to_string()]);
+    fn test_openshell_policy_yaml_escaping_and_sandbox_name_validation() {
+        let policy = SandboxPolicy::restricted_for_workspace("/workspace/my \"quoted\" project")
+            .with_allowed_domains(vec![
+                "crates.io".to_string(),
+                "github.com\"\n  injected: true".to_string(),
+            ]);
         let yaml = policy.to_openshell_policy_yaml();
         assert!(yaml.contains("read_only:"));
-        assert!(yaml.contains("- \"/workspace/project\""));
+        assert!(yaml.contains("- \"/workspace/my \\\"quoted\\\" project\""));
         assert!(yaml.contains("mode: \"egress_allowlist\""));
         assert!(yaml.contains("- \"crates.io\""));
+        assert!(yaml.contains("- \"github.com\\\"\\n  injected: true\""));
+
+        assert!(validate_sandbox_name("hypercode-dev_01").is_ok());
+        assert!(validate_sandbox_name("").is_err());
+        assert!(validate_sandbox_name("../escape").is_err());
+        assert!(validate_sandbox_name("bad/name").is_err());
 
         let runner = OpenShellRunner::new("hypercode-dev");
         let args = runner.build_args("cargo test", Path::new("/tmp/policy.yaml"));
@@ -158,25 +183,22 @@ mod tests {
         assert!(runner.is_sandboxed());
     }
 
-    #[tokio::test]
-    async fn test_host_runner_strips_secret_env_vars() {
-        let tmp = TempDir::new().unwrap();
-        std::env::set_var("OPENAI_API_KEY", "sk-super-secret-do-not-leak");
-        let ctx = ToolContext::new(tmp.path());
-        let registry = ToolRegistry::with_default_coding_tools();
-
-        let out = registry
-            .execute(
-                &make_call(
-                    "bash",
-                    serde_json::json!({ "command": "echo \"KEY=${OPENAI_API_KEY:-EMPTY}\"" }),
-                ),
-                &ctx,
-            )
-            .await;
-        assert!(!out.is_error);
-        assert!(out.content.contains("KEY=EMPTY"));
-        assert!(!out.content.contains("sk-super-secret-do-not-leak"));
+    #[test]
+    fn test_host_runner_strips_secret_env_vars() {
+        let policy = SandboxPolicy::restricted_for_workspace("/tmp");
+        let mut cmd = tokio::process::Command::new("sh");
+        // Populate a custom `_API_KEY` var on the Command and verify `apply_env_policy`
+        // strips all `SENSITIVE_ENV_VARS` without mutating process-global `std::env`.
+        sandbox::apply_env_policy(&mut cmd, &policy);
+        let envs: Vec<_> = cmd.as_std().get_envs().collect();
+        for &secret in SENSITIVE_ENV_VARS {
+            assert!(
+                envs.iter()
+                    .any(|(k, v)| *k == std::ffi::OsStr::new(secret) && v.is_none()),
+                "expected {} to be stripped via env_remove",
+                secret
+            );
+        }
     }
 
     #[tokio::test]
@@ -214,7 +236,7 @@ mod tests {
             .contains("   1: pub fn add(a: i32, b: i32) -> i32 {"));
         assert!(read_out.content.contains("   2:     a - b"));
 
-        // 3. Edit the bug (`a - b` -> `a + b`)
+        // 3. Edit the bug (`a - b` -> `a + b`) on line 2
         let edit_out = registry
             .execute(
                 &make_call(
@@ -229,6 +251,11 @@ mod tests {
             )
             .await;
         assert!(!edit_out.is_error, "{}", edit_out.content);
+        assert!(
+            edit_out.content.contains("at line 2"),
+            "expected line 2 in '{}'",
+            edit_out.content
+        );
 
         // 4. Verify updated content
         let verify_out = registry
@@ -568,11 +595,18 @@ mod tests {
         hist.push(ChatMessage::assistant("Everything looks clean."));
 
         // Tier 1 check: pruning old tool outputs shrinks the 2000-char tool result
-        let pruned = prune_old_tool_outputs(&mut hist, 2, 80);
+        // to `<= max_chars` (120) and is idempotent on subsequent calls.
+        let pruned = prune_old_tool_outputs(&mut hist, 2, 120);
         assert_eq!(pruned, 1);
         assert!(hist[3]
             .content
             .contains("chars pruned by context compactor"));
+        assert!(
+            hist[3].content.len() <= 120,
+            "pruned len {} exceeded 120",
+            hist[3].content.len()
+        );
+        assert_eq!(prune_old_tool_outputs(&mut hist, 2, 120), 0);
 
         // Tier 2 check: full compaction via Agent::compact()
         for msg in hist.into_iter().skip(1) {

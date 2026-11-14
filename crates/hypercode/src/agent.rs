@@ -225,8 +225,13 @@ impl Agent {
 
     /// Discover workspace context (`AGENTS.md`, `CLAUDE.md`, `.hypercode.md`, shallow file tree)
     /// from `tool_ctx.workspace_root` and enrich the agent's system prompt.
-    pub fn with_workspace_context(mut self) -> Self {
+    pub fn with_workspace_context(self) -> Self {
         let ws = WorkspaceContext::discover(&self.tool_ctx.workspace_root);
+        self.with_discovered_context(&ws)
+    }
+
+    /// Enrich the agent's system prompt using an already-discovered `WorkspaceContext`.
+    pub fn with_discovered_context(mut self, ws: &WorkspaceContext) -> Self {
         let enriched = ws.build_system_prompt(&self.config.system_prompt);
         self.config.system_prompt = enriched.clone();
         if let Some(first) = self.history.first_mut() {

@@ -65,11 +65,12 @@ fn collect_entries(
         if out.len() >= MAX_ENTRIES {
             break;
         }
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
         let path = entry.path();
         let file_name = entry.file_name();
         let name_str = file_name.to_string_lossy();
 
-        if path.is_dir() {
+        if path.is_dir() && !is_symlink {
             if is_ignored_dir(&name_str) {
                 continue;
             }
@@ -128,8 +129,17 @@ impl Tool for ListFilesTool {
         }
 
         let max_depth = parsed.max_depth.clamp(1, 10);
-        let mut entries = Vec::new();
-        collect_entries(&resolved, ctx, 1, max_depth, &mut entries);
+        let ctx_clone = ctx.clone();
+        let entries = match tokio::task::spawn_blocking(move || {
+            let mut out = Vec::new();
+            collect_entries(&resolved, &ctx_clone, 1, max_depth, &mut out);
+            out
+        })
+        .await
+        {
+            Ok(out) => out,
+            Err(e) => return ToolOutput::error(format!("list_files worker task failed: {}", e)),
+        };
 
         if entries.is_empty() {
             return ToolOutput::success(format!("Directory '{}' is empty.", parsed.path));

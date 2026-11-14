@@ -4,8 +4,34 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+
+static TEMP_POLICY_COUNTER: AtomicU64 = AtomicU64::new(1);
+
+/// Format a string as a safely escaped double-quoted YAML 1.2 scalar.
+fn yaml_quoted(value: &str) -> String {
+    serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
+}
+
+/// Validate that an OpenShell sandbox name contains only safe identifier characters.
+pub fn validate_sandbox_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("OpenShell sandbox_name cannot be empty".to_string());
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "Invalid OpenShell sandbox_name '{}': only ASCII alphanumeric, '-', and '_' are allowed",
+            name
+        ));
+    }
+    Ok(())
+}
 
 /// Environment variable names that commonly hold sensitive credentials and are
 /// stripped from child processes when `strip_env_secrets` is enabled.
@@ -69,7 +95,7 @@ impl SandboxPolicy {
         yaml.push_str("    - \"/\"\n");
         yaml.push_str("  read_write:\n");
         for path in &self.writable_paths {
-            yaml.push_str(&format!("    - \"{}\"\n", path.display()));
+            yaml.push_str(&format!("    - {}\n", yaml_quoted(&path.to_string_lossy())));
         }
         yaml.push_str("network:\n");
         if self.allow_network {
@@ -80,7 +106,7 @@ impl SandboxPolicy {
             yaml.push_str("  mode: \"egress_allowlist\"\n");
             yaml.push_str("  allowed_domains:\n");
             for domain in &self.allowed_domains {
-                yaml.push_str(&format!("    - \"{}\"\n", domain));
+                yaml.push_str(&format!("    - {}\n", yaml_quoted(domain)));
             }
         }
         yaml
@@ -134,6 +160,37 @@ pub(crate) fn apply_env_policy(cmd: &mut Command, policy: &SandboxPolicy) {
     }
 }
 
+/// Spawn `cmd` in its own process group (on Unix) and wait up to `timeout`.
+/// If `timeout` expires, kills the entire process group so grandchild processes do not leak.
+async fn run_command_with_timeout(
+    mut cmd: Command,
+    timeout: Duration,
+    timeout_label: &str,
+    spawn_err_prefix: &str,
+) -> Result<std::process::Output, String> {
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("{}: {}", spawn_err_prefix, e))?;
+    let pid = child.id();
+
+    match tokio::time::timeout(timeout, child.wait_with_output()).await {
+        Ok(res) => res.map_err(|e| format!("{}: {}", spawn_err_prefix, e)),
+        Err(_) => {
+            #[cfg(unix)]
+            if let Some(pgid) = pid {
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("kill -KILL -{} >/dev/null 2>&1 || true", pgid))
+                    .status();
+            }
+            Err(timeout_label.to_string())
+        }
+    }
+}
+
 /// Host command runner (`sh -c <command>`) with environment secret stripping.
 #[derive(Debug, Clone, Default)]
 pub struct HostRunner;
@@ -165,16 +222,13 @@ impl CommandRunner for HostRunner {
 
         apply_env_policy(&mut cmd, policy);
 
-        let output = tokio::time::timeout(timeout, cmd.output())
-            .await
-            .map_err(|_| {
-                format!(
-                    "Command timed out after {}s: `{}`",
-                    timeout.as_secs(),
-                    command
-                )
-            })?
-            .map_err(|e| format!("Failed to spawn command `{}`: {}", command, e))?;
+        let timeout_msg = format!(
+            "Command timed out after {}s: `{}`",
+            timeout.as_secs(),
+            command
+        );
+        let spawn_prefix = format!("Failed to spawn command `{}`", command);
+        let output = run_command_with_timeout(cmd, timeout, &timeout_msg, &spawn_prefix).await?;
 
         Ok(CommandExecution {
             exit_code: output.status.code().unwrap_or(-1),
@@ -249,17 +303,36 @@ impl CommandRunner for OpenShellRunner {
         timeout: Duration,
         policy: &SandboxPolicy,
     ) -> Result<CommandExecution, String> {
-        // Materialize policy YAML if an explicit policy_file was not provided.
-        let policy_path = match &self.policy_file {
-            Some(p) => p.clone(),
+        validate_sandbox_name(&self.sandbox_name)?;
+
+        // Materialize policy YAML using an exclusive `create_new` file if an explicit
+        // `policy_file` was not provided.
+        let (policy_path, cleanup_temp) = match &self.policy_file {
+            Some(p) => (p.clone(), false),
             None => {
-                let generated_path = std::env::temp_dir()
-                    .join(format!("hypercode-openshell-{}.yaml", self.sandbox_name));
+                let seq = TEMP_POLICY_COUNTER.fetch_add(1, Ordering::Relaxed);
+                let generated_path = std::env::temp_dir().join(format!(
+                    "hypercode-openshell-{}-{}-{}.yaml",
+                    self.sandbox_name,
+                    std::process::id(),
+                    seq
+                ));
                 let yaml = policy.to_openshell_policy_yaml();
-                tokio::fs::write(&generated_path, yaml)
+                let mut open_opts = tokio::fs::OpenOptions::new();
+                open_opts.write(true).create_new(true);
+                #[cfg(unix)]
+                open_opts.mode(0o600);
+                let mut file = open_opts
+                    .open(&generated_path)
+                    .await
+                    .map_err(|e| format!("Failed to create OpenShell policy YAML: {}", e))?;
+                file.write_all(yaml.as_bytes())
                     .await
                     .map_err(|e| format!("Failed to write OpenShell policy YAML: {}", e))?;
-                generated_path
+                file.flush()
+                    .await
+                    .map_err(|e| format!("Failed to flush OpenShell policy YAML: {}", e))?;
+                (generated_path, true)
             }
         };
 
@@ -274,21 +347,22 @@ impl CommandRunner for OpenShellRunner {
 
         apply_env_policy(&mut cmd, policy);
 
-        let output = tokio::time::timeout(timeout, cmd.output())
-            .await
-            .map_err(|_| {
-                format!(
-                    "OpenShell command timed out after {}s: `{}`",
-                    timeout.as_secs(),
-                    command
-                )
-            })?
-            .map_err(|e| {
-                format!(
-                    "Failed to invoke OpenShell binary '{}' for `{}`: {}",
-                    self.binary_path, command, e
-                )
-            })?;
+        let timeout_msg = format!(
+            "OpenShell command timed out after {}s: `{}`",
+            timeout.as_secs(),
+            command
+        );
+        let spawn_prefix = format!(
+            "Failed to invoke OpenShell binary '{}' for `{}`",
+            self.binary_path, command
+        );
+        let run_res = run_command_with_timeout(cmd, timeout, &timeout_msg, &spawn_prefix).await;
+
+        if cleanup_temp {
+            let _ = tokio::fs::remove_file(&policy_path).await;
+        }
+
+        let output = run_res?;
 
         Ok(CommandExecution {
             exit_code: output.status.code().unwrap_or(-1),

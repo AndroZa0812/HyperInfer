@@ -124,7 +124,9 @@ fn collect_shallow_tree(
             .to_string_lossy()
             .into_owned();
 
-        if path.is_dir() {
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+
+        if path.is_dir() && !is_symlink {
             if is_ignored_dir(&name_str) {
                 continue;
             }
@@ -185,6 +187,10 @@ impl Default for CompactionConfig {
     }
 }
 
+/// Bytes reserved for `\n... [N chars pruned by context compactor] ...\n`
+/// so a pruned message stays strictly `<= max_chars` and is never re-pruned.
+const PRUNE_MARKER_RESERVE: usize = 64;
+
 /// Tier 1 Compaction: Prune oversized `MessageRole::Tool` outputs in older messages
 /// while preserving all `ToolCall` / `tool_call_id` pairs and keeping the most recent
 /// `keep_recent_messages` untouched.
@@ -204,7 +210,7 @@ pub fn prune_old_tool_outputs(
 
     for msg in &mut history[..cutoff] {
         if msg.role == MessageRole::Tool && msg.content.len() > max_chars {
-            let half = max_chars / 2;
+            let half = max_chars.saturating_sub(PRUNE_MARKER_RESERVE) / 2;
             let mut head_end = half.min(msg.content.len());
             while !msg.content.is_char_boundary(head_end) {
                 head_end -= 1;
@@ -232,8 +238,9 @@ pub fn prune_old_tool_outputs(
 /// Find a safe split index in `history` for Tier-2 summarization so that:
 /// 1. Leading `System` messages stay at the front.
 /// 2. At least `keep_recent_messages` remain in the tail, AND the tail starts
-///    cleanly on a `MessageRole::User` boundary (never splitting an Assistant
-///    `tool_calls` message from its following `MessageRole::Tool` results!).
+///    cleanly on a `MessageRole::User` boundary (or, in a long single-turn tool loop,
+///    on a `MessageRole::Assistant` boundary immediately after a completed `Tool` result
+///    batch, never splitting an `Assistant` `tool_calls` message from its `Tool` results!).
 pub fn find_safe_compaction_split(
     history: &[ChatMessage],
     keep_recent_messages: usize,
@@ -245,10 +252,16 @@ pub fn find_safe_compaction_split(
     }
 
     let target_split = history.len().saturating_sub(keep_recent_messages);
-    // Walk backwards from `target_split` down to `start_idx + 1` to find a `User` message boundary.
+    // Prefer splitting at a `User` turn boundary; if none exists (e.g. a single turn
+    // with many tool steps), fall back to splitting right before an `Assistant` step.
     let split_idx = (start_idx + 1..=target_split)
         .rev()
-        .find(|&idx| history[idx].role == MessageRole::User)?;
+        .find(|&idx| history[idx].role == MessageRole::User)
+        .or_else(|| {
+            (start_idx + 1..=target_split)
+                .rev()
+                .find(|&idx| history[idx].role == MessageRole::Assistant)
+        })?;
 
     if split_idx <= start_idx {
         None
@@ -313,13 +326,23 @@ pub async fn compact_history_with_llm(
         .map(|c| c.message.content)
         .unwrap_or_default();
 
-    let summary_messages = vec![
+    let split_starts_with_assistant = history
+        .get(split_idx)
+        .map(|m| m.role == MessageRole::Assistant)
+        .unwrap_or(false);
+
+    let mut summary_messages = vec![
         ChatMessage::user("[Previous conversation history compacted]"),
         ChatMessage::assistant(format!(
             "<conversation_summary>\n{}\n</conversation_summary>",
             summary_text.trim()
         )),
     ];
+    if split_starts_with_assistant {
+        summary_messages.push(ChatMessage::user(
+            "[Continuing current task after context compaction]",
+        ));
+    }
 
     history.splice(start_idx..split_idx, summary_messages);
     Ok(true)

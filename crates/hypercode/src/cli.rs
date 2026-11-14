@@ -194,6 +194,8 @@ impl ReplCommand {
     }
 }
 
+const MAX_DIFF_PREVIEW_LINES: usize = 30;
+
 /// Format a human-readable preview of a tool call (including a unified diff for `edit_file`).
 pub fn format_tool_call_preview(call: &ToolCall) -> String {
     let parsed: serde_json::Value = match serde_json::from_str(&call.arguments) {
@@ -214,11 +216,25 @@ pub fn format_tool_call_preview(call: &ToolCall) -> String {
                 .unwrap_or("");
 
             let mut out = format!("edit_file `{}`:\n", path);
-            for line in target.lines() {
+            let target_lines: Vec<&str> = target.lines().collect();
+            for line in target_lines.iter().take(MAX_DIFF_PREVIEW_LINES) {
                 out.push_str(&format!("  \x1b[31m- {}\x1b[0m\n", line));
             }
-            for line in replacement.lines() {
+            if target_lines.len() > MAX_DIFF_PREVIEW_LINES {
+                out.push_str(&format!(
+                    "  \x1b[90m... (+{} more removed lines)\x1b[0m\n",
+                    target_lines.len() - MAX_DIFF_PREVIEW_LINES
+                ));
+            }
+            let replacement_lines: Vec<&str> = replacement.lines().collect();
+            for line in replacement_lines.iter().take(MAX_DIFF_PREVIEW_LINES) {
                 out.push_str(&format!("  \x1b[32m+ {}\x1b[0m\n", line));
+            }
+            if replacement_lines.len() > MAX_DIFF_PREVIEW_LINES {
+                out.push_str(&format!(
+                    "  \x1b[90m... (+{} more added lines)\x1b[0m\n",
+                    replacement_lines.len() - MAX_DIFF_PREVIEW_LINES
+                ));
             }
             out.trim_end().to_string()
         }
@@ -348,13 +364,17 @@ impl ApprovalHandler for TerminalApprovalHandler {
         print!("\x1b[1mAllow this tool call? [y/N]: \x1b[0m");
         let _ = io::stdout().flush();
 
-        let stdin = io::stdin();
-        let mut line = String::new();
-        if stdin.lock().read_line(&mut line).is_ok() {
-            matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
-        } else {
-            false
-        }
+        tokio::task::spawn_blocking(|| {
+            let stdin = io::stdin();
+            let mut line = String::new();
+            if stdin.lock().read_line(&mut line).is_ok() {
+                matches!(line.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+            } else {
+                false
+            }
+        })
+        .await
+        .unwrap_or(false)
     }
 }
 
@@ -473,7 +493,7 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
         ToolRegistry::with_default_coding_tools(),
         tool_ctx,
     )
-    .with_workspace_context()
+    .with_discovered_context(&ws_context)
     .with_approval_handler(TerminalApprovalHandler)
     .with_event_sink(TerminalEventSink);
 

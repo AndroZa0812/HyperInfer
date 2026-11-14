@@ -10,6 +10,7 @@ use std::path::Path;
 
 const DEFAULT_MAX_RESULTS: usize = 50;
 const MAX_FILE_SIZE_BYTES: u64 = 1024 * 1024; // 1 MB
+const MAX_GREP_DEPTH: usize = 20;
 
 pub struct GrepTool;
 
@@ -67,10 +68,11 @@ fn search_path(
     target: &Path,
     re: &Regex,
     ctx: &ToolContext,
+    depth: usize,
     max_results: usize,
     matches: &mut Vec<String>,
 ) {
-    if matches.len() >= max_results {
+    if depth > MAX_GREP_DEPTH || matches.len() >= max_results {
         return;
     }
     if target.is_file() {
@@ -89,6 +91,10 @@ fn search_path(
         if matches.len() >= max_results {
             break;
         }
+        let is_symlink = entry.file_type().map(|ft| ft.is_symlink()).unwrap_or(false);
+        if is_symlink {
+            continue;
+        }
         let path = entry.path();
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
@@ -96,7 +102,7 @@ fn search_path(
             if is_ignored_dir(&name_str) {
                 continue;
             }
-            search_path(&path, re, ctx, max_results, matches);
+            search_path(&path, re, ctx, depth + 1, max_results, matches);
         } else if path.is_file() {
             search_file(&path, re, ctx, max_results, matches);
         }
@@ -160,8 +166,17 @@ impl Tool for GrepTool {
         }
 
         let max_results = parsed.max_results.clamp(1, 500);
-        let mut matches = Vec::new();
-        search_path(&resolved, &re, ctx, max_results, &mut matches);
+        let ctx_clone = ctx.clone();
+        let matches = match tokio::task::spawn_blocking(move || {
+            let mut m = Vec::new();
+            search_path(&resolved, &re, &ctx_clone, 0, max_results, &mut m);
+            m
+        })
+        .await
+        {
+            Ok(m) => m,
+            Err(e) => return ToolOutput::error(format!("grep worker task failed: {}", e)),
+        };
 
         if matches.is_empty() {
             return ToolOutput::success(format!(

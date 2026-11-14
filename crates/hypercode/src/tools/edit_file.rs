@@ -90,7 +90,11 @@ impl Tool for EditFileTool {
         }
 
         let byte_offset = original.find(&parsed.target).unwrap_or(0);
-        let start_line = original[..byte_offset].lines().count().max(1);
+        let start_line = original[..byte_offset]
+            .bytes()
+            .filter(|&b| b == b'\n')
+            .count()
+            + 1;
         let target_lines = parsed.target.lines().count();
         let replacement_lines = parsed.replacement.lines().count();
 
