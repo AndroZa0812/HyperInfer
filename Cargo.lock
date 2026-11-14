@@ -1617,6 +1617,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "hypercode"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "futures",
+ "hyperinfer-client",
+ "hyperinfer-core",
+ "hyperinfer-providers",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "hyperinfer-client"
 version = "0.2.0"
 dependencies = [
