@@ -205,6 +205,7 @@ pub fn prune_old_tool_outputs(
         return 0;
     }
 
+    let max_chars = max_chars.max(PRUNE_MARKER_RESERVE);
     let cutoff = history.len().saturating_sub(keep_recent_messages);
     let mut pruned_count = 0;
 

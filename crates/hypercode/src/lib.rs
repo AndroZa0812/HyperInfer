@@ -607,6 +607,9 @@ mod tests {
             hist[3].content.len()
         );
         assert_eq!(prune_old_tool_outputs(&mut hist, 2, 120), 0);
+        // Even with a tiny `max_chars` (< PRUNE_MARKER_RESERVE), clamping prevents re-pruning.
+        assert_eq!(prune_old_tool_outputs(&mut hist, 2, 10), 1);
+        assert_eq!(prune_old_tool_outputs(&mut hist, 2, 10), 0);
 
         // Tier 2 check: full compaction via Agent::compact()
         for msg in hist.into_iter().skip(1) {
