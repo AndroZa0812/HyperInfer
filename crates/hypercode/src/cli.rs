@@ -420,10 +420,8 @@ pub async fn build_client_and_model(
         let local_key =
             std::env::var("HYPERCODE_LOCAL_API_KEY").unwrap_or_else(|_| "local".to_string());
         api_keys.insert("other".to_string(), local_key);
-        detected_model.get_or_insert_with(|| "qwen2.5-coder:latest".to_string());
-        if default_provider.is_none() {
-            default_provider = Some(Provider::Other);
-        }
+        detected_model = Some("qwen2.5-coder:latest".to_string());
+        default_provider = Some(Provider::Other);
     }
 
     if api_keys.is_empty() {

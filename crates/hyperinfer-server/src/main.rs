@@ -531,6 +531,7 @@ async fn get_deployment<D: Database, C: ConfigStore>(
 
 async fn create_deployment<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
 ) -> impl IntoResponse {
     if let Err(msg) = req.validate() {
@@ -573,6 +574,7 @@ async fn create_deployment<D: Database, C: ConfigStore>(
 
 async fn update_deployment<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Path(id): Path<String>,
     Json(req): Json<hyperinfer_core::CreateDeploymentRequest>,
 ) -> impl IntoResponse {
@@ -597,6 +599,7 @@ async fn update_deployment<D: Database, C: ConfigStore>(
 
 async fn delete_deployment<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match state.db.delete_deployment(&id).await {
