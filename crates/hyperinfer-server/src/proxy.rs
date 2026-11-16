@@ -127,11 +127,9 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
 }
 
 fn resolve_api_key_ref(raw: &str) -> String {
-    if raw.starts_with('$') {
-        let var_name = &raw[1..];
+    if let Some(var_name) = raw.strip_prefix('$') {
         std::env::var(var_name).unwrap_or_default()
-    } else if raw.starts_with("env:") {
-        let var_name = &raw[4..];
+    } else if let Some(var_name) = raw.strip_prefix("env:") {
         std::env::var(var_name).unwrap_or_default()
     } else {
         raw.to_string()
