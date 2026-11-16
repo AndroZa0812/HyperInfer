@@ -1,5 +1,6 @@
 //! HyperCode — Agentic coding harness built on HyperInfer.
 
+pub mod a2a;
 pub mod agent;
 pub mod cli;
 pub mod context;
@@ -7,6 +8,11 @@ pub mod sandbox;
 pub mod tool;
 pub mod tools;
 
+pub use a2a::{
+    A2aServer, A2aStreamEvent, AgentCapabilities, AgentCard, AgentSkill, Artifact, JsonRpcError,
+    JsonRpcRequest, JsonRpcResponse, Message as A2aMessage, Part as A2aPart, Task as A2aTask,
+    TaskState, TaskStatus,
+};
 pub use agent::{
     Agent, AgentConfig, AgentError, AgentEvent, ApprovalHandler, ApprovalMode, AutoApproveHandler,
     ChatBackend, EventSink, NoopEventSink, RejectAllHandler, TurnOutcome,
@@ -694,5 +700,119 @@ mod tests {
         );
         let bash_preview = format_tool_call_preview(&bash_call);
         assert_eq!(bash_preview, "bash [UNSANDBOXED]: `git status`");
+    }
+
+    #[tokio::test]
+    async fn test_a2a_agent_card_and_input_required_approval_flow() {
+        let tmp = TempDir::new().unwrap();
+        let ws = WorkspaceContext::discover(tmp.path());
+        let backend = Arc::new(ScriptedBackend::new(vec![
+            // Step 1: Agent wants to write `hello.txt` (triggers InputRequired in SmartSandbox)
+            ChatMessage::assistant_with_tools(
+                "Writing hello.txt",
+                vec![make_call(
+                    "write_file",
+                    serde_json::json!({
+                        "path": "hello.txt",
+                        "content": "hello from a2a\n"
+                    }),
+                )],
+            ),
+            // Step 2: After approval and execution, agent completes
+            ChatMessage::assistant("Created hello.txt successfully."),
+        ]));
+
+        let server = A2aServer::new(
+            "http://127.0.0.1:41241",
+            AgentConfig {
+                approval_mode: ApprovalMode::SmartSandbox,
+                ..Default::default()
+            },
+            backend,
+            ToolRegistry::with_default_coding_tools(),
+            ToolContext::new(tmp.path()),
+            ws,
+        );
+
+        // 1. Agent Card discovery via JSON-RPC
+        let card_resp = server
+            .handle_rpc(JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                id: Some(serde_json::json!(1)),
+                method: "agent/card".to_string(),
+                params: serde_json::json!({}),
+            })
+            .await;
+        assert!(card_resp.error.is_none());
+        let card: AgentCard = serde_json::from_value(card_resp.result.unwrap()).unwrap();
+        assert_eq!(card.name, "HyperCode");
+        assert!(card.capabilities.streaming);
+
+        // 2. Send task -> pauses in `InputRequired` for `write_file` approval
+        let send_resp = server
+            .handle_rpc(JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                id: Some(serde_json::json!(2)),
+                method: "tasks/send".to_string(),
+                params: serde_json::json!({
+                    "id": "task-1",
+                    "sessionId": "sess-1",
+                    "message": {
+                        "role": "user",
+                        "parts": [{ "type": "text", "text": "Create hello.txt" }]
+                    }
+                }),
+            })
+            .await;
+        assert!(send_resp.error.is_none(), "{:?}", send_resp.error);
+        let paused_task: A2aTask = serde_json::from_value(send_resp.result.unwrap()).unwrap();
+        assert_eq!(paused_task.status.state, TaskState::InputRequired);
+
+        // 3. Approve via `tasks/send` on the same `task-1` -> completes!
+        let approve_resp = server
+            .handle_rpc(JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                id: Some(serde_json::json!(3)),
+                method: "tasks/send".to_string(),
+                params: serde_json::json!({
+                    "id": "task-1",
+                    "message": {
+                        "role": "user",
+                        "parts": [{ "type": "text", "text": "approve" }]
+                    }
+                }),
+            })
+            .await;
+        assert!(approve_resp.error.is_none(), "{:?}", approve_resp.error);
+        let done_task: A2aTask = serde_json::from_value(approve_resp.result.unwrap()).unwrap();
+        assert_eq!(done_task.status.state, TaskState::Completed);
+        assert!(!done_task.artifacts.is_empty());
+
+        // Verify file was written on disk
+        let written = std::fs::read_to_string(tmp.path().join("hello.txt")).unwrap();
+        assert_eq!(written, "hello from a2a\n");
+
+        // 4. `tasks/get` returns the completed task
+        let get_resp = server
+            .handle_rpc(JsonRpcRequest {
+                jsonrpc: "2.0".to_string(),
+                id: Some(serde_json::json!(4)),
+                method: "tasks/get".to_string(),
+                params: serde_json::json!({ "id": "task-1" }),
+            })
+            .await;
+        assert!(get_resp.error.is_none());
+        let fetched: A2aTask = serde_json::from_value(get_resp.result.unwrap()).unwrap();
+        assert_eq!(fetched.status.state, TaskState::Completed);
+    }
+
+    #[test]
+    fn test_cli_a2a_flags() {
+        let opts_port = CliOptions::parse_from(["--a2a-port", "41241"]).unwrap();
+        assert_eq!(opts_port.a2a_port, Some(41241));
+        assert!(!opts_port.a2a_stdio);
+
+        let opts_stdio = CliOptions::parse_from(["--a2a-stdio"]).unwrap();
+        assert!(opts_stdio.a2a_stdio);
     }
 }

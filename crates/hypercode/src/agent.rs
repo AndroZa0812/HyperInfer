@@ -223,6 +223,14 @@ impl Agent {
         self
     }
 
+    pub fn set_approval_handler<H: ApprovalHandler + 'static>(&mut self, handler: H) {
+        self.approval_handler = Arc::new(handler);
+    }
+
+    pub fn set_event_sink<S: EventSink + 'static>(&mut self, sink: S) {
+        self.event_sink = Arc::new(sink);
+    }
+
     /// Discover workspace context (`AGENTS.md`, `CLAUDE.md`, `.hypercode.md`, shallow file tree)
     /// from `tool_ctx.workspace_root` and enrich the agent's system prompt.
     pub fn with_workspace_context(self) -> Self {
