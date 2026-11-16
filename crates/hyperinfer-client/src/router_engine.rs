@@ -108,7 +108,7 @@ impl RouterEngine {
             _ => Provider::Other,
         };
         let mut router_deployment = RouterDeployment::new(
-            d.name.clone(),
+            d.model.clone(),
             provider,
             d.model.clone(),
             d.api_key_ref.clone(),
