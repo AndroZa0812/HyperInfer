@@ -12,30 +12,41 @@ pub const USAGE_REQUESTS_KEY_PREFIX: &str = "hyperinfer:usage:requests:";
 
 const GCRA_SCRIPT: &str = r#"
 local key = KEYS[1]
-local rate = tonumber(ARGV[1])
-local capacity = tonumber(ARGV[2])
-local now = tonumber(ARGV[3])
+local limit_per_min = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local now_ms = tonumber(ARGV[3])
 local cost = tonumber(ARGV[4])
 
-local emission_interval = capacity / rate
+if not limit_per_min then
+    return {1, 0}
+end
+if limit_per_min <= 0 then
+    return {0, 0}
+end
+
+local emission_interval_ms = window_ms / limit_per_min
 local tat = redis.call('GET', key)
 
 if not tat then
-    tat = now
+    tat = now_ms
 else
     tat = tonumber(tat)
 end
 
-local new_tat = math.max(tat, now) + cost * emission_interval
-local allow_at = new_tat - capacity
+local new_tat = math.max(tat, now_ms) + cost * emission_interval_ms
+local allow_at = new_tat - window_ms
 
-if allow_at <= now then
-    redis.call('SET', key, new_tat, 'EX', math.ceil(capacity * 2))
+if allow_at <= now_ms then
+    local ttl_secs = math.max(1, math.ceil((new_tat - now_ms) / 1000))
+    redis.call('SET', key, tostring(new_tat), 'EX', ttl_secs)
     return {1, 0}
 else
-    return {0, math.ceil(allow_at - now)}
+    return {0, math.ceil(allow_at - now_ms)}
 end
 "#;
+
+const USAGE_KEY_TTL_SECS: u64 = 86_400; // 24 hours
+const TPM_WINDOW_MS: u64 = 60_000; // 1 minute in milliseconds
 
 const RPM_SCRIPT: &str = r#"
 local key = KEYS[1]
@@ -99,6 +110,22 @@ impl RateLimiter {
         key: &str,
         amount: u64,
     ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        self.is_allowed_with_quota(key, amount, None).await
+    }
+
+    pub async fn is_allowed_with_quota(
+        &self,
+        key: &str,
+        amount: u64,
+        quota: Option<&crate::types::Quota>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        let rpm_limit = quota
+            .and_then(|q| q.max_requests_per_minute)
+            .unwrap_or(self.default_rpm);
+        let tpm_limit = quota
+            .and_then(|q| q.max_tokens_per_minute)
+            .unwrap_or(self.default_tpm);
+
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
 
@@ -106,7 +133,7 @@ impl RateLimiter {
                 .arg(RPM_SCRIPT)
                 .arg(1)
                 .arg(format!("hyperinfer:ratelimit:rpm:{}", key))
-                .arg(self.default_rpm)
+                .arg(rpm_limit)
                 .arg(60)
                 .query_async(&mut conn)
                 .await?;
@@ -117,18 +144,17 @@ impl RateLimiter {
             }
 
             let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
-            let now = std::time::SystemTime::now()
+            let now_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
                 .as_millis() as u64;
-            let rate = self.default_tpm / 60;
             let tpm_result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
                 .arg(&tpm_key)
-                .arg(rate)
-                .arg(self.default_tpm)
-                .arg(now)
+                .arg(tpm_limit)
+                .arg(TPM_WINDOW_MS)
+                .arg(now_ms)
                 .arg(amount)
                 .query_async(&mut conn)
                 .await?;
@@ -173,23 +199,60 @@ impl RateLimiter {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
 
-            let now = std::time::SystemTime::now()
+            let now_ms = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
                 .as_millis() as u64;
-            let rate = limit / 60;
 
             let result: Vec<u64> = redis::cmd("EVAL")
                 .arg(GCRA_SCRIPT)
                 .arg(1)
                 .arg(format!("hyperinfer:ratelimit:tpm:{}", key))
-                .arg(rate)
                 .arg(limit)
-                .arg(now)
+                .arg(TPM_WINDOW_MS)
+                .arg(now_ms)
                 .arg(tokens)
                 .query_async(&mut conn)
                 .await?;
 
+            Ok(result.first().copied().unwrap_or(0) == 1)
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Charge additional tokens against the TPM limiter (e.g., for actual usage
+    /// that exceeded the pre-request estimate). Does not affect RPM.
+    pub async fn charge_tokens(
+        &self,
+        key: &str,
+        tokens: u64,
+        quota: Option<&crate::types::Quota>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if tokens == 0 {
+            return Ok(true);
+        }
+        let tpm_limit = quota
+            .and_then(|q| q.max_tokens_per_minute)
+            .unwrap_or(self.default_tpm);
+
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .as_millis() as u64;
+            let result: Vec<u64> = redis::cmd("EVAL")
+                .arg(GCRA_SCRIPT)
+                .arg(1)
+                .arg(&tpm_key)
+                .arg(tpm_limit)
+                .arg(TPM_WINDOW_MS)
+                .arg(now_ms)
+                .arg(tokens)
+                .query_async(&mut conn)
+                .await?;
             Ok(result.first().copied().unwrap_or(0) == 1)
         } else {
             Ok(true)
@@ -203,14 +266,22 @@ impl RateLimiter {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(ref manager) = self.redis_manager {
             let mut conn = manager.clone();
+            let tokens_key = format!("{}{}", USAGE_TOKENS_KEY_PREFIX, key);
+            let requests_key = format!("{}{}", USAGE_REQUESTS_KEY_PREFIX, key);
 
             redis::pipe()
                 .atomic()
                 .cmd("INCRBY")
-                .arg(format!("{}{}", USAGE_TOKENS_KEY_PREFIX, key))
+                .arg(&tokens_key)
                 .arg(tokens_used)
+                .cmd("EXPIRE")
+                .arg(&tokens_key)
+                .arg(USAGE_KEY_TTL_SECS)
                 .cmd("INCR")
-                .arg(format!("{}{}", USAGE_REQUESTS_KEY_PREFIX, key))
+                .arg(&requests_key)
+                .cmd("EXPIRE")
+                .arg(&requests_key)
+                .arg(USAGE_KEY_TTL_SECS)
                 .query_async::<()>(&mut conn)
                 .await?;
         }
