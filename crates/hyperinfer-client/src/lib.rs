@@ -339,11 +339,18 @@ impl HyperInferClient {
         async move {
             let start = std::time::Instant::now();
 
-            // 1. Check rate limit using configured per-key quota (falls back to defaults)
+            // 1. Estimate prompt tokens and check rate limit using configured per-key quota
+            let estimated_tokens = ((request
+                .messages
+                .iter()
+                .map(|m| m.content.len())
+                .sum::<usize>()
+                / 4)
+            .max(1)) as u64;
             let key_quota = self.config.read().await.quotas.get(key).cloned();
             let allowed = self
                 .rate_limiter
-                .is_allowed_with_quota(key, 1, key_quota.as_ref())
+                .is_allowed_with_quota(key, estimated_tokens, key_quota.as_ref())
                 .await;
             if let Err(e) = allowed {
                 return Err(HyperInferError::RateLimit(e.to_string()));
@@ -397,11 +404,31 @@ impl HyperInferClient {
                             if let Ok(body) = response.json::<ChatResponse>().await {
                                 // Record success metrics
                                 let latency = start.elapsed().as_secs_f64() * 1000.0;
-                                let tokens =
+                                let actual_tokens =
                                     (body.usage.input_tokens + body.usage.output_tokens) as u64;
                                 self.router_engine
-                                    .record_success(&deployment.id, latency, tokens)
+                                    .record_success(&deployment.id, latency, actual_tokens)
                                     .await;
+
+                                // Charge delta if actual usage exceeded our estimate
+                                if actual_tokens > estimated_tokens {
+                                    let delta = actual_tokens - estimated_tokens;
+                                    let quota_clone = key_quota.clone();
+                                    let rl = self.rate_limiter.clone();
+                                    let key_owned = key.to_string();
+                                    tokio::spawn(async move {
+                                        if let Err(e) = rl
+                                            .charge_tokens(&key_owned, delta, quota_clone.as_ref())
+                                            .await
+                                        {
+                                            tracing::warn!(
+                                                error = %e,
+                                                key = %key_owned,
+                                                "Failed to charge token delta"
+                                            );
+                                        }
+                                    });
+                                }
 
                                 // Record telemetry
                                 let elapsed = start.elapsed().as_millis() as u64;
@@ -536,6 +563,26 @@ impl HyperInferClient {
                 .rate_limiter
                 .record_usage(key, total_tokens as u64)
                 .await;
+
+            // Charge delta if actual usage exceeded our estimate
+            if total_tokens as u64 > estimated_tokens {
+                let delta = total_tokens as u64 - estimated_tokens;
+                let quota_clone = key_quota.clone();
+                let rl = self.rate_limiter.clone();
+                let key_owned = key.to_string();
+                tokio::spawn(async move {
+                    if let Err(e) = rl
+                        .charge_tokens(&key_owned, delta, quota_clone.as_ref())
+                        .await
+                    {
+                        tracing::warn!(
+                            error = %e,
+                            key = %key_owned,
+                            "Failed to charge token delta"
+                        );
+                    }
+                });
+            }
 
             // 5. Fire-and-forget traffic mirror (if configured).
             mirroring::maybe_mirror(

@@ -17,8 +17,11 @@ local window_ms = tonumber(ARGV[2])
 local now_ms = tonumber(ARGV[3])
 local cost = tonumber(ARGV[4])
 
-if not limit_per_min or limit_per_min <= 0 then
+if not limit_per_min then
     return {1, 0}
+end
+if limit_per_min <= 0 then
+    return {0, 0}
 end
 
 local emission_interval_ms = window_ms / limit_per_min
@@ -212,6 +215,44 @@ impl RateLimiter {
                 .query_async(&mut conn)
                 .await?;
 
+            Ok(result.first().copied().unwrap_or(0) == 1)
+        } else {
+            Ok(true)
+        }
+    }
+
+    /// Charge additional tokens against the TPM limiter (e.g., for actual usage
+    /// that exceeded the pre-request estimate). Does not affect RPM.
+    pub async fn charge_tokens(
+        &self,
+        key: &str,
+        tokens: u64,
+        quota: Option<&crate::types::Quota>,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+        if tokens == 0 {
+            return Ok(true);
+        }
+        let tpm_limit = quota
+            .and_then(|q| q.max_tokens_per_minute)
+            .unwrap_or(self.default_tpm);
+
+        if let Some(ref manager) = self.redis_manager {
+            let mut conn = manager.clone();
+            let tpm_key = format!("hyperinfer:ratelimit:tpm:{}", key);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .as_millis() as u64;
+            let result: Vec<u64> = redis::cmd("EVAL")
+                .arg(GCRA_SCRIPT)
+                .arg(1)
+                .arg(&tpm_key)
+                .arg(tpm_limit)
+                .arg(TPM_WINDOW_MS)
+                .arg(now_ms)
+                .arg(tokens)
+                .query_async(&mut conn)
+                .await?;
             Ok(result.first().copied().unwrap_or(0) == 1)
         } else {
             Ok(true)
