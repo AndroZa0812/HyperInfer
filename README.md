@@ -39,10 +39,28 @@ cargo add hyperinfer-client
 ```
 
 ```rust
+use std::collections::HashMap;
 use hyperinfer_client::HyperInferClient;
+use hyperinfer_core::types::{Config, ChatRequest, ChatMessage};
 
-let client = HyperInferClient::new("config_endpoint", "my_team").await?;
-let response = client.chat("gpt-4o-mini", "Hello!").await?;
+let config = Config {
+    api_keys: HashMap::from([("openai".to_string(), "sk-...".to_string())]),
+    routing_rules: vec![],
+    quotas: HashMap::new(),
+    model_aliases: HashMap::new(),
+    default_provider: None,
+};
+let client = HyperInferClient::new_local(config).await?;
+let request = ChatRequest {
+    model: "gpt-4o-mini".to_string(),
+    messages: vec![ChatMessage::user("Hello!")],
+    temperature: None,
+    max_tokens: None,
+    stream: None,
+    stop: None,
+    tools: None,
+};
+let response = client.chat("default", request).await?;
 println!("{}", response.choices[0].message.content);
 ```
 

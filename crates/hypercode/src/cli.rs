@@ -1,5 +1,6 @@
 //! Terminal UI, CLI argument parsing, interactive approval prompt, and REPL loop for `hypercode`.
 
+use crate::a2a::A2aServer;
 use crate::agent::{Agent, AgentConfig, AgentEvent, ApprovalHandler, ApprovalMode, EventSink};
 use crate::context::WorkspaceContext;
 use crate::sandbox::{HostRunner, OpenShellRunner};
@@ -23,6 +24,8 @@ pub struct CliOptions {
     pub openshell_sandbox: Option<String>,
     pub local_url: Option<String>,
     pub max_steps: usize,
+    pub a2a_port: Option<u16>,
+    pub a2a_stdio: bool,
     pub show_help: bool,
 }
 
@@ -36,6 +39,8 @@ impl Default for CliOptions {
             openshell_sandbox: std::env::var("HYPERCODE_OPENSHELL_SANDBOX").ok(),
             local_url: std::env::var("HYPERCODE_LOCAL_URL").ok(),
             max_steps: 25,
+            a2a_port: None,
+            a2a_stdio: false,
             show_help: false,
         }
     }
@@ -109,6 +114,18 @@ impl CliOptions {
                         .parse::<usize>()
                         .map_err(|_| format!("Invalid --max-steps value: '{}'", raw))?;
                 }
+                "--a2a-port" => {
+                    let raw = iter
+                        .next()
+                        .ok_or_else(|| "Missing value for --a2a-port".to_string())?;
+                    opts.a2a_port = Some(
+                        raw.parse::<u16>()
+                            .map_err(|_| format!("Invalid --a2a-port value: '{}'", raw))?,
+                    );
+                }
+                "--a2a-stdio" => {
+                    opts.a2a_stdio = true;
+                }
                 other if other.starts_with('-') => {
                     return Err(format!("Unknown flag: '{}'. Use --help for usage.", other));
                 }
@@ -143,6 +160,8 @@ OPTIONS:
         --openshell <NAME>       Run bash commands inside an NVIDIA OpenShell sandbox
         --local-url <URL>        OpenAI-compatible local endpoint (e.g. http://localhost:11434)
         --max-steps <N>          Max ReAct tool-calling iterations per turn (default: 25)
+        --a2a-port <PORT>        Start an A2A HTTP/SSE JSON-RPC server on 127.0.0.1:<PORT>
+        --a2a-stdio              Start an A2A JSON-RPC 2.0 server over stdin/stdout
     -h, --help                   Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -484,6 +503,36 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
         approval_mode: opts.approval_mode,
         ..Default::default()
     };
+
+    if opts.a2a_stdio {
+        let server = A2aServer::new(
+            "stdio://hypercode",
+            agent_config,
+            client,
+            ToolRegistry::with_default_coding_tools(),
+            tool_ctx,
+            ws_context,
+        );
+        return server.serve_stdio().await;
+    }
+
+    if let Some(port) = opts.a2a_port {
+        let bind_addr = format!("127.0.0.1:{}", port);
+        let url = format!("http://{}", bind_addr);
+        println!(
+            "HyperCode A2A server listening on {} (AgentCard: {}/.well-known/agent.json)",
+            url, url
+        );
+        let server = A2aServer::new(
+            url,
+            agent_config,
+            client,
+            ToolRegistry::with_default_coding_tools(),
+            tool_ctx,
+            ws_context,
+        );
+        return server.serve_http(&bind_addr).await;
+    }
 
     let mut agent = Agent::new(
         agent_config,
