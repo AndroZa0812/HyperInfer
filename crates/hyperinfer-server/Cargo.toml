@@ -21,6 +21,7 @@ path = "src/main.rs"
 
 [dependencies]
 hyperinfer-core = { path = "../hyperinfer-core", version = "0.1.1" }
+hyperinfer-providers = { path = "../hyperinfer-providers", version = "0.1.0" }
 hyperinfer-router = { path = "../hyperinfer-router", version = "0.1.0" }
 async-trait = "0.1"
 axum = "0.8"
