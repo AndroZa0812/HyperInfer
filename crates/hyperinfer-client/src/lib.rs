@@ -3,7 +3,6 @@
 #![allow(clippy::double_must_use)]
 
 pub mod cache;
-pub mod http_client;
 pub mod mirroring;
 pub mod router;
 pub mod router_engine;
@@ -13,7 +12,6 @@ pub mod telemetry_otlp;
 mod util;
 
 pub use cache::ExactMatchCache;
-pub use http_client::HttpCaller;
 pub use mirroring::{MirrorConfig, MirrorHandle};
 pub use router::Router;
 pub use router_engine::RouterEngine;
@@ -150,7 +148,6 @@ impl Stream for AccountedStream {
 
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
-    http_caller: Arc<HttpCaller>,
     router: Arc<Router>,
     router_engine: Arc<RouterEngine>,
     rate_limiter: RateLimiter,
@@ -162,7 +159,6 @@ pub struct HyperInferClient {
 
 impl HyperInferClient {
     pub async fn new(redis_url: &str, config: Config) -> Result<Self, HyperInferError> {
-        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
         let router = Arc::new(
             Router::new(config.routing_rules.clone())
                 .with_aliases(config.model_aliases.clone())
@@ -184,7 +180,6 @@ impl HyperInferClient {
 
         Ok(Self {
             config,
-            http_caller,
             router,
             router_engine: Arc::new(RouterEngine::new().await),
             rate_limiter,
@@ -197,7 +192,6 @@ impl HyperInferClient {
 
     /// Create a standalone in-memory `HyperInferClient` that requires no Redis or external server.
     pub async fn new_local(config: Config) -> Result<Self, HyperInferError> {
-        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
         let router = Arc::new(
             Router::new(config.routing_rules.clone())
                 .with_aliases(config.model_aliases.clone())
@@ -217,7 +211,6 @@ impl HyperInferClient {
 
         Ok(Self {
             config,
-            http_caller,
             router,
             router_engine: Arc::new(RouterEngine::new().await),
             rate_limiter,
@@ -534,9 +527,13 @@ impl HyperInferClient {
                 .await;
 
             // 5. Fire-and-forget traffic mirror (if configured).
+            let registry_for_mirror = {
+                let guard = self.provider_registry.read().await;
+                Arc::clone(&guard)
+            };
             mirroring::maybe_mirror(
                 self.mirror.clone(),
-                self.http_caller.clone(),
+                registry_for_mirror,
                 self.router.clone(),
                 config_snapshot,
                 key.to_string(),
