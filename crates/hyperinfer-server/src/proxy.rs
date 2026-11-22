@@ -1,8 +1,14 @@
-use hyperinfer_core::{ChatRequest, Database, Provider};
+use futures::Stream;
+use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, Database, HyperInferError, Provider};
+use hyperinfer_providers::{
+    anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAiProvider, LlmProvider,
+    ProviderRegistry,
+};
 use hyperinfer_router::{
     deployment::Deployment as RouterDeployment,
     engine::{GlobalLimits, RouterEngine},
     error::RoutingError,
+    state::redis_state::{RedisConfig, RedisRoutingState},
     strategy::{
         cost_based::CostBased, latency_based::LatencyBased, least_busy::LeastBusy,
         usage_based::UsageBased, weighted_shuffle::WeightedShuffle, DeploymentMetrics,
@@ -12,7 +18,9 @@ use hyperinfer_router::{
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::pin::Pin;
 use std::sync::{Arc, LazyLock};
+use tracing::warn;
 
 static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
@@ -138,10 +146,256 @@ fn resolve_api_key_ref(raw: &str) -> String {
 
 fn default_base_url_for_provider(provider: &Provider) -> String {
     match provider {
-        Provider::Anthropic => "https://api.anthropic.com/v1".to_string(),
-        Provider::OpenAI => "https://api.openai.com/v1".to_string(),
-        _ => "https://api.openai.com/v1".to_string(),
+        Provider::Anthropic => "https://api.anthropic.com".to_string(),
+        Provider::Gemini => "https://generativelanguage.googleapis.com".to_string(),
+        Provider::Antigravity => "https://cloudcode-pa.googleapis.com".to_string(),
+        Provider::OpenAI | Provider::Other => "https://api.openai.com".to_string(),
     }
+}
+
+/// Normalize a deployment's `base_url` for `hyperinfer-providers` (`OpenAiProvider` and
+/// `AnthropicProvider` append `/v1/chat/completions` and `/v1/messages` respectively).
+fn normalize_provider_base_url(base_url: &str, provider: &Provider) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    match provider {
+        Provider::OpenAI | Provider::Anthropic | Provider::Other => {
+            trimmed.trim_end_matches("/v1").to_string()
+        }
+        Provider::Gemini | Provider::Antigravity => trimmed.to_string(),
+    }
+}
+
+/// Shared proxy router holding a persistent `RouterEngine`, `RoutingState` (`RedisRoutingState`
+/// with graceful `NoopState` fallback), and `ProviderRegistry`.
+pub struct ProxyRouter {
+    engine: Arc<RouterEngine>,
+    state: Arc<dyn RoutingState>,
+    providers: Arc<ProviderRegistry>,
+}
+
+impl ProxyRouter {
+    /// Create an in-memory `ProxyRouter` (for tests or Redis-less environments).
+    pub async fn new_in_memory() -> Self {
+        let engine = RouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
+        let providers = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&providers);
+        Self {
+            engine: Arc::new(engine),
+            state: Arc::new(NoopState),
+            providers,
+        }
+    }
+
+    /// Create a `ProxyRouter` backed by `RedisRoutingState`, falling back to `NoopState`
+    /// if Redis is unavailable.
+    pub async fn with_redis(redis_url: &str) -> Self {
+        let engine = RouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
+        let state: Arc<dyn RoutingState> =
+            match RedisRoutingState::new(redis_url, RedisConfig::default()).await {
+                Ok(redis_state) => Arc::new(redis_state),
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        "Redis unavailable for server ProxyRouter; falling back to NoopState"
+                    );
+                    Arc::new(NoopState)
+                }
+            };
+        let providers = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&providers);
+        Self {
+            engine: Arc::new(engine),
+            state,
+            providers,
+        }
+    }
+
+    async fn register_all_strategies(engine: &RouterEngine) {
+        engine
+            .register_strategy(Box::new(WeightedShuffle::new()))
+            .await;
+        engine
+            .register_strategy(Box::new(LatencyBased::new()))
+            .await;
+        engine.register_strategy(Box::new(LeastBusy::new())).await;
+        engine.register_strategy(Box::new(UsageBased::new())).await;
+        engine.register_strategy(Box::new(CostBased::new())).await;
+    }
+
+    pub fn providers(&self) -> &Arc<ProviderRegistry> {
+        &self.providers
+    }
+
+    /// Select a deployment using the shared `RouterEngine` and `RoutingState`.
+    pub async fn select_deployment<D: Database>(
+        &self,
+        db: &D,
+        request: &ChatRequest,
+        deployments: &[hyperinfer_core::Deployment],
+        model_aliases: &HashMap<String, String>,
+        auth: Option<&ProxyAuth>,
+    ) -> Result<SelectedDeployment, RoutingError> {
+        if deployments.is_empty() {
+            return Err(RoutingError::NoDeployments(request.model.clone()));
+        }
+
+        for (alias, target) in model_aliases {
+            self.engine.set_alias(alias, target).await;
+        }
+
+        if let Ok(Some(config)) = db.get_routing_config().await {
+            self.engine.set_default_strategy(&config.strategy).await;
+            if let Ok(groups) =
+                serde_json::from_value::<HashMap<String, String>>(config.routing_groups)
+            {
+                for (model, strategy_name) in groups {
+                    self.engine.set_routing_group(&model, &strategy_name).await;
+                }
+            }
+        }
+
+        let router_deployments: Vec<RouterDeployment> =
+            deployments.iter().map(core_to_router_deployment).collect();
+        self.engine.rebuild_pool(router_deployments).await;
+
+        let ctx = RoutingContext {
+            team_id: auth.map(|a| a.team_id.clone()),
+            ..Default::default()
+        };
+        let result = self
+            .engine
+            .select_deployment(&request.model, self.state.as_ref(), &ctx)
+            .await?;
+
+        let selected = &result.deployment;
+        let base_url = selected
+            .base_url
+            .clone()
+            .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
+
+        Ok(SelectedDeployment {
+            deployment: selected.as_ref().clone(),
+            base_url,
+            api_key: resolve_api_key_ref(&selected.api_key_ref),
+            provider: selected.provider.clone(),
+        })
+    }
+
+    pub async fn record_success(&self, deployment_id: &str, latency_ms: f64, tokens: u64) {
+        self.engine
+            .record_success(deployment_id, latency_ms, tokens, self.state.as_ref())
+            .await;
+    }
+
+    pub async fn record_failure(&self, deployment_id: &str) {
+        self.engine
+            .record_failure(deployment_id, self.state.as_ref())
+            .await;
+    }
+}
+
+fn core_to_router_deployment(d: &hyperinfer_core::Deployment) -> RouterDeployment {
+    let provider = match d.provider.as_str() {
+        "openai" => Provider::OpenAI,
+        "anthropic" => Provider::Anthropic,
+        "gemini" => Provider::Gemini,
+        "antigravity" => Provider::Antigravity,
+        _ => Provider::Other,
+    };
+    let mut router_deployment = RouterDeployment::new(
+        d.model.clone(),
+        provider,
+        d.model.clone(),
+        d.api_key_ref.clone(),
+    );
+    router_deployment.id = d.id.clone();
+    if !d.base_url.is_empty() {
+        router_deployment = router_deployment.with_base_url(d.base_url.clone());
+    }
+    router_deployment = router_deployment.with_weight(d.weight);
+    if let Some(max_tpm) = d.max_tpm {
+        router_deployment = router_deployment.with_tpm_limit(max_tpm as u64);
+    }
+    if let Some(max_rpm) = d.max_rpm {
+        router_deployment = router_deployment.with_rpm_limit(max_rpm as u64);
+    }
+    if let Some(cost) = d.cost_per_1k_input_tokens {
+        router_deployment = router_deployment.with_input_cost(cost);
+    }
+    if let Some(cost) = d.cost_per_1k_output_tokens {
+        router_deployment = router_deployment.with_output_cost(cost);
+    }
+    router_deployment
+}
+
+fn resolve_provider(
+    registry: &ProviderRegistry,
+    provider: &Provider,
+    base_url: &str,
+) -> Result<Arc<dyn LlmProvider>, u16> {
+    let default_url = default_base_url_for_provider(provider);
+    let normalized = normalize_provider_base_url(base_url, provider);
+
+    if normalized == default_url {
+        if let Some(p) = registry.get(&provider.to_string()) {
+            return Ok(p);
+        }
+    }
+
+    match provider {
+        Provider::Anthropic => AnthropicProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|_| 500u16),
+        Provider::Gemini => GeminiProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|_| 500u16),
+        Provider::Antigravity => GeminiProvider::antigravity_with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|_| 500u16),
+        Provider::OpenAI | Provider::Other => OpenAiProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|_| 500u16),
+    }
+}
+
+fn map_provider_error(err: HyperInferError) -> u16 {
+    match err {
+        HyperInferError::ApiError { status, .. } => status,
+        HyperInferError::RateLimit(_) => 429,
+        HyperInferError::UnsupportedStreaming(_) => 400,
+        _ => 502,
+    }
+}
+
+/// Forward a non-streaming `ChatRequest` through `hyperinfer-providers`.
+pub async fn forward_chat(
+    registry: &ProviderRegistry,
+    request: &ChatRequest,
+    base_url: &str,
+    api_key: &str,
+    provider: &Provider,
+) -> Result<ChatResponse, u16> {
+    validate_base_url(base_url)?;
+    let llm_provider = resolve_provider(registry, provider, base_url)?;
+    llm_provider
+        .chat(request, api_key)
+        .await
+        .map_err(map_provider_error)
+}
+
+/// Forward a streaming `ChatRequest` (`stream: true`) through `hyperinfer-providers`.
+pub async fn forward_chat_stream(
+    registry: &ProviderRegistry,
+    request: &ChatRequest,
+    base_url: &str,
+    api_key: &str,
+    provider: &Provider,
+) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>, u16> {
+    validate_base_url(base_url)?;
+    let llm_provider = resolve_provider(registry, provider, base_url)?;
+    Ok(llm_provider.stream(request, api_key))
 }
 
 fn set_auth_header(
@@ -312,5 +566,65 @@ pub async fn forward_request(
         Ok(body)
     } else {
         Err(status.as_u16())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_normalize_provider_base_url() {
+        assert_eq!(
+            normalize_provider_base_url("https://api.openai.com/v1/", &Provider::OpenAI),
+            "https://api.openai.com"
+        );
+        assert_eq!(
+            normalize_provider_base_url("https://api.anthropic.com/v1", &Provider::Anthropic),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            normalize_provider_base_url(
+                "https://generativelanguage.googleapis.com/",
+                &Provider::Gemini
+            ),
+            "https://generativelanguage.googleapis.com"
+        );
+    }
+
+    #[test]
+    fn test_validate_base_url_blocks_ssrf_targets() {
+        assert!(validate_base_url("https://api.openai.com/v1").is_ok());
+        assert!(validate_base_url("http://localhost:8080").is_err());
+        assert!(validate_base_url("http://sub.localhost:8080").is_err());
+        assert!(validate_base_url("http://[::1]:8080").is_err());
+        assert!(validate_base_url("http://127.0.0.1:8080").is_err());
+        assert!(validate_base_url("ftp://example.com").is_err());
+    }
+
+    #[test]
+    fn test_resolve_provider_uses_registry_and_custom_urls() {
+        let registry = ProviderRegistry::new();
+        hyperinfer_providers::init_default_registry(&registry);
+
+        let openai = resolve_provider(&registry, &Provider::OpenAI, "https://api.openai.com/v1")
+            .expect("openai");
+        assert_eq!(openai.name(), "openai");
+
+        let anthropic = resolve_provider(
+            &registry,
+            &Provider::Anthropic,
+            "https://api.anthropic.com/v1",
+        )
+        .expect("anthropic");
+        assert_eq!(anthropic.name(), "anthropic");
+
+        let custom = resolve_provider(
+            &registry,
+            &Provider::Anthropic,
+            "https://proxy.example.com/v1",
+        )
+        .expect("custom anthropic");
+        assert_eq!(custom.name(), "anthropic");
     }
 }

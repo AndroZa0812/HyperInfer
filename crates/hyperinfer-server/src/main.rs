@@ -5,11 +5,17 @@ use axum::{
     extract::{Extension, Json, Path, Query, State},
     http::{header::SET_COOKIE, Request, StatusCode},
     middleware::{self, Next},
-    response::{IntoResponse, Response},
+    response::{
+        sse::{Event as SseEvent, KeepAlive, Sse},
+        IntoResponse, Response,
+    },
     routing::{get, post},
     Router,
 };
-use hyperinfer_core::{Config, ConfigStore, Database, DbError, TelemetryConsumer, UsageRecord};
+use futures::StreamExt;
+use hyperinfer_core::{
+    Config, ConfigStore, Database, DbError, RateLimiter, TelemetryConsumer, UsageRecord,
+};
 use hyperinfer_server::{
     auth::{
         auth_middleware, create_auth_token, AuthClaims, LoginRequest, LoginResponse, MeResponse,
@@ -38,6 +44,8 @@ struct AppState<D: Database, C: ConfigStore> {
     config_manager: C,
     admin_token: Arc<String>,
     jwt_secret: Arc<String>,
+    proxy_router: Option<Arc<proxy::ProxyRouter>>,
+    rate_limiter: Option<Arc<RateLimiter>>,
 }
 
 type ProdState = AppState<SqlxDb, RedisConfigStore>;
@@ -631,11 +639,13 @@ impl IntoResponse for ProxyError {
     }
 }
 
-async fn chat_completions_handler<D: Database, C: ConfigStore>(
+async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     headers: axum::http::HeaderMap,
     Json(request): Json<hyperinfer_core::ChatRequest>,
-) -> Result<Json<serde_json::Value>, ProxyError> {
+) -> Result<Response, ProxyError> {
+    let start = std::time::Instant::now();
+
     // 1. Extract and validate API key
     let api_key = headers
         .get("authorization")
@@ -653,17 +663,47 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
         }
     };
 
-    // 2. Check team quota
+    // 2. Enforce team RPM / TPM quotas
     if let Ok(Some(quota)) = state.db.get_quota(&auth.team_id).await {
-        tracing::debug!(
-            "Team {} quota: rpm={}, tpm={}",
-            auth.team_id,
-            quota.rpm_limit,
-            quota.tpm_limit
-        );
+        if let Some(ref limiter) = state.rate_limiter {
+            if quota.rpm_limit > 0 {
+                match limiter
+                    .check_rpm(&auth.team_id, quota.rpm_limit as u64)
+                    .await
+                {
+                    Ok((false, _)) => {
+                        return Err(ProxyError {
+                            error: "Team RPM quota exceeded".to_string(),
+                            code: 429,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!(team_id = %auth.team_id, error = %e, "RPM quota check failed");
+                    }
+                    Ok((true, _)) => {}
+                }
+            }
+            if quota.tpm_limit > 0 {
+                match limiter
+                    .check_tpm(&auth.team_id, quota.tpm_limit as u64, 1)
+                    .await
+                {
+                    Ok(false) => {
+                        return Err(ProxyError {
+                            error: "Team TPM quota exceeded".to_string(),
+                            code: 429,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!(team_id = %auth.team_id, error = %e, "TPM quota check failed");
+                    }
+                    Ok(true) => {}
+                }
+            }
+        }
     }
 
-    // 3. Load deployments from database
+    // 3. Load active deployments from database
     let deployments = state
         .db
         .list_deployments(&request.model, Some(true))
@@ -680,35 +720,146 @@ async fn chat_completions_handler<D: Database, C: ConfigStore>(
         });
     }
 
-    // 4. Select deployment using routing
-    let config = state.config.read().await;
-    let selected = proxy::select_deployment(
-        &state.db,
-        &request,
-        &deployments,
-        &config.model_aliases,
-        Some(&auth),
-    )
-    .await
-    .map_err(|e| ProxyError {
-        error: format!("Routing failed: {}", e),
-        code: 503,
-    })?;
+    // 4. Select deployment using the shared ProxyRouter
+    let proxy_router = match &state.proxy_router {
+        Some(r) => Arc::clone(r),
+        None => Arc::new(proxy::ProxyRouter::new_in_memory().await),
+    };
 
-    // 5. Forward request to selected deployment
-    let body = proxy::forward_request(
+    let model_aliases = state.config.read().await.model_aliases.clone();
+    let selected = proxy_router
+        .select_deployment(
+            &state.db,
+            &request,
+            &deployments,
+            &model_aliases,
+            Some(&auth),
+        )
+        .await
+        .map_err(|e| ProxyError {
+            error: format!("Routing failed: {}", e),
+            code: 503,
+        })?;
+
+    let deployment_id = selected.deployment.id.clone();
+
+    // 5. Streaming path (`stream: true`) via ProviderRegistry + SSE
+    if request.stream == Some(true) {
+        let stream = match proxy::forward_chat_stream(
+            proxy_router.providers(),
+            &request,
+            &selected.base_url,
+            &selected.api_key,
+            &selected.provider,
+        )
+        .await
+        {
+            Ok(s) => s,
+            Err(code) => {
+                proxy_router.record_failure(&deployment_id).await;
+                return Err(ProxyError {
+                    error: "Upstream streaming request failed".to_string(),
+                    code,
+                });
+            }
+        };
+
+        let db = state.db.clone();
+        let router_clone = Arc::clone(&proxy_router);
+        let team_id = auth.team_id.clone();
+        let api_key_id = auth.api_key_id.clone();
+        let model_name = request.model.clone();
+
+        let sse_stream = async_stream::stream! {
+            let mut input_tokens: u32 = 0;
+            let mut output_tokens: u32 = 0;
+            let mut stream = stream;
+
+            while let Some(item) = stream.next().await {
+                match item {
+                    Ok(chunk) => {
+                        if let Some(ref usage) = chunk.usage {
+                            input_tokens = usage.input_tokens;
+                            output_tokens = usage.output_tokens;
+                        }
+                        if let Ok(json) = serde_json::to_string(&chunk) {
+                            yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data(json));
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!(error = %e, "Error in upstream SSE chunk");
+                        router_clone.record_failure(&deployment_id).await;
+                        break;
+                    }
+                }
+            }
+
+            yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data("[DONE]"));
+
+            let elapsed_ms = start.elapsed().as_millis() as i64;
+            let total_tokens = (input_tokens + output_tokens) as u64;
+            router_clone
+                .record_success(&deployment_id, elapsed_ms as f64, total_tokens)
+                .await;
+            let _ = db
+                .record_usage(
+                    &team_id,
+                    &api_key_id,
+                    &model_name,
+                    input_tokens as i32,
+                    output_tokens as i32,
+                    elapsed_ms,
+                )
+                .await;
+        };
+
+        return Ok(Sse::new(sse_stream)
+            .keep_alive(KeepAlive::default())
+            .into_response());
+    }
+
+    // 6. Non-streaming path via ProviderRegistry
+    let response = match proxy::forward_chat(
+        proxy_router.providers(),
         &request,
         &selected.base_url,
         &selected.api_key,
         &selected.provider,
     )
     .await
-    .map_err(|code| ProxyError {
-        error: "Upstream request failed".to_string(),
-        code,
-    })?;
+    {
+        Ok(resp) => resp,
+        Err(code) => {
+            proxy_router.record_failure(&deployment_id).await;
+            return Err(ProxyError {
+                error: "Upstream request failed".to_string(),
+                code,
+            });
+        }
+    };
 
-    Ok(Json(body))
+    let elapsed_ms = start.elapsed().as_millis() as i64;
+    let total_tokens = (response.usage.input_tokens + response.usage.output_tokens) as u64;
+    proxy_router
+        .record_success(&deployment_id, elapsed_ms as f64, total_tokens)
+        .await;
+
+    if let Err(e) = state
+        .db
+        .record_usage(
+            &auth.team_id,
+            &auth.api_key_id,
+            &request.model,
+            response.usage.input_tokens as i32,
+            response.usage.output_tokens as i32,
+            elapsed_ms,
+        )
+        .await
+    {
+        tracing::warn!(error = ?e, "Failed to record proxy usage log");
+    }
+
+    Ok(Json(response).into_response())
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1123,12 +1274,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     };
     let jwt_secret_arc = Arc::new(jwt_secret.clone());
 
+    let proxy_router = Arc::new(proxy::ProxyRouter::with_redis(&redis_url).await);
+    let rate_limiter = match RateLimiter::new(Some(&redis_url)).await {
+        Ok(rl) => Some(Arc::new(rl)),
+        Err(e) => {
+            tracing::warn!(error = %e, "Failed to initialize Redis RateLimiter; quota enforcement disabled");
+            None
+        }
+    };
+
     let state: ProdState = AppState {
         config,
         db: db.clone(),
         config_manager,
         admin_token: Arc::new(admin_token),
         jwt_secret: jwt_secret_arc.clone(),
+        proxy_router: Some(proxy_router),
+        rate_limiter,
     };
 
     let mcp_state = McpState::new(jwt_secret);
@@ -1367,6 +1529,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         }
     }
 
@@ -1399,6 +1563,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_team(State(state), Path("nonexistent-id".to_string())).await;
@@ -1438,6 +1604,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_team(State(state), Path("test-team-id".to_string())).await;
@@ -1476,6 +1644,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {
@@ -1520,6 +1690,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_user(State(state), Path("nonexistent-user".to_string())).await;
@@ -1548,6 +1720,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_api_key(State(state), Path("nonexistent-key".to_string())).await;
@@ -1576,6 +1750,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_model_alias(State(state), Path("nonexistent-alias".to_string())).await;
@@ -1604,6 +1780,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_quota(State(state), Path("nonexistent-team".to_string())).await;
@@ -1632,6 +1810,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let response = get_team(State(state), Path("error-id".to_string())).await;
@@ -1757,6 +1937,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {
@@ -1823,6 +2005,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {
@@ -1885,6 +2069,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {
@@ -1941,6 +2127,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {
@@ -1987,6 +2175,8 @@ mod tests {
             config_manager: MockConfigStore::new(),
             admin_token: Arc::new("test-token".to_string()),
             jwt_secret: Arc::new("test-jwt-secret".to_string()),
+            proxy_router: None,
+            rate_limiter: None,
         };
 
         let admin = RequireAdmin(AuthClaims {

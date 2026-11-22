@@ -1766,6 +1766,7 @@ dependencies = [
  "hex",
  "http-body-util",
  "hyperinfer-core",
+ "hyperinfer-providers",
  "hyperinfer-router",
  "jsonwebtoken",
  "mime_guess",
