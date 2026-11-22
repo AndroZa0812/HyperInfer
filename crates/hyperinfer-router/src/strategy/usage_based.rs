@@ -1,4 +1,4 @@
-use super::{RoutingContext, RoutingState, RoutingStrategy};
+use super::{DeploymentMetrics, RoutingContext, RoutingState, RoutingStrategy};
 use crate::deployment::Deployment;
 use crate::error::RoutingError;
 use async_trait::async_trait;
@@ -43,7 +43,15 @@ impl RoutingStrategy for UsageBased {
         let mut eligible: Vec<(usize, f64)> = Vec::new();
 
         for (i, deployment) in candidates.iter().enumerate() {
-            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
+            let metrics = match all_metrics.get(&deployment.id) {
+                Some(m) => m.clone(),
+                None => {
+                    if state.is_cooled_down(&deployment.id).await? {
+                        continue;
+                    }
+                    DeploymentMetrics::default()
+                }
+            };
             if metrics.cooled_down {
                 continue;
             }
