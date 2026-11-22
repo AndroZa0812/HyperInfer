@@ -152,23 +152,30 @@ jobs:
           path: dist/
 
   # ---------------------------------------------------------------------------
-  # Publish all wheels to PyPI via OIDC trusted publishing
+  # Publish wheels per package to PyPI via OIDC trusted publishing
+  # (each package uses its own GitHub environment so PyPI pending publishers
+  # have distinct (owner, repo, workflow, environment) tuples)
   # ---------------------------------------------------------------------------
   publish:
-    name: Publish to PyPI
-    needs: build
+    name: Publish ${{ matrix.package }} to PyPI
+    needs: [prepare, build]
     runs-on: ubuntu-latest
-    environment: pypi
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.prepare.outputs.changed || '[]') }}
+    environment: ${{ matrix.package == 'hyperinfer-python' && 'pypi' || (matrix.package == 'hyperinfer-langchain' && 'pypi-langchain' || 'pypi-llamaindex') }}
     permissions:
       id-token: write
     steps:
-      - name: Download all wheels
+      - name: Download ${{ matrix.package }} wheels
         uses: actions/download-artifact@v8
         with:
+          pattern: ${{ matrix.package }}-dist-*
           path: dist/
           merge-multiple: true
 
-      - name: Publish to PyPI
+      - name: Publish ${{ matrix.package }} to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
