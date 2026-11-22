@@ -18,32 +18,29 @@ pub fn drain_lines(raw_buf: &mut Vec<u8>, lines: &mut Vec<String>) {
         return;
     }
 
-    match std::str::from_utf8(raw_buf) {
-        Ok(s) => {
-            let mut rest = s;
-            while let Some(pos) = rest.find('\n') {
-                let (line, next_rest) = rest.split_at(pos);
-                let line = line.strip_suffix('\r').unwrap_or(line);
-                lines.push(line.to_string());
-                rest = &next_rest[1..];
-            }
-            if rest.is_empty() {
-                raw_buf.clear();
-            } else {
-                *raw_buf = rest.as_bytes().to_vec();
-            }
-        }
-        Err(e) => {
-            let valid_up_to = e.valid_up_to();
-            let valid_prefix = &raw_buf[..valid_up_to];
+    // Determine how many bytes are valid UTF-8
+    let valid_up_to = match std::str::from_utf8(raw_buf) {
+        Ok(_) => raw_buf.len(),
+        Err(e) => e.valid_up_to(),
+    };
 
-            if let Some(pos) = valid_prefix.iter().rposition(|&b| b == b'\n') {
-                let line_bytes = &valid_prefix[..pos];
-                let line_bytes = line_bytes.strip_suffix(b"\r").unwrap_or(line_bytes);
-                lines.push(String::from_utf8_lossy(line_bytes).into_owned());
-                raw_buf.drain(..=pos + 1);
-            }
+    // Process all complete lines within the valid UTF-8 range
+    let mut consumed = 0;
+    let mut i = 0;
+    while i < valid_up_to {
+        if raw_buf[i] == b'\n' {
+            // Found a newline - extract the line
+            let line_bytes = &raw_buf[consumed..i];
+            let line_bytes = line_bytes.strip_suffix(b"\r").unwrap_or(line_bytes);
+            lines.push(String::from_utf8_lossy(line_bytes).into_owned());
+            consumed = i + 1;
         }
+        i += 1;
+    }
+
+    // Drain all consumed bytes
+    if consumed > 0 {
+        raw_buf.drain(..consumed);
     }
 }
 
@@ -172,5 +169,18 @@ mod tests {
     fn test_drain_lines_mixed_crlf_and_lf() {
         let (lines, _) = feed_chunks(&[b"line1\r\nline2\nline3\r\n"]);
         assert_eq!(lines, vec!["line1", "line2", "line3"]);
+    }
+
+    #[test]
+    fn test_drain_lines_multiple_lines_with_split_multibyte_at_end() {
+        // Multiple complete lines in chunk 1, with a split multi-byte UTF-8 char at the end
+        let chunk1: &[u8] = b"data: line1\ndata: line2\ndata: caf\xc3";
+        let chunk2: &[u8] = b"\xa9\ndata: line4\n";
+        let (lines, remainder) = feed_chunks(&[chunk1, chunk2]);
+        assert_eq!(
+            lines,
+            vec!["data: line1", "data: line2", "data: café", "data: line4"]
+        );
+        assert!(remainder.is_empty());
     }
 }

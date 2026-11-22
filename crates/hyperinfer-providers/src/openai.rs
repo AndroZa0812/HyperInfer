@@ -30,7 +30,7 @@ impl OpenAiProvider {
         let base_url = base_url.into().trim_end_matches('/').to_string();
         Ok(Self {
             http_client: Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
+                .timeout(std::time::Duration::from_secs(300))
                 .build()?,
             name: name.into(),
             base_url,

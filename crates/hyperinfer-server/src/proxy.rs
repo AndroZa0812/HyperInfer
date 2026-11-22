@@ -100,7 +100,20 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
     let host = parsed.host_str().ok_or(400u16)?;
 
-    if let Ok(ip) = host.parse::<IpAddr>() {
+    // Reject localhost (case-insensitive)
+    let host_lower = host.to_lowercase();
+    if host_lower == "localhost" || host_lower.ends_with(".localhost") {
+        return Err(400);
+    }
+
+    // Strip IPv6 brackets before parsing
+    let host_clean = host
+        .strip_prefix('[')
+        .unwrap_or(host)
+        .strip_suffix(']')
+        .unwrap_or(host);
+
+    if let Ok(ip) = host_clean.parse::<IpAddr>() {
         if crate::safe_resolver::is_blocked(ip) {
             return Err(400);
         }
@@ -111,6 +124,16 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
     }
 
     Ok(())
+}
+
+fn resolve_api_key_ref(raw: &str) -> String {
+    if let Some(var_name) = raw.strip_prefix('$') {
+        std::env::var(var_name).unwrap_or_default()
+    } else if let Some(var_name) = raw.strip_prefix("env:") {
+        std::env::var(var_name).unwrap_or_default()
+    } else {
+        raw.to_string()
+    }
 }
 
 fn default_base_url_for_provider(provider: &Provider) -> String {
@@ -201,7 +224,7 @@ pub async fn select_deployment<D: Database>(
             _ => Provider::Other,
         };
         let mut router_deployment = RouterDeployment::new(
-            d.name.clone(),
+            d.model.clone(),
             provider,
             d.model.clone(),
             d.api_key_ref.clone(),
@@ -246,7 +269,7 @@ pub async fn select_deployment<D: Database>(
             selected.api_key_ref.clone(),
         ),
         base_url,
-        api_key: selected.api_key_ref.clone(),
+        api_key: resolve_api_key_ref(&selected.api_key_ref),
         provider: selected.provider.clone(),
     })
 }
