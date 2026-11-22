@@ -52,6 +52,15 @@ impl Telemetry {
         })
     }
 
+    /// Create a Telemetry instance from an existing ConnectionManager.
+    /// This allows sharing a single Redis connection across subsystems.
+    pub fn from_connection_manager(manager: redis::aio::ConnectionManager) -> Self {
+        Self {
+            manager: Some(manager),
+            stream_key: DEFAULT_STREAM_KEY.to_string(),
+        }
+    }
+
     pub fn with_stream_key(mut self, stream_key: &str) -> Self {
         if !stream_key.trim().is_empty() {
             self.stream_key = stream_key.to_string();

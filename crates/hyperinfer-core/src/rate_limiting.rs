@@ -94,6 +94,16 @@ impl RateLimiter {
         })
     }
 
+    /// Create a RateLimiter from an existing ConnectionManager.
+    /// This allows sharing a single Redis connection across subsystems.
+    pub fn from_connection_manager(manager: ConnectionManager) -> Self {
+        Self {
+            redis_manager: Some(manager),
+            default_rpm: 60,
+            default_tpm: 100000,
+        }
+    }
+
     pub async fn is_allowed(
         &self,
         key: &str,

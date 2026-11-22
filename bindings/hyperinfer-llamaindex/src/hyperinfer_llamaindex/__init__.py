@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
-import queue
-import threading
 from typing import Any, cast
 
 from hyperinfer import Client, Config
@@ -17,21 +13,7 @@ from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core.llms.callbacks import llm_completion_callback
 from pydantic import Field
 
-
-def _run_sync(coro: Any) -> Any:
-    """Run *coro* safely from any context — sync or already-async.
-
-    ``asyncio.run()`` raises ``RuntimeError: This event loop is already
-    running`` when called from inside an async context (FastAPI, Jupyter,
-    LangGraph, etc.).  This helper avoids that by delegating to a
-    *dedicated background thread* that owns its own event loop, then blocks
-    the current thread until the result is ready.
-
-    Because we use a fresh thread, there is never a loop conflict regardless
-    of what the caller's thread is doing.
-    """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
+from ._sync import run_sync, run_sync_generator
 
 
 class HyperInferLLM(CustomLLM):
@@ -55,7 +37,7 @@ class HyperInferLLM(CustomLLM):
 
     @llm_completion_callback()
     def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
-        return cast(CompletionResponse, _run_sync(self._acomplete(prompt, **kwargs)))
+        return cast(CompletionResponse, run_sync(self._acomplete(prompt, **kwargs)))
 
     @llm_completion_callback()
     async def _acomplete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
@@ -85,64 +67,19 @@ class HyperInferLLM(CustomLLM):
     ) -> CompletionResponseGen:
         """Synchronous streaming — yields chunks as they arrive from the async generator.
 
-        Uses a background thread + ``queue.Queue`` so chunks are forwarded
-        incrementally rather than collected into a list first.  Safe to call
-        from both plain-sync and already-running-async contexts (FastAPI,
-        Jupyter, LangGraph nodes).
+        Uses the shared persistent background event loop so chunks are
+        forwarded incrementally rather than collected into a list first.  Safe
+        to call from both plain-sync and already-running-async contexts
+        (FastAPI, Jupyter, LangGraph nodes).
         """
-        _sentinel = object()
-        # Bounded to 1: producer blocks until the consumer takes each chunk,
-        # providing natural backpressure and bounding peak memory to one chunk.
-        chunk_queue: queue.Queue[CompletionResponse | BaseException | object] = queue.Queue(
-            maxsize=1
-        )
-        cancel_event = threading.Event()
 
-        async def _producer() -> None:
-            try:
-                async for r in await self.astream_complete(prompt, formatted=formatted, **kwargs):
-                    if cancel_event.is_set():
-                        break
-                    chunk_queue.put(r)
-            except Exception as exc:  # noqa: BLE001
-                chunk_queue.put(exc)
-            finally:
-                # Use timeout to avoid blocking indefinitely if consumer stopped draining
-                while True:
-                    try:
-                        chunk_queue.put(_sentinel, timeout=0.1)
-                        break
-                    except queue.Full:
-                        pass
-
-        def _run_producer() -> None:
-            asyncio.run(_producer())
+        async def _producer() -> CompletionResponseAsyncGen:
+            async for chunk in await self.astream_complete(prompt, formatted=formatted, **kwargs):
+                yield chunk
 
         def _gen() -> CompletionResponseGen:
-            t = threading.Thread(target=_run_producer, daemon=True)
-            t.start()
-            try:
-                while True:
-                    item = chunk_queue.get()
-                    if item is _sentinel:
-                        break
-                    if isinstance(item, BaseException):
-                        raise item
-                    yield cast(CompletionResponse, item)
-            except GeneratorExit:
-                cancel_event.set()
-            except BaseException:
-                cancel_event.set()
-                raise
-            finally:
-                # Continuously drain queue until producer thread finishes
-                # to prevent deadlock if producer blocks on put().
-                while t.is_alive():
-                    try:
-                        chunk_queue.get(timeout=0.05)
-                    except queue.Empty:
-                        pass
-                t.join()
+            for chunk in run_sync_generator(_producer):
+                yield cast(CompletionResponse, chunk)
 
         return _gen()
 

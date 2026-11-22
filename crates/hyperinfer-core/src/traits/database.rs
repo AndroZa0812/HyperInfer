@@ -59,6 +59,21 @@ pub trait Database: Clone + Send + Sync + 'static {
         response_time_ms: i64,
     ) -> Result<UsageLog, DbError>;
 
+    async fn record_usage_batch(&self, entries: &[NewUsageLog]) -> Result<(), DbError> {
+        for entry in entries {
+            self.record_usage(
+                &entry.team_id,
+                &entry.api_key_id,
+                &entry.model,
+                entry.input_tokens,
+                entry.output_tokens,
+                entry.response_time_ms,
+            )
+            .await?;
+        }
+        Ok(())
+    }
+
     // --- Deployment CRUD ---
     async fn list_deployments(
         &self,
@@ -133,6 +148,16 @@ pub struct Quota {
     pub rpm_limit: i32,
     pub tpm_limit: i32,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewUsageLog {
+    pub team_id: String,
+    pub api_key_id: String,
+    pub model: String,
+    pub input_tokens: i32,
+    pub output_tokens: i32,
+    pub response_time_ms: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

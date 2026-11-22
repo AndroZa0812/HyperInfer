@@ -74,6 +74,17 @@ impl ExactMatchCache {
         }
     }
 
+    /// Create an ExactMatchCache from an existing ConnectionManager.
+    /// This allows sharing a single Redis connection across subsystems.
+    pub fn from_connection_manager(manager: ConnectionManager, namespace: &str) -> Self {
+        debug!("ExactMatchCache: using shared Redis connection");
+        Self {
+            conn: Some(manager),
+            ttl_secs: DEFAULT_TTL_SECS,
+            namespace: namespace.to_string(),
+        }
+    }
+
     /// Override the cache TTL.  Returns `self` for chaining.
     pub fn with_ttl(mut self, secs: u64) -> Self {
         self.ttl_secs = secs;

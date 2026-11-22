@@ -504,6 +504,176 @@ impl TelemetryConsumer {
         Ok(handle)
     }
 
+    async fn read_batch(
+        conn: &mut MultiplexedConnection,
+        stream_key: &str,
+        consumer_group: &str,
+        consumer_name: &str,
+    ) -> Result<Vec<StreamEntry>, redis::RedisError> {
+        #[allow(clippy::type_complexity)]
+        let results: Vec<(String, Vec<StreamEntry>)> = redis::cmd("XREADGROUP")
+            .arg("GROUP")
+            .arg(consumer_group)
+            .arg(consumer_name)
+            .arg("COUNT")
+            .arg(XREADGROUP_COUNT)
+            .arg("BLOCK")
+            .arg(XREADGROUP_BLOCK_MS)
+            .arg("STREAMS")
+            .arg(stream_key)
+            .arg(">")
+            .query_async(conn)
+            .await?;
+
+        Ok(results
+            .into_iter()
+            .flat_map(|(_stream, entries)| entries)
+            .collect())
+    }
+
+    pub async fn start_consuming_batches<F, Fut>(
+        &self,
+        handler: F,
+        cancellation_token: CancellationToken,
+    ) -> Result<tokio::task::JoinHandle<()>, Box<dyn std::error::Error + Send + Sync>>
+    where
+        F: Fn(Vec<UsageRecord>) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = Result<(), Box<dyn std::error::Error + Send + Sync>>>
+            + Send
+            + 'static,
+    {
+        let client = Arc::clone(&self.client);
+        let stream_key = self.stream_key.clone();
+        let consumer_group = self.consumer_group.clone();
+        let consumer_name = self.consumer_name.clone();
+
+        let handle = tokio::spawn(async move {
+            let mut backoff: u64 = 1;
+            loop {
+                if cancellation_token.is_cancelled() {
+                    info!("Telemetry consumer shutting down");
+                    return;
+                }
+
+                let mut conn = match client.get_multiplexed_async_connection().await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        error!(
+                            "Failed to connect to Redis: {}. Reconnecting in {}s",
+                            e, backoff
+                        );
+                        tokio::select! {
+                            _ = cancellation_token.cancelled() => {
+                                info!("Telemetry consumer shutting down");
+                                return;
+                            }
+                            _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff)) => {
+                                backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                            }
+                        }
+                        continue;
+                    }
+                };
+
+                if let Err(e) =
+                    Self::ensure_consumer_group(&mut conn, &stream_key, &consumer_group).await
+                {
+                    warn!("Failed to ensure consumer group: {}", e);
+                }
+
+                info!("Telemetry consumer started (batch mode)");
+                backoff = 1;
+
+                loop {
+                    if cancellation_token.is_cancelled() {
+                        info!("Telemetry consumer shutting down");
+                        return;
+                    }
+
+                    let entries = tokio::select! {
+                        result = Self::read_batch(
+                            &mut conn,
+                            &stream_key,
+                            &consumer_group,
+                            &consumer_name,
+                        ) => {
+                            match result {
+                                Ok(entries) => {
+                                    backoff = 1;
+                                    entries
+                                }
+                                Err(e) => {
+                                    error!(
+                                        "Telemetry consumer error: {}. Reconnecting in {}s",
+                                        e, backoff
+                                    );
+                                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                    break;
+                                }
+                            }
+                        }
+                        _ = cancellation_token.cancelled() => {
+                            info!("Telemetry consumer shutting down");
+                            return;
+                        }
+                    };
+
+                    let mut valid_records = Vec::new();
+                    let mut valid_ids = Vec::new();
+                    let mut unparseable_ids = Vec::new();
+
+                    for (msg_id, fields) in entries {
+                        match Self::parse_entry(Some(&msg_id), &fields) {
+                            Some(record) => {
+                                valid_records.push(record);
+                                valid_ids.push(msg_id);
+                            }
+                            None => {
+                                warn!("Failed to parse telemetry entry: {}", msg_id);
+                                unparseable_ids.push(msg_id);
+                            }
+                        }
+                    }
+
+                    if !unparseable_ids.is_empty() {
+                        let id_refs: Vec<&str> =
+                            unparseable_ids.iter().map(|s| s.as_str()).collect();
+                        if let Err(e) =
+                            Self::ack_messages(&mut conn, &stream_key, &consumer_group, &id_refs)
+                                .await
+                        {
+                            error!("Failed to ack unparseable messages: {}", e);
+                        }
+                    }
+
+                    if !valid_records.is_empty() {
+                        match handler(valid_records).await {
+                            Ok(()) => {
+                                let id_refs: Vec<&str> =
+                                    valid_ids.iter().map(|s| s.as_str()).collect();
+                                if let Err(e) = Self::ack_messages(
+                                    &mut conn,
+                                    &stream_key,
+                                    &consumer_group,
+                                    &id_refs,
+                                )
+                                .await
+                                {
+                                    error!("Failed to ack messages: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                error!("Handler failed for batch: {}", e);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        Ok(handle)
+    }
+
     fn parse_entry(msg_id: Option<&str>, fields: &[(String, String)]) -> Option<UsageRecord> {
         let mut key = None;
         let mut model = None;

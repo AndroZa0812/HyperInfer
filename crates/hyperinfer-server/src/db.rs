@@ -6,7 +6,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use hyperinfer_core::{
     ApiKey, ConfigStore, CreateDeploymentRequest, Database, DbError, Deployment, ModelAlias,
-    PolicyUpdate, Quota, RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog, User,
+    NewUsageLog, PolicyUpdate, Quota, RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog,
+    User,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -296,6 +297,38 @@ impl Database for SqlxDb {
         .await?;
 
         Ok(UsageLog::from(result))
+    }
+
+    async fn record_usage_batch(&self, entries: &[NewUsageLog]) -> Result<(), DbError> {
+        if entries.is_empty() {
+            return Ok(());
+        }
+
+        let parsed: Vec<(uuid::Uuid, uuid::Uuid, &NewUsageLog)> = entries
+            .iter()
+            .map(|entry| {
+                let team_uuid =
+                    uuid::Uuid::parse_str(&entry.team_id).map_err(|_| DbError::InvalidUuid)?;
+                let api_key_uuid =
+                    uuid::Uuid::parse_str(&entry.api_key_id).map_err(|_| DbError::InvalidUuid)?;
+                Ok((team_uuid, api_key_uuid, entry))
+            })
+            .collect::<Result<_, DbError>>()?;
+
+        let mut builder = sqlx::QueryBuilder::new(
+            "INSERT INTO usage_logs (team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms) ",
+        );
+        builder.push_values(parsed, |mut b, (team_uuid, api_key_uuid, entry)| {
+            b.push_bind(team_uuid)
+                .push_bind(api_key_uuid)
+                .push_bind(&entry.model)
+                .push_bind(entry.input_tokens)
+                .push_bind(entry.output_tokens)
+                .push_bind(entry.response_time_ms);
+        });
+
+        builder.build().execute(&self.pool).await?;
+        Ok(())
     }
 
     async fn count_users_by_role(&self, role: &str) -> Result<i64, DbError> {

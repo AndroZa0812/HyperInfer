@@ -16,7 +16,9 @@ pub use error::{ConfigError, DbError, HyperInferError};
 pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY_PREFIX};
 pub use redis::PolicyUpdate;
 pub use telemetry_consumer::TelemetryConsumer;
-pub use traits::{ApiKey, ConfigStore, Database, ModelAlias, Quota, Team, UsageLog, User};
+pub use traits::{
+    ApiKey, ConfigStore, Database, ModelAlias, NewUsageLog, Quota, Team, UsageLog, User,
+};
 pub use types::{
     ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, CreateDeploymentRequest,
     Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, ToolCall, ToolDefinition,
