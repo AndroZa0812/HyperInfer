@@ -51,7 +51,7 @@ for (const name of packages) {
 }
 
 if (bumped.length > 0) {
-  const result = execFileSync('bun', ['run', 'scripts/sync-versions.js']).toString();
+  const result = execFileSync(process.execPath, ['scripts/sync-versions.js']).toString();
   console.error(result.trim());
 }
 

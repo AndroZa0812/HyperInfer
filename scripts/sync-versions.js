@@ -4,8 +4,11 @@ const path = require('path');
 const workspaces = [
   'crates/hyperinfer-client',
   'crates/hyperinfer-core',
+  'crates/hyperinfer-providers',
   'crates/hyperinfer-python',
+  'crates/hyperinfer-router',
   'crates/hyperinfer-server',
+  'crates/hypercode',
   'bindings/hyperinfer-langchain',
   'bindings/hyperinfer-llamaindex'
 ];
