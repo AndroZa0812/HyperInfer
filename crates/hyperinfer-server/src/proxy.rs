@@ -228,7 +228,8 @@ impl ProxyRouter {
         &self.providers
     }
 
-    /// Select a deployment using the shared `RouterEngine` and `RoutingState`.
+    /// Select a deployment using a per-request `RouterEngine` (to avoid pool races)
+    /// while still passing the shared `RoutingState` for metrics/latency/cooldowns.
     pub async fn select_deployment<D: Database>(
         &self,
         db: &D,
@@ -241,31 +242,35 @@ impl ProxyRouter {
             return Err(RoutingError::NoDeployments(request.model.clone()));
         }
 
+        // Build a per-request engine to avoid mutating the shared pool.
+        let engine = RouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
+
         for (alias, target) in model_aliases {
-            self.engine.set_alias(alias, target).await;
+            engine.set_alias(alias, target).await;
         }
 
         if let Ok(Some(config)) = db.get_routing_config().await {
-            self.engine.set_default_strategy(&config.strategy).await;
+            engine.set_default_strategy(&config.strategy).await;
             if let Ok(groups) =
                 serde_json::from_value::<HashMap<String, String>>(config.routing_groups)
             {
                 for (model, strategy_name) in groups {
-                    self.engine.set_routing_group(&model, &strategy_name).await;
+                    engine.set_routing_group(&model, &strategy_name).await;
                 }
             }
         }
 
         let router_deployments: Vec<RouterDeployment> =
             deployments.iter().map(core_to_router_deployment).collect();
-        self.engine.rebuild_pool(router_deployments).await;
+        engine.rebuild_pool(router_deployments).await;
 
         let ctx = RoutingContext {
             team_id: auth.map(|a| a.team_id.clone()),
             ..Default::default()
         };
-        let result = self
-            .engine
+        // Pass the shared state so metrics/latency/cooldowns are still shared.
+        let result = engine
             .select_deployment(&request.model, self.state.as_ref(), &ctx)
             .await?;
 

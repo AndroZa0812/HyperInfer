@@ -664,6 +664,15 @@ async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C
     };
 
     // 2. Enforce team RPM / TPM quotas
+    let estimated_tokens: u64 = (request
+        .messages
+        .iter()
+        .map(|m| m.content.len())
+        .sum::<usize>()
+        / 4)
+    .max(1) as u64;
+    let mut team_tpm_limit: Option<u64> = None;
+
     if let Ok(Some(quota)) = state.db.get_quota(&auth.team_id).await {
         if let Some(ref limiter) = state.rate_limiter {
             if quota.rpm_limit > 0 {
@@ -684,8 +693,10 @@ async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C
                 }
             }
             if quota.tpm_limit > 0 {
+                let tpm_limit = quota.tpm_limit as u64;
+                team_tpm_limit = Some(tpm_limit);
                 match limiter
-                    .check_tpm(&auth.team_id, quota.tpm_limit as u64, 1)
+                    .check_tpm(&auth.team_id, tpm_limit, estimated_tokens)
                     .await
                 {
                     Ok(false) => {
@@ -775,6 +786,7 @@ async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C
             let mut output_tokens: u32 = 0;
             let mut stream = stream;
 
+            let mut stream_failed = false;
             while let Some(item) = stream.next().await {
                 match item {
                     Ok(chunk) => {
@@ -789,9 +801,19 @@ async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C
                     Err(e) => {
                         tracing::warn!(error = %e, "Error in upstream SSE chunk");
                         router_clone.record_failure(&deployment_id).await;
+                        stream_failed = true;
                         break;
                     }
                 }
+            }
+
+            if stream_failed {
+                yield Ok::<SseEvent, std::convert::Infallible>(
+                    SseEvent::default()
+                        .event("error")
+                        .data("Upstream streaming request failed"),
+                );
+                return;
             }
 
             yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data("[DONE]"));
@@ -843,6 +865,17 @@ async fn chat_completions_handler<D: Database + Clone + Send + Sync + 'static, C
     proxy_router
         .record_success(&deployment_id, elapsed_ms as f64, total_tokens)
         .await;
+
+    if let (Some(ref limiter), Some(tpm_limit)) = (&state.rate_limiter, team_tpm_limit) {
+        if total_tokens > estimated_tokens {
+            if let Err(e) = limiter
+                .check_tpm(&auth.team_id, tpm_limit, total_tokens - estimated_tokens)
+                .await
+            {
+                tracing::warn!(team_id = %auth.team_id, error = %e, "Post-response TPM accounting failed");
+            }
+        }
+    }
 
     if let Err(e) = state
         .db
