@@ -18,6 +18,8 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .dns_resolver(Arc::new(crate::safe_resolver::SafeResolver))
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
         .build()
         .expect("Failed to build secure reqwest HTTP client")
 });

@@ -14,8 +14,6 @@
 use hyperinfer_core::{ChatRequest, ChatResponse};
 use redis::{aio::ConnectionManager, AsyncCommands};
 use sha2::{Digest, Sha256};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::{debug, warn};
 
 /// Default TTL for cached responses (5 minutes).
@@ -24,7 +22,7 @@ pub const DEFAULT_TTL_SECS: u64 = 300;
 /// Exact-match Redis cache for [`ChatResponse`] values.
 #[derive(Clone)]
 pub struct ExactMatchCache {
-    conn: Option<Arc<Mutex<ConnectionManager>>>,
+    conn: Option<ConnectionManager>,
     ttl_secs: u64,
     /// Namespace for cache keys to avoid cross-client collisions.
     namespace: String,
@@ -48,7 +46,7 @@ impl ExactMatchCache {
                 Ok(mgr) => {
                     debug!("ExactMatchCache: connected to Redis");
                     Self {
-                        conn: Some(Arc::new(Mutex::new(mgr))),
+                        conn: Some(mgr),
                         ttl_secs: DEFAULT_TTL_SECS,
                         namespace: namespace.to_string(),
                     }
@@ -109,9 +107,9 @@ impl ExactMatchCache {
         let conn = self.conn.as_ref()?;
         let key = self.cache_key(request)?;
 
-        let mut guard = conn.lock().await;
-        let raw: Option<String> = guard.get(&key).await.ok()?;
-        drop(guard);
+        // Clone the ConnectionManager for this operation (it's cheap and lock-free).
+        let mut conn = conn.clone();
+        let raw: Option<String> = conn.get(&key).await.ok()?;
 
         let raw = raw?;
         match serde_json::from_str::<ChatResponse>(&raw) {
@@ -147,9 +145,9 @@ impl ExactMatchCache {
             }
         };
 
-        let mut guard = conn.lock().await;
-        let result: redis::RedisResult<()> = guard.set_ex(&key, &raw, self.ttl_secs).await;
-        drop(guard);
+        // Clone the ConnectionManager for this operation (it's cheap and lock-free).
+        let mut conn = conn.clone();
+        let result: redis::RedisResult<()> = conn.set_ex(&key, &raw, self.ttl_secs).await;
 
         if let Err(e) = result {
             warn!("Cache write error: {}", e);
