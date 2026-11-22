@@ -159,10 +159,14 @@ impl Default for AgentConfig {
                 "You are HyperCode, an expert AI coding assistant.\n",
                 "Use the provided tools to inspect the codebase, make surgical edits, ",
                 "and verify your changes before answering.\n",
-                "Prefer `edit_file` over `write_file` when modifying existing files."
+                "Prefer `edit_file` over `write_file` when modifying existing files.\n",
+                "Batch independent `read_file`, `grep`, `glob`, and `edit_file` calls in parallel ",
+                "within the same turn instead of issuing them one at a time.\n",
+                "Always run relevant build, test, and lint checks after your edits and fix any ",
+                "reported errors before finishing."
             )
             .to_string(),
-            max_steps: 25,
+            max_steps: 50,
             temperature: Some(0.0),
             max_tokens: Some(4096),
             approval_mode: ApprovalMode::SmartSandbox,
