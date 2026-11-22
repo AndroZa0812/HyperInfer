@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
   workflow_dispatch:
     inputs:
       packages:
@@ -48,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.detect.outputs.changed || steps.bump.outputs.changed || '[]' }}
+      release_tag: ${{ steps.detect.outputs.release_tag || steps.bump.outputs.release_tag || '' }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,13 +58,17 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Detect changed packages
-        if: github.event_name == 'push'
+      - name: Detect packages for tagged release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         id: detect
         run: |
           bun install
           CHANGED=$(bun scripts/get-changed-packages.js)
+          if [ "$CHANGED" = "[]" ] || [ -z "$CHANGED" ]; then
+            CHANGED='["hyperinfer-python","hyperinfer-langchain","hyperinfer-llamaindex"]'
+          fi
           echo "changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
 
       - name: Bump versions
         if: github.event_name == 'workflow_dispatch'
@@ -71,7 +76,9 @@ jobs:
         run: |
           bun install
           BUMPED=$(bun scripts/bump-versions.js "${{ inputs.packages }}" "${{ inputs.bump }}")
+          VERSION=$(bun -e 'console.log(JSON.parse(require("fs").readFileSync("crates/hyperinfer-python/package.json", "utf8")).version)')
           echo "changed=$BUMPED" >> "$GITHUB_OUTPUT"
+          echo "release_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
 
   # ---------------------------------------------------------------------------
   # Build wheels for each changed package across platforms
@@ -140,13 +147,13 @@ jobs:
           path: dist/
 
   # ---------------------------------------------------------------------------
-  # Publish all wheels to TestPyPI via OIDC trusted publishing
+  # Publish all wheels to PyPI via OIDC trusted publishing
   # ---------------------------------------------------------------------------
   publish:
-    name: Publish to TestPyPI
+    name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
-    environment: testpypi
+    environment: pypi
     permissions:
       id-token: write
     steps:
@@ -156,10 +163,9 @@ jobs:
           path: dist/
           merge-multiple: true
 
-      - name: Publish to TestPyPI
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          repository-url: https://test.pypi.org/legacy/
           packages-dir: dist/
           skip-existing: true
 
@@ -195,7 +201,7 @@ jobs:
   # ---------------------------------------------------------------------------
   github-release:
     name: Create GitHub Release
-    needs: [publish, publish-crates]
+    needs: [prepare, publish, publish-crates]
     if: always() && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
@@ -210,7 +216,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: "v${{ github.sha }}"
-          name: "Release ${{ github.sha }}"
+          tag_name: "${{ needs.prepare.outputs.release_tag }}"
+          name: "Release ${{ needs.prepare.outputs.release_tag }}"
+          generate_release_notes: true
           files: dist/*
           draft: false
