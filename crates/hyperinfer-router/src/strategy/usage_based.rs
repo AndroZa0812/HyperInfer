@@ -43,11 +43,10 @@ impl RoutingStrategy for UsageBased {
         let mut eligible: Vec<(usize, f64)> = Vec::new();
 
         for (i, deployment) in candidates.iter().enumerate() {
-            if state.is_cooled_down(&deployment.id).await? {
+            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
+            if metrics.cooled_down {
                 continue;
             }
-
-            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
 
             let utilization = match deployment.tpm_limit {
                 Some(limit) if limit > 0 => metrics.tpm_used as f64 / limit as f64,

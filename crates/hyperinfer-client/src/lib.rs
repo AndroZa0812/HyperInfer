@@ -186,7 +186,7 @@ impl HyperInferClient {
             config,
             http_caller,
             router,
-            router_engine: Arc::new(RouterEngine::new().await),
+            router_engine: Arc::new(RouterEngine::with_redis(redis_url).await),
             rate_limiter,
             telemetry,
             cache,

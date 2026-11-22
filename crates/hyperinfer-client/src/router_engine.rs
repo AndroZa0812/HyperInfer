@@ -3,6 +3,7 @@ use hyperinfer_router::{
     deployment::Deployment as RouterDeployment,
     engine::{GlobalLimits, RouterEngine as HyperInferRouterEngine, RoutingResult},
     error::RoutingError,
+    state::redis_state::{RedisConfig, RedisRoutingState},
     strategy::{
         cost_based::CostBased, latency_based::LatencyBased, least_busy::LeastBusy,
         usage_based::UsageBased, weighted_shuffle::WeightedShuffle, RoutingContext, RoutingState,
@@ -10,6 +11,7 @@ use hyperinfer_router::{
 };
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::warn;
 
 /// Client-side router engine that wraps the core routing engine
 pub struct RouterEngine {
@@ -23,6 +25,28 @@ impl RouterEngine {
         let engine = HyperInferRouterEngine::new(GlobalLimits::default());
         Self::register_all_strategies(&engine).await;
         let state = Arc::new(NoopState);
+        Self {
+            inner: Arc::new(engine),
+            state,
+        }
+    }
+
+    /// Create a new router engine backed by `RedisRoutingState`, gracefully falling back
+    /// to `NoopState` if Redis is unavailable.
+    pub async fn with_redis(redis_url: &str) -> Self {
+        let engine = HyperInferRouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
+        let state: Arc<dyn RoutingState> =
+            match RedisRoutingState::new(redis_url, RedisConfig::default()).await {
+                Ok(redis_state) => Arc::new(redis_state),
+                Err(e) => {
+                    warn!(
+                        error = %e,
+                        "Redis unavailable for RouterEngine; falling back to NoopState"
+                    );
+                    Arc::new(NoopState)
+                }
+            };
         Self {
             inner: Arc::new(engine),
             state,

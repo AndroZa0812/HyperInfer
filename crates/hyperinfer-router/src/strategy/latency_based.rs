@@ -80,11 +80,10 @@ impl RoutingStrategy for LatencyBased {
         let mut eligible: Vec<(usize, f64)> = Vec::new();
 
         for (i, deployment) in candidates.iter().enumerate() {
-            if state.is_cooled_down(&deployment.id).await? {
+            let metrics = all_metrics.get(&deployment.id);
+            if metrics.is_some_and(|m| m.cooled_down) {
                 continue;
             }
-
-            let metrics = all_metrics.get(&deployment.id);
             let latency = match metrics {
                 Some(m) if m.latency_ewma_ms > 0.0 => m.latency_ewma_ms,
                 _ => fallback_latency,

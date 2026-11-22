@@ -82,6 +82,7 @@ fn metrics_from_values(values: &[Option<String>], base: usize) -> DeploymentMetr
         total_requests: parse_u64(&values[base + 4]),
         total_failures: parse_u64(&values[base + 5]),
         last_failure_ts: None,
+        cooled_down: values.get(base + 6).and_then(|v| v.as_ref()).is_some(),
     }
 }
 
@@ -139,6 +140,7 @@ impl RoutingState for RedisRoutingState {
             format!("{}:rpm", prefix),
             format!("{}:total_req", prefix),
             format!("{}:total_fail", prefix),
+            format!("{}:cooldown", prefix),
         ];
 
         let values: Vec<Option<String>> = redis::cmd("MGET")
@@ -148,6 +150,7 @@ impl RoutingState for RedisRoutingState {
             .arg(&keys[3])
             .arg(&keys[4])
             .arg(&keys[5])
+            .arg(&keys[6])
             .query_async(&mut conn)
             .await?;
 
@@ -163,7 +166,7 @@ impl RoutingState for RedisRoutingState {
         }
 
         let mut conn = self.manager.clone();
-        let keys_per_deployment = 6;
+        let keys_per_deployment = 7;
         let mut all_keys: Vec<String> = Vec::with_capacity(ids.len() * keys_per_deployment);
 
         for id in ids {
@@ -174,6 +177,7 @@ impl RoutingState for RedisRoutingState {
             all_keys.push(format!("{}:rpm", prefix));
             all_keys.push(format!("{}:total_req", prefix));
             all_keys.push(format!("{}:total_fail", prefix));
+            all_keys.push(format!("{}:cooldown", prefix));
         }
 
         let mut cmd = redis::cmd("MGET");
@@ -186,7 +190,7 @@ impl RoutingState for RedisRoutingState {
         let mut result = HashMap::with_capacity(ids.len());
         for (i, id) in ids.iter().enumerate() {
             let base = i * keys_per_deployment;
-            if base + 5 < values.len() {
+            if base + 6 < values.len() {
                 result.insert(id.to_string(), metrics_from_values(&values, base));
             }
         }

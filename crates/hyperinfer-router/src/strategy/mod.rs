@@ -20,6 +20,8 @@ pub struct DeploymentMetrics {
     pub total_requests: u64,
     pub total_failures: u64,
     pub last_failure_ts: Option<u64>,
+    #[serde(default)]
+    pub cooled_down: bool,
 }
 
 #[derive(Debug, Clone, Default)]

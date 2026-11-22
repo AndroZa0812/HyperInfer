@@ -53,11 +53,10 @@ impl RoutingStrategy for CostBased {
         let mut eligible: Vec<usize> = Vec::new();
 
         for (i, deployment) in candidates.iter().enumerate() {
-            if state.is_cooled_down(&deployment.id).await? {
+            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
+            if metrics.cooled_down {
                 continue;
             }
-
-            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
 
             if let Some(rpm_limit) = deployment.rpm_limit {
                 if metrics.rpm_used >= rpm_limit {
