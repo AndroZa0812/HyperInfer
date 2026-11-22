@@ -2,10 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-import concurrent.futures
-import queue
-import threading
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, cast
 
@@ -20,6 +16,8 @@ from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
 from pydantic import Field
 
+from ._sync import run_sync, run_sync_generator
+
 
 def _format_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
     """Convert a list of LangChain ``BaseMessage`` objects to OpenAI-style dicts.
@@ -30,22 +28,6 @@ def _format_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
     and ``function_call`` from ``additional_kwargs``.
     """
     return [convert_message_to_dict(msg) for msg in messages]
-
-
-def _run_sync(coro: Any) -> Any:
-    """Run *coro* safely from any context — sync or already-async.
-
-    ``asyncio.run()`` raises ``RuntimeError: This event loop is already
-    running`` when called from inside an async context (FastAPI, Jupyter,
-    LangGraph, etc.).  This helper avoids that by delegating to a
-    *dedicated background thread* that owns its own event loop, then blocks
-    the current thread until the result is ready.
-
-    Because we use a fresh thread, there is never a loop conflict regardless
-    of what the caller's thread is doing.
-    """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(asyncio.run, coro).result()
 
 
 class HyperInferChatModel(BaseChatModel):
@@ -71,10 +53,7 @@ class HyperInferChatModel(BaseChatModel):
         # run_manager here is a sync CallbackManagerForLLMRun; _agenerate
         # expects the async variant, so we pass None — the non-streaming path
         # does not invoke any token callbacks.
-        return cast(
-            ChatResult,
-            _run_sync(self._agenerate(messages, stop, None, **kwargs)),
-        )
+        return run_sync(self._agenerate(messages, stop, None, **kwargs))
 
     async def _agenerate(
         self,
@@ -116,76 +95,21 @@ class HyperInferChatModel(BaseChatModel):
     ) -> Iterator[ChatGenerationChunk]:
         """Synchronous streaming — yields chunks as they arrive from the async generator.
 
-        Uses a background thread + bounded ``queue.Queue`` so chunks are
+        Uses the shared persistent background event loop so chunks are
         forwarded incrementally rather than collected into a list first.  Safe
         to call from both plain-sync and already-running-async contexts
         (FastAPI, Jupyter, LangGraph nodes).
-
-        Backpressure and cancellation
-        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-        The queue is bounded (size 1) so the producer blocks after each chunk
-        until the consumer takes it.  A ``cancel_event`` is set by the
-        consumer whenever it exits early (break, exception, or
-        ``GeneratorExit``), allowing the producer to stop iterating before the
-        upstream stream finishes instead of running to completion and buffering
-        all remaining chunks.
         """
-        _sentinel = object()
-        # Bounded to 1: producer blocks until the consumer takes each chunk,
-        # providing natural backpressure and bounding peak memory to one chunk.
-        chunk_queue: queue.Queue[ChatGenerationChunk | BaseException | object] = queue.Queue(
-            maxsize=1
-        )
-        cancel_event = threading.Event()
 
-        async def _producer() -> None:
-            try:
-                # run_manager here is a sync CallbackManagerForLLMRun; _astream
-                # expects the async variant, so we pass None — token callbacks
-                # are not available when bridging from a sync context.
-                async for chunk in self._astream(messages, stop, None, **kwargs):
-                    if cancel_event.is_set():
-                        break
-                    chunk_queue.put(chunk)
-            except Exception as exc:  # noqa: BLE001
-                chunk_queue.put(exc)
-            finally:
-                # Use timeout to avoid blocking indefinitely if consumer stopped draining
-                while True:
-                    try:
-                        chunk_queue.put(_sentinel, timeout=0.1)
-                        break
-                    except queue.Full:
-                        pass
+        async def _producer() -> AsyncIterator[ChatGenerationChunk]:
+            # run_manager here is a sync CallbackManagerForLLMRun; _astream
+            # expects the async variant, so we pass None — token callbacks
+            # are not available when bridging from a sync context.
+            async for chunk in self._astream(messages, stop, None, **kwargs):
+                yield chunk
 
-        def _run_producer() -> None:
-            asyncio.run(_producer())
-
-        t = threading.Thread(target=_run_producer, daemon=True)
-        t.start()
-
-        try:
-            while True:
-                item = chunk_queue.get()
-                if item is _sentinel:
-                    break
-                if isinstance(item, BaseException):
-                    raise item
-                yield cast(ChatGenerationChunk, item)
-        except GeneratorExit:
-            cancel_event.set()
-        except BaseException:
-            cancel_event.set()
-            raise
-        finally:
-            # Continuously drain queue until producer thread finishes
-            # to prevent deadlock if producer blocks on put().
-            while t.is_alive():
-                try:
-                    chunk_queue.get(timeout=0.05)
-                except queue.Empty:
-                    pass
-            t.join()
+        for chunk in run_sync_generator(_producer):
+            yield cast(ChatGenerationChunk, chunk)
 
     async def _astream(
         self,

@@ -27,6 +27,7 @@ use hyperinfer_server::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
@@ -1219,8 +1220,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let redis_url =
         std::env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
+    let max_connections: u32 = std::env::var("DATABASE_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(20);
     let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections(max_connections)
         .connect(&database_url)
         .await?;
 
@@ -1254,73 +1260,91 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let db_clone = db.clone();
     let telemetry_consumer = TelemetryConsumer::new(&redis_url).await?;
     let cancellation_token = CancellationToken::new();
+
+    // Key-hash cache: hash -> (team_id, api_key_id), bounded at 10,000 entries
+    let key_cache: Arc<RwLock<HashMap<String, (String, String)>>> =
+        Arc::new(RwLock::new(HashMap::new()));
+    let key_cache_clone = key_cache.clone();
+
     let _telemetry_handle = telemetry_consumer
-        .start_consuming(
-            move |record: UsageRecord| {
+        .start_consuming_batches(
+            move |records: Vec<UsageRecord>| {
                 let db = db_clone.clone();
+                let cache = key_cache_clone.clone();
                 async move {
-                    match resolve_api_key(&db, &record.key).await {
-                        Ok(Some((team_id, api_key_id))) => {
-                            match db
-                                .record_usage(
-                                    &team_id,
-                                    &api_key_id,
-                                    &record.model,
-                                    i32::try_from(record.input_tokens).unwrap_or_else(|_| {
-                                        tracing::warn!(
-                                            "input_tokens overflow: {}",
-                                            record.input_tokens
-                                        );
-                                        i32::MAX
-                                    }),
-                                    i32::try_from(record.output_tokens).unwrap_or_else(|_| {
-                                        tracing::warn!(
-                                            "output_tokens overflow: {}",
-                                            record.output_tokens
-                                        );
-                                        i32::MAX
-                                    }),
-                                    i64::try_from(record.response_time_ms).unwrap_or_else(|_| {
-                                        tracing::warn!(
-                                            "response_time_ms overflow: {}",
-                                            record.response_time_ms
-                                        );
-                                        i64::MAX
-                                    }),
-                                )
-                                .await
-                            {
-                                Ok(_) => {
+                    let mut batch = Vec::with_capacity(records.len());
+                    let mut cache_w = cache.write().await;
+
+                    for record in records {
+                        let key_hash = hash_key(&record.key);
+                        let (team_id, api_key_id) = match cache_w.get(&key_hash) {
+                            Some(v) => v.clone(),
+                            None => match resolve_api_key(&db, &record.key).await {
+                                Ok(Some(v)) => {
+                                    if cache_w.len() >= 10_000 {
+                                        cache_w.clear();
+                                    }
+                                    cache_w.insert(key_hash, v.clone());
+                                    v
+                                }
+                                Ok(None) => {
                                     tracing::debug!(
-                                        "Recorded usage for key_id: {}",
+                                        "API key not found for key_id: {}, skipping usage record",
                                         key_id(&record.key)
-                                    )
+                                    );
+                                    continue;
                                 }
                                 Err(e) => {
                                     tracing::error!(
-                                        "Failed to record usage for key_id {}: {:?}",
+                                        "Failed to resolve API key for key_id {}: {:?}",
                                         key_id(&record.key),
                                         e
                                     );
                                     return Err(e.into());
                                 }
+                            },
+                        };
+
+                        batch.push(hyperinfer_core::NewUsageLog {
+                            team_id,
+                            api_key_id,
+                            model: record.model,
+                            input_tokens: i32::try_from(record.input_tokens).unwrap_or_else(|_| {
+                                tracing::warn!("input_tokens overflow: {}", record.input_tokens);
+                                i32::MAX
+                            }),
+                            output_tokens: i32::try_from(record.output_tokens).unwrap_or_else(
+                                |_| {
+                                    tracing::warn!(
+                                        "output_tokens overflow: {}",
+                                        record.output_tokens
+                                    );
+                                    i32::MAX
+                                },
+                            ),
+                            response_time_ms: i64::try_from(record.response_time_ms)
+                                .unwrap_or_else(|_| {
+                                    tracing::warn!(
+                                        "response_time_ms overflow: {}",
+                                        record.response_time_ms
+                                    );
+                                    i64::MAX
+                                }),
+                        });
+                    }
+
+                    if !batch.is_empty() {
+                        match db.record_usage_batch(&batch).await {
+                            Ok(_) => {
+                                tracing::debug!("Recorded {} usage entries in batch", batch.len());
+                            }
+                            Err(e) => {
+                                tracing::error!("Failed to record usage batch: {:?}", e);
+                                return Err(e.into());
                             }
                         }
-                        Ok(None) => {
-                            tracing::debug!(
-                                "API key not found for key_id: {}, skipping usage record",
-                                key_id(&record.key)
-                            );
-                        }
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to resolve API key for key_id {}: {:?}",
-                                key_id(&record.key),
-                                e
-                            );
-                            return Err(e.into());
-                        }
                     }
+
                     Ok(())
                 }
             },

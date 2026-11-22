@@ -37,6 +37,8 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .dns_resolver(Arc::new(safe_resolver::SafeResolver))
         .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .read_timeout(std::time::Duration::from_secs(60))
         .build()
         .expect("Failed to build secure reqwest HTTP client")
 });
@@ -168,13 +170,19 @@ impl HyperInferClient {
                 .with_aliases(config.model_aliases.clone())
                 .with_default_provider(config.default_provider.clone()),
         );
-        let rate_limiter = RateLimiter::new(Some(redis_url))
+
+        // Create a single Redis client and connection manager shared across subsystems
+        let redis_client = redis::Client::open(redis_url)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
+        let manager = redis::aio::ConnectionManager::new(redis_client.clone())
             .await
             .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
-        let telemetry = Telemetry::new(redis_url)
-            .await
-            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string())))?;
-        let cache = ExactMatchCache::new(redis_url, "default").await;
+
+        // Share the connection manager across subsystems
+        let rate_limiter = RateLimiter::from_connection_manager(manager.clone());
+        let telemetry = Telemetry::from_connection_manager(manager.clone());
+        let cache = ExactMatchCache::from_connection_manager(manager, "default");
+
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
