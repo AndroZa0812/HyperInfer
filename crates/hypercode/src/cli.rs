@@ -38,7 +38,7 @@ impl Default for CliOptions {
             approval_mode: ApprovalMode::SmartSandbox,
             openshell_sandbox: std::env::var("HYPERCODE_OPENSHELL_SANDBOX").ok(),
             local_url: std::env::var("HYPERCODE_LOCAL_URL").ok(),
-            max_steps: 25,
+            max_steps: 50,
             a2a_port: None,
             a2a_stdio: false,
             show_help: false,
@@ -159,7 +159,7 @@ OPTIONS:
         --approval <MODE>        Approval mode: smart (default), mutations, all, auto
         --openshell <NAME>       Run bash commands inside an NVIDIA OpenShell sandbox
         --local-url <URL>        OpenAI-compatible local endpoint (e.g. http://localhost:11434)
-        --max-steps <N>          Max ReAct tool-calling iterations per turn (default: 25)
+        --max-steps <N>          Max ReAct tool-calling iterations per turn (default: 50)
         --a2a-port <PORT>        Start an A2A HTTP/SSE JSON-RPC server on 127.0.0.1:<PORT>
         --a2a-stdio              Start an A2A JSON-RPC 2.0 server over stdin/stdout
     -h, --help                   Show this help message
