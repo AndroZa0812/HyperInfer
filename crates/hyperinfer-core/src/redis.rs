@@ -11,10 +11,56 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use crate::error::ConfigError;
-use crate::types::Config;
+use crate::types::{Config, Provider, Quota, RoutingRule};
+use std::collections::HashMap;
 
 pub const CONFIG_CHANNEL: &str = "hyperinfer:config_updates";
 pub const CONFIG_KEY: &str = "hyperinfer:config";
+
+/// Internal Redis serialization DTO for `Config` that preserves `api_keys`
+/// (unlike public `Config`, which skips `api_keys` during serialization to prevent HTTP leaks).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredConfig {
+    #[serde(default)]
+    api_keys: HashMap<String, String>,
+    #[serde(default)]
+    routing_rules: Vec<RoutingRule>,
+    #[serde(default)]
+    quotas: HashMap<String, Quota>,
+    #[serde(default)]
+    model_aliases: HashMap<String, String>,
+    #[serde(default)]
+    default_provider: Option<Provider>,
+}
+
+impl From<&Config> for StoredConfig {
+    fn from(c: &Config) -> Self {
+        Self {
+            api_keys: c.api_keys.clone(),
+            routing_rules: c.routing_rules.clone(),
+            quotas: c.quotas.clone(),
+            model_aliases: c.model_aliases.clone(),
+            default_provider: c.default_provider.clone(),
+        }
+    }
+}
+
+impl From<StoredConfig> for Config {
+    fn from(s: StoredConfig) -> Self {
+        Self {
+            api_keys: s.api_keys,
+            routing_rules: s.routing_rules,
+            quotas: s.quotas,
+            model_aliases: s.model_aliases,
+            default_provider: s.default_provider,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoredConfigUpdate {
+    config: StoredConfig,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigUpdate {
@@ -81,13 +127,14 @@ impl ConfigManager {
                             }
                         };
 
-                        let new_config = match serde_json::from_str::<ConfigUpdate>(&payload_str) {
-                            Ok(update) => update.config,
-                            Err(e) => {
-                                error!("Failed to parse config update: {}", e);
-                                continue;
-                            }
-                        };
+                        let new_config =
+                            match serde_json::from_str::<StoredConfigUpdate>(&payload_str) {
+                                Ok(update) => Config::from(update.config),
+                                Err(e) => {
+                                    error!("Failed to parse config update: {}", e);
+                                    continue;
+                                }
+                            };
 
                         {
                             let mut cfg = config.write().await;
@@ -193,8 +240,8 @@ impl ConfigManager {
 
         match data {
             Some(bytes) => {
-                let config: Config = serde_json::from_slice(&bytes)?;
-                Ok(config)
+                let stored: StoredConfig = serde_json::from_slice(&bytes)?;
+                Ok(Config::from(stored))
             }
             None => Ok(Config {
                 api_keys: std::collections::HashMap::new(),
@@ -208,9 +255,10 @@ impl ConfigManager {
 
     pub async fn publish_config_update(&self, config: &Config) -> Result<(), ConfigError> {
         let mut conn = self.manager.clone();
+        let stored = StoredConfig::from(config);
 
         // Store config first so it's available when subscribers receive notification
-        let config_bytes = serde_json::to_vec(config)?;
+        let config_bytes = serde_json::to_vec(&stored)?;
 
         redis::cmd("SET")
             .arg(CONFIG_KEY)
@@ -218,9 +266,7 @@ impl ConfigManager {
             .query_async::<()>(&mut conn)
             .await?;
 
-        let update = ConfigUpdate {
-            config: config.clone(),
-        };
+        let update = StoredConfigUpdate { config: stored };
 
         let payload = serde_json::to_string(&update)?;
 

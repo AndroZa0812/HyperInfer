@@ -339,8 +339,12 @@ impl HyperInferClient {
         async move {
             let start = std::time::Instant::now();
 
-            // 1. Check rate limit
-            let allowed = self.rate_limiter.is_allowed(key, 1).await;
+            // 1. Check rate limit using configured per-key quota (falls back to defaults)
+            let key_quota = self.config.read().await.quotas.get(key).cloned();
+            let allowed = self
+                .rate_limiter
+                .is_allowed_with_quota(key, 1, key_quota.as_ref())
+                .await;
             if let Err(e) = allowed {
                 return Err(HyperInferError::RateLimit(e.to_string()));
             }
