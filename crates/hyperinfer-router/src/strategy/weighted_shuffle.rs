@@ -60,11 +60,18 @@ impl RoutingStrategy for WeightedShuffle {
         let mut eligible: Vec<(usize, f64)> = Vec::new();
 
         for (i, deployment) in candidates.iter().enumerate() {
-            if state.is_cooled_down(&deployment.id).await? {
+            let metrics = match all_metrics.get(&deployment.id) {
+                Some(m) => m.clone(),
+                None => {
+                    if state.is_cooled_down(&deployment.id).await? {
+                        continue;
+                    }
+                    DeploymentMetrics::default()
+                }
+            };
+            if metrics.cooled_down {
                 continue;
             }
-
-            let metrics = all_metrics.get(&deployment.id).cloned().unwrap_or_default();
 
             let ew = Self::effective_weight(deployment, &metrics);
             if ew > 0.0 {
@@ -143,7 +150,13 @@ pub mod tests_helpers {
             &self,
             deployment_id: &str,
         ) -> Result<DeploymentMetrics, RoutingError> {
-            Ok(self.metrics.get(deployment_id).cloned().unwrap_or_default())
+            let mut m = self.metrics.get(deployment_id).cloned().unwrap_or_default();
+            m.cooled_down = self
+                .cooled_down
+                .get(deployment_id)
+                .copied()
+                .unwrap_or(false);
+            Ok(m)
         }
 
         async fn get_all_metrics(
@@ -152,8 +165,19 @@ pub mod tests_helpers {
         ) -> Result<HashMap<String, DeploymentMetrics>, RoutingError> {
             let mut result = HashMap::new();
             for id in ids {
+                let cooled_down = self.cooled_down.get(*id).copied().unwrap_or(false);
                 if let Some(m) = self.metrics.get(*id) {
-                    result.insert(id.to_string(), m.clone());
+                    let mut m = m.clone();
+                    m.cooled_down = cooled_down;
+                    result.insert(id.to_string(), m);
+                } else if cooled_down {
+                    result.insert(
+                        id.to_string(),
+                        DeploymentMetrics {
+                            cooled_down: true,
+                            ..Default::default()
+                        },
+                    );
                 }
             }
             Ok(result)
