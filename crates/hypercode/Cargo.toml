@@ -3,7 +3,7 @@ name = "hypercode"
 version = "0.1.0"
 edition = "2021"
 description = "Agentic coding harness built on HyperInfer"
-license = "MIT"
+license = "AGPL-3.0-only"
 repository = "https://github.com/AndroZa0812/HyperInfer"
 
 [dependencies]

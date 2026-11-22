@@ -3,6 +3,7 @@ name = "hyperinfer"
 version = "0.1.1"
 description = "High-performance Python SDK for HyperInfer LLM Gateway"
 readme = "README.md"
+license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.11"
 dependencies = ["typing-extensions>=4.0"]
 
