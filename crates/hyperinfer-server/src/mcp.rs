@@ -173,6 +173,7 @@ pub type SessionRegistry = Arc<RwLock<HashMap<String, McpSession>>>;
 pub struct McpToolDefinition {
     pub name: String,
     pub description: String,
+    #[serde(rename = "inputSchema")]
     pub input_schema: serde_json::Value,
 }
 
@@ -317,13 +318,19 @@ pub async fn dispatch_method(state: &McpState, req: &JsonRpcRequest) -> JsonRpcR
                             let handler = tool.handler.clone();
                             drop(tools);
                             match handler(arguments).await {
-                                Ok(result) => JsonRpcResponse::ok(
-                                    id,
-                                    serde_json::json!({
-                                        "content": [{ "type": "text", "text": result }],
-                                        "isError": false
-                                    }),
-                                ),
+                                Ok(result) => {
+                                    let text = match result {
+                                        serde_json::Value::String(s) => s,
+                                        other => other.to_string(),
+                                    };
+                                    JsonRpcResponse::ok(
+                                        id,
+                                        serde_json::json!({
+                                            "content": [{ "type": "text", "text": text }],
+                                            "isError": false
+                                        }),
+                                    )
+                                }
                                 Err(err_msg) => JsonRpcResponse::ok(
                                     id,
                                     serde_json::json!({
@@ -991,7 +998,7 @@ mod tests {
         let result = resp.result.unwrap();
         assert_eq!(result["isError"], false);
         assert_eq!(result["content"][0]["type"], "text");
-        assert_eq!(result["content"][0]["text"], 8);
+        assert_eq!(result["content"][0]["text"], "8");
     }
 
     #[tokio::test]

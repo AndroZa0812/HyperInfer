@@ -59,38 +59,33 @@ pub(crate) fn chat_request_to_openai_body(request: &ChatRequest) -> serde_json::
         .map(|m| {
             let mut msg = serde_json::Map::new();
             msg.insert("role".to_string(), serde_json::json!(m.role));
-            if let Some(ref parts) = m.content_parts {
-                if !parts.is_empty() {
-                    let oai_parts: Vec<serde_json::Value> = parts
-                        .iter()
-                        .map(|p| match p {
-                            hyperinfer_core::ContentPart::Text { text } => {
-                                serde_json::json!({ "type": "text", "text": text })
+            if let Some(parts) = m.content_parts.as_ref().filter(|p| !p.is_empty()) {
+                let oai_parts: Vec<serde_json::Value> = parts
+                    .iter()
+                    .map(|p| match p {
+                        hyperinfer_core::ContentPart::Text { text } => {
+                            serde_json::json!({ "type": "text", "text": text })
+                        }
+                        hyperinfer_core::ContentPart::ImageUrl { image_url } => {
+                            let mut img = serde_json::Map::new();
+                            img.insert("type".to_string(), serde_json::json!("image_url"));
+                            let mut url_obj = serde_json::Map::new();
+                            url_obj.insert("url".to_string(), serde_json::json!(image_url.url));
+                            if let Some(ref detail) = image_url.detail {
+                                url_obj.insert("detail".to_string(), serde_json::json!(detail));
                             }
-                            hyperinfer_core::ContentPart::ImageUrl { image_url } => {
-                                let mut img = serde_json::Map::new();
-                                img.insert("type".to_string(), serde_json::json!("image_url"));
-                                let mut url_obj = serde_json::Map::new();
-                                url_obj.insert("url".to_string(), serde_json::json!(image_url.url));
-                                if let Some(ref detail) = image_url.detail {
-                                    url_obj.insert("detail".to_string(), serde_json::json!(detail));
-                                }
-                                img.insert(
-                                    "image_url".to_string(),
-                                    serde_json::Value::Object(url_obj),
-                                );
-                                serde_json::Value::Object(img)
-                            }
-                        })
-                        .collect();
-                    msg.insert("content".to_string(), serde_json::json!(oai_parts));
-                }
-            } else if let Some(ref calls) = m.tool_calls {
-                if m.content.is_empty() {
-                    msg.insert("content".to_string(), serde_json::Value::Null);
-                } else {
-                    msg.insert("content".to_string(), serde_json::json!(m.content));
-                }
+                            img.insert("image_url".to_string(), serde_json::Value::Object(url_obj));
+                            serde_json::Value::Object(img)
+                        }
+                    })
+                    .collect();
+                msg.insert("content".to_string(), serde_json::json!(oai_parts));
+            } else if m.tool_calls.is_some() && m.content.is_empty() {
+                msg.insert("content".to_string(), serde_json::Value::Null);
+            } else {
+                msg.insert("content".to_string(), serde_json::json!(m.content));
+            }
+            if let Some(ref calls) = m.tool_calls {
                 let oai_calls: Vec<serde_json::Value> = calls
                     .iter()
                     .map(|tc| {
@@ -105,8 +100,6 @@ pub(crate) fn chat_request_to_openai_body(request: &ChatRequest) -> serde_json::
                     })
                     .collect();
                 msg.insert("tool_calls".to_string(), serde_json::json!(oai_calls));
-            } else {
-                msg.insert("content".to_string(), serde_json::json!(m.content));
             }
             if let Some(ref tool_call_id) = m.tool_call_id {
                 msg.insert("tool_call_id".to_string(), serde_json::json!(tool_call_id));
