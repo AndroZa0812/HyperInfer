@@ -24,7 +24,7 @@
 use axum::{
     body::Body,
     extract::{Query, State},
-    http::{HeaderMap, Request, StatusCode},
+    http::{Request, StatusCode},
     middleware::Next,
     response::{sse::Event, IntoResponse, Response, Sse},
     Extension, Json,
@@ -39,6 +39,7 @@ use uuid::Uuid;
 
 // ── JWT ─────────────────────────────────────────────────────────────────────
 
+use crate::auth::extract_bearer_token;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
 /// Claims expected inside an MCP Bearer JWT.
@@ -62,7 +63,7 @@ pub async fn jwt_auth_middleware(
     mut req: Request<Body>,
     next: Next,
 ) -> Response {
-    let token = match extract_bearer(req.headers()) {
+    let token = match extract_bearer_token(req.headers()) {
         Some(t) => t,
         None => {
             return (StatusCode::UNAUTHORIZED, "Missing Authorization header").into_response();
@@ -80,16 +81,7 @@ pub async fn jwt_auth_middleware(
     next.run(req).await
 }
 
-fn extract_bearer(headers: &HeaderMap) -> Option<String> {
-    let value = headers.get(axum::http::header::AUTHORIZATION)?;
-    let s = value.to_str().ok()?;
-    let mut parts = s.splitn(2, char::is_whitespace);
-    let scheme = parts.next()?;
-    if scheme.eq_ignore_ascii_case("bearer") {
-        return Some(parts.next()?.to_owned());
-    }
-    None
-}
+// extract_bearer_token is now imported from auth.rs
 
 pub fn validate_jwt(token: &str, secret: &str) -> Result<McpClaims, jsonwebtoken::errors::Error> {
     let key = DecodingKey::from_secret(secret.as_bytes());

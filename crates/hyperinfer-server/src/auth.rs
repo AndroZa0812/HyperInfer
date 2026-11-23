@@ -153,7 +153,7 @@ pub async fn auth_middleware(
     next.run(req).await
 }
 
-fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
+pub fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
     let value = headers.get(axum::http::header::AUTHORIZATION)?;
     let s = value.to_str().ok()?;
     let mut parts = s.splitn(2, char::is_whitespace);

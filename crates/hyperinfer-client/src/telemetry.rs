@@ -1,5 +1,3 @@
-use hex;
-use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_STREAM_KEY: &str = "hyperinfer:telemetry";
@@ -13,16 +11,7 @@ pub struct Telemetry {
 impl Telemetry {
     /// Returns a truncated hash suffix of the key for safe logging
     fn key_id(key: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(key.as_bytes());
-        let hash = hasher.finalize();
-        let hex_hash = hex::encode(hash);
-        // Return last 8 characters of hash
-        if hex_hash.len() >= 8 {
-            format!("...{}", &hex_hash[hex_hash.len() - 8..])
-        } else {
-            hex_hash
-        }
+        hyperinfer_core::key_id(key)
     }
     pub fn disabled() -> Self {
         Self {

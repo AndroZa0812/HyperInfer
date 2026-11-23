@@ -4,8 +4,6 @@
 
 use redis::aio::ConnectionManager;
 use redis::Client;
-use serde::{Deserialize, Serialize};
-use std::time::Instant;
 
 pub const USAGE_TOKENS_KEY_PREFIX: &str = "hyperinfer:usage:tokens:";
 pub const USAGE_REQUESTS_KEY_PREFIX: &str = "hyperinfer:usage:requests:";
@@ -65,20 +63,7 @@ end
 return {1, limit - current, 0}
 "#;
 
-#[derive(Debug, Clone)]
-pub struct TokenBucket {
-    pub capacity: u64,
-    pub tokens: u64,
-    pub refill_rate: u64,
-    pub last_refill: Instant,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Quota {
-    pub max_requests_per_minute: Option<u64>,
-    pub max_tokens_per_minute: Option<u64>,
-    pub budget_cents: Option<u64>,
-}
+// Quota is now defined in crate::types and imported above.
 
 #[derive(Clone)]
 pub struct RateLimiter {
@@ -302,6 +287,7 @@ impl RateLimiter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Quota;
 
     #[tokio::test]
     async fn test_rate_limiter_new_without_redis() {
@@ -346,35 +332,6 @@ mod tests {
         let limiter = RateLimiter::new(None).await.unwrap();
         let result = limiter.record_usage("test-key", 50).await;
         assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_token_bucket_creation() {
-        let bucket = TokenBucket {
-            capacity: 100,
-            tokens: 100,
-            refill_rate: 10,
-            last_refill: Instant::now(),
-        };
-
-        assert_eq!(bucket.capacity, 100);
-        assert_eq!(bucket.tokens, 100);
-        assert_eq!(bucket.refill_rate, 10);
-    }
-
-    #[test]
-    fn test_token_bucket_clone() {
-        let bucket = TokenBucket {
-            capacity: 50,
-            tokens: 25,
-            refill_rate: 5,
-            last_refill: Instant::now(),
-        };
-
-        let cloned = bucket.clone();
-        assert_eq!(bucket.capacity, cloned.capacity);
-        assert_eq!(bucket.tokens, cloned.tokens);
-        assert_eq!(bucket.refill_rate, cloned.refill_rate);
     }
 
     #[test]
