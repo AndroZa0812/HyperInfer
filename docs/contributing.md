@@ -65,13 +65,20 @@ cargo run --bin hyperinfer-server
 ### Project Structure
 
 ```
-src/                    # Cargo workspace
+crates/                 # Cargo workspace
 ├── hyperinfer-core/    # Core types and shared logic
 ├── hyperinfer-client/  # SDK client library
 ├── hyperinfer-server/  # Control plane server
 ├── hyperinfer-router/  # LLM request router
 ├── hyperinfer-providers/  # LLM provider implementations
-└── hyperinfer-python/  # Python bindings (PyO3)
+├── hyperinfer-python/  # Python bindings (PyO3)
+└── hypercode/          # Agent framework
+bindings/               # Python integration packages
+├── hyperinfer-langchain/   # LangChain integration
+└── hyperinfer-llamaindex/  # LlamaIndex integration
+apps/                   # Applications
+└── dashboard/          # SvelteKit admin UI
+docs/                   # Documentation site (Zensical)
 ```
 
 ## Code Style

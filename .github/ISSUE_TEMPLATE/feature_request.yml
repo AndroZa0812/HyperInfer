@@ -1,0 +1,60 @@
+name: Feature Request
+description: Suggest a new feature or enhancement for HyperInfer
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Please describe your idea below.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of HyperInfer would this affect?
+      options:
+        - hyperinfer-core
+        - hyperinfer-client
+        - hyperinfer-server
+        - hyperinfer-router
+        - hyperinfer-providers
+        - hyperinfer-python
+        - hypercode
+        - hyperinfer-langchain
+        - hyperinfer-llamaindex
+        - dashboard
+        - documentation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What is the current limitation?
+      placeholder: "Currently, HyperInfer doesn't support X, which makes it difficult to Y."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you'd like to see. How should it work?
+      placeholder: "I'd like HyperInfer to support X by doing Y. The API would look like..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative solutions or workarounds?
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any other context, examples, or references that might be helpful.
