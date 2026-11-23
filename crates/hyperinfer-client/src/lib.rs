@@ -77,7 +77,7 @@ impl AccountedStream {
         let _enter = self.span.clone().entered();
         crate::telemetry_otlp::set_gen_ai_usage(&self.span, input_tokens, output_tokens);
 
-        // Telemetry write is off the critical path.
+        // Telemetry write is off the critical path (record_with_tokens spawns internally).
         let telemetry = self.telemetry.clone();
         let key = self.key.clone();
         let model = self.model.clone();
@@ -198,7 +198,7 @@ pub struct HyperInferClient {
     telemetry: Telemetry,
     cache: ExactMatchCache,
     mirror: MirrorHandle,
-    provider_registry: Arc<RwLock<Arc<ProviderRegistry>>>,
+    provider_registry: Arc<ProviderRegistry>,
 }
 
 impl HyperInferClient {
@@ -224,9 +224,8 @@ impl HyperInferClient {
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
-        let provider_registry_inner = Arc::new(ProviderRegistry::new());
-        hyperinfer_providers::init_default_registry(&provider_registry_inner);
-        let provider_registry = Arc::new(RwLock::new(provider_registry_inner));
+        let provider_registry = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&provider_registry);
 
         Ok(Self {
             config,
@@ -255,9 +254,8 @@ impl HyperInferClient {
         let mirror: MirrorHandle = Arc::new(RwLock::new(None));
         let config = Arc::new(RwLock::new(config));
 
-        let provider_registry_inner = Arc::new(ProviderRegistry::new());
-        hyperinfer_providers::init_default_registry(&provider_registry_inner);
-        let provider_registry = Arc::new(RwLock::new(provider_registry_inner));
+        let provider_registry = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&provider_registry);
 
         Ok(Self {
             config,
@@ -277,9 +275,9 @@ impl HyperInferClient {
         &self,
         provider: P,
     ) {
-        let guard = self.provider_registry.read().await;
-        let _ = guard.unregister(provider.name());
-        guard.register(provider);
+        let registry = self.provider_registry.clone();
+        let _ = registry.unregister(provider.name());
+        registry.register(provider);
     }
 
     /// Configure traffic mirroring.  Pass `None` to disable.
@@ -288,9 +286,8 @@ impl HyperInferClient {
         *guard = cfg;
     }
 
-    pub async fn inject_provider_registry(&self, external_registry: Arc<ProviderRegistry>) {
-        let mut guard = self.provider_registry.write().await;
-        *guard = external_registry;
+    pub async fn inject_provider_registry(&mut self, external_registry: Arc<ProviderRegistry>) {
+        let _old = std::mem::replace(&mut self.provider_registry, external_registry);
     }
 
     /// Load deployments into the router engine for deployment-based routing
@@ -421,7 +418,7 @@ impl HyperInferClient {
                 );
 
                 let llm_provider = {
-                    let registry = self.provider_registry.read().await;
+                    let registry = self.provider_registry.clone();
                     match resolve_provider(&registry, &deployment.provider, base_url) {
                         Ok(p) => p,
                         Err(e) => {
@@ -491,7 +488,7 @@ impl HyperInferClient {
 
                 // Execute HTTP call via provider registry
                 let llm_provider = {
-                    let registry = self.provider_registry.read().await;
+                    let registry = self.provider_registry.clone();
                     registry.get(&provider_name).ok_or_else(|| {
                         HyperInferError::Config(std::io::Error::new(
                             std::io::ErrorKind::NotFound,
@@ -532,23 +529,22 @@ impl HyperInferClient {
             self.cache.set(&request, &response).await;
 
             // Record async Redis telemetry off the critical path.
+            // record_with_tokens spawns internally, so call directly.
             let telemetry = self.telemetry.clone();
             let key_owned = key.to_string();
             let model_owned = model.clone();
-            tokio::spawn(async move {
-                if let Err(e) = telemetry
-                    .record_with_tokens(
-                        &key_owned,
-                        &model_owned,
-                        input_tokens,
-                        output_tokens,
-                        elapsed,
-                    )
-                    .await
-                {
-                    tracing::warn!(error = %e, "telemetry record failed");
-                }
-            });
+            if let Err(e) = telemetry
+                .record_with_tokens(
+                    &key_owned,
+                    &model_owned,
+                    input_tokens,
+                    output_tokens,
+                    elapsed,
+                )
+                .await
+            {
+                tracing::warn!(error = %e, "telemetry record failed");
+            }
 
             // Record usage for rate-limiter token bucket.
             let total_tokens = response.usage.input_tokens + response.usage.output_tokens;
@@ -578,10 +574,7 @@ impl HyperInferClient {
             }
 
             // 5. Fire-and-forget traffic mirror (if configured).
-            let registry_for_mirror = {
-                let guard = self.provider_registry.read().await;
-                Arc::clone(&guard)
-            };
+            let registry_for_mirror = self.provider_registry.clone();
             mirroring::maybe_mirror(
                 self.mirror.clone(),
                 registry_for_mirror,
@@ -636,7 +629,7 @@ impl HyperInferClient {
             let api_key = deployment.api_key_ref.clone();
 
             let llm_provider = {
-                let registry = self.provider_registry.read().await;
+                let registry = self.provider_registry.clone();
                 match resolve_provider(&registry, &deployment.provider, base_url) {
                     Ok(p) => p,
                     Err(e) => {
@@ -689,7 +682,7 @@ impl HyperInferClient {
 
             // Get streaming provider from registry (already checks supports_streaming)
             let streaming_provider = {
-                let registry = self.provider_registry.read().await;
+                let registry = self.provider_registry.clone();
                 registry.get_streaming(&provider_name).ok_or_else(|| {
                     HyperInferError::Config(std::io::Error::new(
                         std::io::ErrorKind::NotFound,
