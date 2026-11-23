@@ -145,6 +145,7 @@ pub struct User {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: String,
+    #[serde(default, skip_serializing)]
     pub key_hash: String,
     pub user_id: String,
     pub team_id: String,
