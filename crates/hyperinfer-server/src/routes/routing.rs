@@ -9,20 +9,12 @@ use axum::{
     },
 };
 use futures::StreamExt;
-use hyperinfer_core::{ConfigStore, Database};
-use serde::{Deserialize, Serialize};
+use hyperinfer_core::{ConfigStore, Database, UpdateRoutingConfigRequest};
+use serde::Serialize;
 use std::sync::Arc;
 
 use crate::proxy;
 use crate::state::AppState;
-
-#[derive(Deserialize)]
-pub struct UpdateRoutingConfigRequest {
-    pub strategy: Option<String>,
-    pub strategy_params: Option<serde_json::Value>,
-    pub fallback_config: Option<serde_json::Value>,
-    pub routing_groups: Option<serde_json::Value>,
-}
 
 pub async fn config_sync<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
@@ -52,13 +44,7 @@ pub async fn update_routing_config_handler<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     Json(req): Json<UpdateRoutingConfigRequest>,
 ) -> impl IntoResponse {
-    let core_req = hyperinfer_core::UpdateRoutingConfigRequest {
-        strategy: req.strategy,
-        strategy_params: req.strategy_params,
-        fallback_config: req.fallback_config,
-        routing_groups: req.routing_groups,
-    };
-    match state.db.update_routing_config(core_req).await {
+    match state.db.update_routing_config(req).await {
         Ok(config) => Json(config).into_response(),
         Err(e) => {
             tracing::error!("Failed to update routing config: {:?}", e);
