@@ -103,24 +103,9 @@ pub(crate) fn build_anthropic_request_body(
                                     serde_json::json!({ "type": "text", "text": text })
                                 }
                                 hyperinfer_core::ContentPart::ImageUrl { image_url } => {
-                                    if image_url.url.starts_with("data:") {
-                                        let parts: Vec<&str> =
-                                            image_url.url.splitn(2, ';').collect();
-                                        let media_type = if parts[0].starts_with("data:") {
-                                            parts[0].strip_prefix("data:").unwrap_or("image/png")
-                                        } else {
-                                            "image/png"
-                                        };
-                                        let data = if image_url.url.contains("base64,") {
-                                            image_url
-                                                .url
-                                                .split("base64,")
-                                                .nth(1)
-                                                .unwrap_or("")
-                                                .to_string()
-                                        } else {
-                                            image_url.url.to_string()
-                                        };
+                                    if let Some((media_type, data)) =
+                                        crate::parse_data_url(&image_url.url)
+                                    {
                                         serde_json::json!({
                                             "type": "image",
                                             "source": {
@@ -200,18 +185,16 @@ pub(crate) fn build_anthropic_request_body(
 
     // Translate OpenAI-style tool_choice to Anthropic format
     if let Some(ref tool_choice) = request.tool_choice {
-        let anthropic_tool_choice = if tool_choice == &serde_json::json!("auto") {
+        let anthropic_tool_choice = if tool_choice == &serde_json::json!("none") {
+            serde_json::json!({ "type": "none" })
+        } else if tool_choice == &serde_json::json!("auto") {
             serde_json::json!({ "type": "auto" })
         } else if tool_choice == &serde_json::json!("required") {
             serde_json::json!({ "type": "any" })
         } else if let Some(obj) = tool_choice.as_object() {
             if obj.get("type") == Some(&serde_json::json!("function")) {
-                if let Some(func) = obj.get("function") {
-                    if let Some(name) = func.get("name") {
-                        serde_json::json!({ "type": "tool", "name": name })
-                    } else {
-                        serde_json::json!({ "type": "auto" })
-                    }
+                if let Some(name) = obj.get("function").and_then(|f| f.get("name")) {
+                    serde_json::json!({ "type": "tool", "name": name })
                 } else {
                     serde_json::json!({ "type": "auto" })
                 }
@@ -617,6 +600,15 @@ mod tests {
         let (_s, _m, body_specific) = build_anthropic_request_body(&req_specific, false);
         assert_eq!(body_specific["tool_choice"]["type"], "tool");
         assert_eq!(body_specific["tool_choice"]["name"], "read_file");
+
+        let req_none = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(serde_json::json!("none")),
+            ..Default::default()
+        };
+        let (_s, _m, body_none) = build_anthropic_request_body(&req_none, false);
+        assert_eq!(body_none["tool_choice"]["type"], "none");
     }
 
     #[test]
