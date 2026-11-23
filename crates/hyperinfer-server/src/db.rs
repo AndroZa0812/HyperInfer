@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use hyperinfer_core::{
     ApiKey, ConfigStore, CreateDeploymentRequest, Database, DbError, Deployment, ModelAlias,
     NewUsageLog, PolicyUpdate, Quota, RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog,
-    User,
+    UsageSummary, User,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -522,6 +522,60 @@ impl Database for SqlxDb {
     async fn ping(&self) -> Result<(), DbError> {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
         Ok(())
+    }
+
+    async fn list_teams(&self) -> Result<Vec<Team>, DbError> {
+        let rows: Vec<TeamRow> = sqlx::query_as(
+            "SELECT id, name, budget_cents, created_at, updated_at FROM teams ORDER BY created_at ASC",
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Team::from).collect())
+    }
+
+    async fn list_api_keys(&self, team_id: Option<String>) -> Result<Vec<ApiKey>, DbError> {
+        let rows: Vec<ApiKeyRow> = match team_id.as_deref() {
+            Some(tid) => {
+                let uuid = uuid::Uuid::parse_str(tid).map_err(|_| DbError::InvalidUuid)?;
+                sqlx::query_as(
+                    "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE team_id = $1 ORDER BY created_at DESC",
+                )
+                .bind(uuid)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => sqlx::query_as(
+                "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys ORDER BY created_at DESC",
+            )
+            .fetch_all(&self.pool)
+            .await?,
+        };
+        Ok(rows.into_iter().map(ApiKey::from).collect())
+    }
+
+    async fn get_usage_summary(&self, team_id: Option<String>) -> Result<UsageSummary, DbError> {
+        let row: (i64, i64, i64, f64) = match team_id.as_deref() {
+            Some(tid) => {
+                let uuid = uuid::Uuid::parse_str(tid).map_err(|_| DbError::InvalidUuid)?;
+                sqlx::query_as(
+                    "SELECT COUNT(*)::BIGINT, COALESCE(SUM(input_tokens), 0)::BIGINT, COALESCE(SUM(output_tokens), 0)::BIGINT, COALESCE(AVG(response_time_ms)::DOUBLE PRECISION, 0.0) FROM usage_logs WHERE team_id = $1",
+                )
+                .bind(uuid)
+                .fetch_one(&self.pool)
+                .await?
+            }
+            None => sqlx::query_as(
+                "SELECT COUNT(*)::BIGINT, COALESCE(SUM(input_tokens), 0)::BIGINT, COALESCE(SUM(output_tokens), 0)::BIGINT, COALESCE(AVG(response_time_ms)::DOUBLE PRECISION, 0.0) FROM usage_logs",
+            )
+            .fetch_one(&self.pool)
+            .await?,
+        };
+        Ok(UsageSummary {
+            total_requests: row.0,
+            total_input_tokens: row.1,
+            total_output_tokens: row.2,
+            avg_response_time_ms: row.3,
+        })
     }
 }
 

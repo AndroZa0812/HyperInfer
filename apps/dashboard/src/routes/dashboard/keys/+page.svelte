@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '$lib/api';
     import { auth } from '$lib/stores/auth';
-    import type { ApiKey } from '$lib/types';
+    import type { ApiKey, UsageData } from '$lib/types';
     import Button from '$lib/components/Button.svelte';
     import Input from '$lib/components/Input.svelte';
     import Modal from '$lib/components/Modal.svelte';
@@ -15,6 +15,7 @@
     let newKeyName = $state('');
     let searchQuery = $state('');
     let statusFilter = $state('all');
+    let usage = $state<UsageData | null>(null);
 
     let filteredKeys = $derived(
         keys.filter(k => {
@@ -29,8 +30,11 @@
     $effect(() => {
         if (!$auth.loading && $auth.user?.team_id) {
             loading = true;
-            api.getKeys($auth.user!.team_id)
-                .then((k) => { keys = k; })
+            Promise.all([
+                api.getKeys($auth.user!.team_id),
+                api.getUsage($auth.user!.team_id)
+            ])
+                .then(([k, u]) => { keys = k; usage = u; })
                 .catch((e) => { console.error('Failed to load keys', e); })
                 .finally(() => { loading = false; });
         }
@@ -164,9 +168,9 @@
     </Card>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon="speed" label="API Calls (24h)" value="4.2M" trend="+12%" trendDirection="up" />
-        <StatCard icon="security" label="Unauthorized Attempts" value="0" />
-        <StatCard icon="timer" label="Average Latency" value="42ms" trend="Stable" trendDirection="neutral" />
+        <StatCard icon="speed" label="Total Requests" value={usage ? usage.total_requests.toLocaleString() : '0'} />
+        <StatCard icon="security" label="Total Tokens" value={usage ? (usage.total_input_tokens + usage.total_output_tokens).toLocaleString() : '0'} />
+        <StatCard icon="timer" label="Average Latency" value={usage ? `${Math.round(usage.avg_response_time_ms)}ms` : '0ms'} />
     </div>
 </div>
 
