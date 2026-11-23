@@ -14,6 +14,22 @@ pub struct ToolDefinition {
     pub parameters: serde_json::Value,
 }
 
+/// Image URL reference for multimodal content.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImageUrl {
+    pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+}
+
+/// A single content part (text or image) for multimodal messages.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    Text { text: String },
+    ImageUrl { image_url: ImageUrl },
+}
+
 /// A tool (function) invocation requested by an LLM.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolCall {
@@ -41,6 +57,12 @@ pub struct ChatRequest {
     /// Tools available for the model to call.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<ToolDefinition>>,
+    /// Tool choice strategy: "auto", "required", or {"type":"function","function":{"name":"..."}}.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<serde_json::Value>,
+    /// Response format: {"type":"json_object"} or {"type":"json_schema","schema":{...}}.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<serde_json::Value>,
 }
 
 /// A single streamed token delta from a provider SSE event.
@@ -98,6 +120,9 @@ pub struct ChatMessage {
     /// Optional tool name for `MessageRole::Tool` messages (used by Gemini `functionResponse` and OpenAI).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Multimodal content parts (text + images). When set, takes precedence over `content`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content_parts: Option<Vec<ContentPart>>,
 }
 
 impl ChatMessage {
@@ -108,6 +133,7 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            content_parts: None,
         }
     }
 
@@ -118,6 +144,7 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            content_parts: None,
         }
     }
 
@@ -128,6 +155,7 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: None,
             name: None,
+            content_parts: None,
         }
     }
 
@@ -142,6 +170,7 @@ impl ChatMessage {
             },
             tool_call_id: None,
             name: None,
+            content_parts: None,
         }
     }
 
@@ -156,6 +185,7 @@ impl ChatMessage {
             tool_calls: None,
             tool_call_id: Some(tool_call_id.into()),
             name: Some(name.into()),
+            content_parts: None,
         }
     }
 }
@@ -445,6 +475,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         assert!(request.validate().is_err());
@@ -460,6 +492,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         assert!(request.validate().is_err());
@@ -475,6 +509,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         assert!(request.validate().is_ok());
@@ -543,6 +579,84 @@ mod tests {
         assert_eq!(request.messages.len(), 0);
         assert_eq!(request.temperature, None);
         assert_eq!(request.max_tokens, None);
+        assert_eq!(request.tool_choice, None);
+        assert_eq!(request.response_format, None);
+    }
+
+    #[test]
+    fn test_tool_choice_serialization() {
+        let request = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(serde_json::json!("auto")),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"tool_choice\":\"auto\""));
+
+        let request2 = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(
+                serde_json::json!({"type": "function", "function": {"name": "read_file"}}),
+            ),
+            ..Default::default()
+        };
+        let json2 = serde_json::to_string(&request2).unwrap();
+        assert!(json2.contains("\"tool_choice\""));
+        assert!(json2.contains("\"read_file\""));
+    }
+
+    #[test]
+    fn test_response_format_serialization() {
+        let request = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            response_format: Some(serde_json::json!({"type": "json_object"})),
+            ..Default::default()
+        };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"response_format\""));
+        assert!(json.contains("\"json_object\""));
+    }
+
+    #[test]
+    fn test_content_parts_serialization() {
+        let msg = ChatMessage {
+            role: MessageRole::User,
+            content: "".to_string(),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+            content_parts: Some(vec![
+                ContentPart::Text {
+                    text: "Describe this image:".to_string(),
+                },
+                ContentPart::ImageUrl {
+                    image_url: ImageUrl {
+                        url: "https://example.com/img.png".to_string(),
+                        detail: Some("high".to_string()),
+                    },
+                },
+            ]),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"content_parts\""));
+        assert!(json.contains("\"text\":\"Describe this image:\""));
+        assert!(json.contains("\"image_url\""));
+        assert!(json.contains("https://example.com/img.png"));
+        assert!(json.contains("\"detail\":\"high\""));
+
+        // Round-trip
+        let deserialized: ChatMessage = serde_json::from_str(&json).unwrap();
+        assert_eq!(msg, deserialized);
+    }
+
+    #[test]
+    fn test_content_parts_skip_when_none() {
+        let msg = ChatMessage::user("Hello");
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(!json.contains("content_parts"));
     }
 
     #[test]

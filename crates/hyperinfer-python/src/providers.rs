@@ -129,6 +129,7 @@ impl PythonProvider {
                     tool_calls: None,
                     tool_call_id: None,
                     name: None,
+                    content_parts: None,
                 },
                 finish_reason,
             });

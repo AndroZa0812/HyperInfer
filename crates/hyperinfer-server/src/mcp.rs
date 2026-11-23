@@ -32,7 +32,9 @@ use axum::{
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{collections::HashMap, convert::Infallible, sync::Arc, time::Duration};
+use std::{
+    collections::HashMap, convert::Infallible, future::Future, pin::Pin, sync::Arc, time::Duration,
+};
 use tokio::sync::{mpsc, RwLock};
 use tracing::warn;
 use uuid::Uuid;
@@ -164,12 +166,42 @@ pub struct McpSession {
 /// Thread-safe map of session_id → session.
 pub type SessionRegistry = Arc<RwLock<HashMap<String, McpSession>>>;
 
+// ── Tool registry ────────────────────────────────────────────────────────────
+
+/// Definition of an MCP tool exposed to clients.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpToolDefinition {
+    pub name: String,
+    pub description: String,
+    #[serde(rename = "inputSchema")]
+    pub input_schema: serde_json::Value,
+}
+
+/// Async handler for an MCP tool.
+pub type McpToolHandler = Arc<
+    dyn Fn(
+            serde_json::Value,
+        ) -> Pin<Box<dyn Future<Output = Result<serde_json::Value, String>> + Send>>
+        + Send
+        + Sync,
+>;
+
+/// Registered tool with its async handler.
+pub struct RegisteredMcpTool {
+    pub definition: McpToolDefinition,
+    pub handler: McpToolHandler,
+}
+
+/// Thread-safe tool registry.
+pub type ToolRegistry = Arc<RwLock<HashMap<String, RegisteredMcpTool>>>;
+
 // ── Shared state ─────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
 pub struct McpState {
     pub sessions: SessionRegistry,
     pub jwt_secret: Arc<String>,
+    pub tools: ToolRegistry,
 }
 
 impl McpState {
@@ -177,7 +209,26 @@ impl McpState {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             jwt_secret: Arc::new(jwt_secret.into()),
+            tools: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    /// Register an MCP tool with its async handler.
+    pub async fn register_tool<F, Fut>(&self, definition: McpToolDefinition, handler: F)
+    where
+        F: Fn(serde_json::Value) -> Fut + Send + Sync + 'static + Clone,
+        Fut: Future<Output = Result<serde_json::Value, String>> + Send + 'static,
+    {
+        let name = definition.name.clone();
+        let tool = RegisteredMcpTool {
+            definition,
+            handler: Arc::new(move |args| {
+                let h = handler.clone();
+                Box::pin(async move { h(args).await })
+            }),
+        };
+        let mut tools = self.tools.write().await;
+        tools.insert(name, tool);
     }
 }
 
@@ -237,11 +288,68 @@ impl JsonRpcResponse {
 /// Dispatch a JSON-RPC method to its handler and return the response value.
 ///
 /// Extend this function to add new MCP tool methods.
-pub fn dispatch_method(req: &JsonRpcRequest) -> JsonRpcResponse {
+pub async fn dispatch_method(state: &McpState, req: &JsonRpcRequest) -> JsonRpcResponse {
     let id = req.id.clone().flatten();
     match req.method.as_str() {
         "ping" => JsonRpcResponse::ok(id, serde_json::json!("pong")),
-        "tools/list" => JsonRpcResponse::ok(id, serde_json::json!({ "tools": [] })),
+        "tools/list" => {
+            let tools = state.tools.read().await;
+            let mut tool_defs: Vec<McpToolDefinition> =
+                tools.values().map(|t| t.definition.clone()).collect();
+            tool_defs.sort_by(|a, b| a.name.cmp(&b.name));
+            JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_defs }))
+        }
+        "tools/call" => {
+            let params = req.params.as_ref();
+            let name = params
+                .and_then(|p| p.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|s| s.to_string());
+            let arguments = params
+                .and_then(|p| p.get("arguments"))
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({}));
+
+            match name {
+                Some(tool_name) => {
+                    let tools = state.tools.read().await;
+                    match tools.get(&tool_name) {
+                        Some(tool) => {
+                            let handler = tool.handler.clone();
+                            drop(tools);
+                            match handler(arguments).await {
+                                Ok(result) => {
+                                    let text = match result {
+                                        serde_json::Value::String(s) => s,
+                                        other => other.to_string(),
+                                    };
+                                    JsonRpcResponse::ok(
+                                        id,
+                                        serde_json::json!({
+                                            "content": [{ "type": "text", "text": text }],
+                                            "isError": false
+                                        }),
+                                    )
+                                }
+                                Err(err_msg) => JsonRpcResponse::ok(
+                                    id,
+                                    serde_json::json!({
+                                        "content": [{ "type": "text", "text": err_msg }],
+                                        "isError": true
+                                    }),
+                                ),
+                            }
+                        }
+                        None => JsonRpcResponse::err(
+                            id,
+                            -32602,
+                            format!("Tool not found: {}", tool_name),
+                        ),
+                    }
+                }
+                None => JsonRpcResponse::err(id, -32602, "Missing 'name' parameter"),
+            }
+        }
         "initialize" => JsonRpcResponse::ok(
             id,
             serde_json::json!({
@@ -428,7 +536,7 @@ pub async fn mcp_message_handler(
     }
     drop(sessions);
 
-    let rpc_response = dispatch_method(&rpc_req);
+    let rpc_response = dispatch_method(&state, &rpc_req).await;
 
     // If it's a notification (rpc_req.id is None), do not respond.
     if rpc_req.id.is_none() {
@@ -644,57 +752,61 @@ mod tests {
 
     // ── dispatch_method ─────────────────────────────────────────────────────
 
-    #[test]
-    fn test_dispatch_ping() {
+    #[tokio::test]
+    async fn test_dispatch_ping() {
+        let state = McpState::new("secret");
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(Some(json!(1))),
             method: "ping".into(),
             params: None,
         };
-        let resp = dispatch_method(&req);
+        let resp = dispatch_method(&state, &req).await;
         assert_eq!(resp.result, Some(json!("pong")));
         assert!(resp.error.is_none());
     }
 
-    #[test]
-    fn test_dispatch_tools_list() {
+    #[tokio::test]
+    async fn test_dispatch_tools_list() {
+        let state = McpState::new("secret");
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(Some(json!(2))),
             method: "tools/list".into(),
             params: None,
         };
-        let resp = dispatch_method(&req);
+        let resp = dispatch_method(&state, &req).await;
         assert!(resp.result.is_some());
         assert!(resp.error.is_none());
         let tools = &resp.result.unwrap()["tools"];
         assert!(tools.is_array());
     }
 
-    #[test]
-    fn test_dispatch_initialize() {
+    #[tokio::test]
+    async fn test_dispatch_initialize() {
+        let state = McpState::new("secret");
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(Some(json!(3))),
             method: "initialize".into(),
             params: None,
         };
-        let resp = dispatch_method(&req);
+        let resp = dispatch_method(&state, &req).await;
         assert!(resp.result.is_some());
         let result = resp.result.unwrap();
         assert_eq!(result["protocolVersion"], "2024-11-05");
     }
 
-    #[test]
-    fn test_dispatch_unknown_method() {
+    #[tokio::test]
+    async fn test_dispatch_unknown_method() {
+        let state = McpState::new("secret");
         let req = JsonRpcRequest {
             jsonrpc: "2.0".into(),
             id: Some(Some(json!(4))),
             method: "nonexistent".into(),
             params: None,
         };
-        let resp = dispatch_method(&req);
+        let resp = dispatch_method(&state, &req).await;
         assert!(resp.result.is_none());
         let err = resp.error.unwrap();
         assert_eq!(err.code, -32601);
@@ -774,5 +886,157 @@ mod tests {
             "Expected 'pong' in frame data: {}",
             frame.data
         );
+    }
+
+    // ── Tool registry tests ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_register_tool() {
+        let state = McpState::new("secret");
+        state
+            .register_tool(
+                McpToolDefinition {
+                    name: "echo".to_string(),
+                    description: "Echoes input".to_string(),
+                    input_schema: serde_json::json!({
+                        "type": "object",
+                        "properties": { "message": { "type": "string" } }
+                    }),
+                },
+                |args| async move {
+                    let msg = args
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("hello");
+                    Ok(serde_json::json!({ "echo": msg }))
+                },
+            )
+            .await;
+
+        let tools = state.tools.read().await;
+        assert!(tools.contains_key("echo"));
+        assert_eq!(tools["echo"].definition.name, "echo");
+    }
+
+    #[tokio::test]
+    async fn test_tools_list() {
+        let state = McpState::new("secret");
+        state
+            .register_tool(
+                McpToolDefinition {
+                    name: "beta".to_string(),
+                    description: "Second tool".to_string(),
+                    input_schema: serde_json::json!({}),
+                },
+                |_| async move { Ok(serde_json::json!("beta")) },
+            )
+            .await;
+        state
+            .register_tool(
+                McpToolDefinition {
+                    name: "alpha".to_string(),
+                    description: "First tool".to_string(),
+                    input_schema: serde_json::json!({}),
+                },
+                |_| async move { Ok(serde_json::json!("alpha")) },
+            )
+            .await;
+
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(Some(serde_json::json!(1))),
+            method: "tools/list".to_string(),
+            params: None,
+        };
+
+        let resp = dispatch_method(&state, &req).await;
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        let tools = result["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+        // Should be sorted by name
+        assert_eq!(tools[0]["name"], "alpha");
+        assert_eq!(tools[1]["name"], "beta");
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_success() {
+        let state = McpState::new("secret");
+        state
+            .register_tool(
+                McpToolDefinition {
+                    name: "add".to_string(),
+                    description: "Adds two numbers".to_string(),
+                    input_schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "a": { "type": "number" },
+                            "b": { "type": "number" }
+                        }
+                    }),
+                },
+                |args| async move {
+                    let a = args.get("a").and_then(|v| v.as_i64()).unwrap_or(0);
+                    let b = args.get("b").and_then(|v| v.as_i64()).unwrap_or(0);
+                    Ok(serde_json::json!(a + b))
+                },
+            )
+            .await;
+
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(Some(serde_json::json!(1))),
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "name": "add",
+                "arguments": { "a": 5, "b": 3 }
+            })),
+        };
+
+        let resp = dispatch_method(&state, &req).await;
+        assert!(resp.error.is_none());
+        let result = resp.result.unwrap();
+        assert_eq!(result["isError"], false);
+        assert_eq!(result["content"][0]["type"], "text");
+        assert_eq!(result["content"][0]["text"], "8");
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_unknown_tool() {
+        let state = McpState::new("secret");
+
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(Some(serde_json::json!(1))),
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "name": "nonexistent",
+                "arguments": {}
+            })),
+        };
+
+        let resp = dispatch_method(&state, &req).await;
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.as_ref().unwrap().code, -32602);
+        assert!(resp.error.as_ref().unwrap().message.contains("nonexistent"));
+    }
+
+    #[tokio::test]
+    async fn test_tools_call_missing_name() {
+        let state = McpState::new("secret");
+
+        let req = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            id: Some(Some(serde_json::json!(1))),
+            method: "tools/call".to_string(),
+            params: Some(serde_json::json!({
+                "arguments": {}
+            })),
+        };
+
+        let resp = dispatch_method(&state, &req).await;
+        assert!(resp.error.is_some());
+        assert_eq!(resp.error.as_ref().unwrap().code, -32602);
+        assert!(resp.error.as_ref().unwrap().message.contains("name"));
     }
 }
