@@ -344,16 +344,28 @@ async fn get_api_key<D: Database, C: ConfigStore>(
 )]
 async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
-    _admin: RequireAdmin,
+    RequireAdmin(claims): RequireAdmin,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
-    let key_hash = hyperinfer_core::hash_key(&req.key);
+    let raw_key = req
+        .key
+        .filter(|k| !k.trim().is_empty())
+        .unwrap_or_else(|| format!("hi-{}", uuid::Uuid::new_v4()));
+    let user_id = req
+        .user_id
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or(claims.sub);
+    let key_hash = hyperinfer_core::hash_key(&raw_key);
     match state
         .db
-        .create_api_key(&key_hash, &req.user_id, &req.team_id, req.name)
+        .create_api_key(&key_hash, &user_id, &req.team_id, req.name)
         .await
     {
-        Ok(key) => Json(key).into_response(),
+        Ok(api_key) => Json(CreateApiKeyResponse {
+            api_key,
+            key: raw_key,
+        })
+        .into_response(),
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (
@@ -1031,10 +1043,19 @@ struct CreateUserRequest {
 
 #[derive(Deserialize, ToSchema)]
 struct CreateApiKeyRequest {
-    key: String,
-    user_id: String,
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    user_id: Option<String>,
     team_id: String,
     name: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CreateApiKeyResponse {
+    #[serde(flatten)]
+    api_key: hyperinfer_core::ApiKey,
+    key: String,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1550,13 +1571,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[derive(OpenApi)]
         #[openapi(
             paths(
+                list_teams,
                 get_team,
                 create_team,
                 get_user,
                 create_user,
+                list_api_keys,
                 get_api_key,
                 create_api_key,
                 revoke_api_key,
+                get_usage_summary,
                 get_model_alias,
                 create_model_alias,
                 get_quota,
@@ -1581,6 +1605,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 (name = "teams", description = "Team management"),
                 (name = "users", description = "User management"),
                 (name = "api_keys", description = "API key management"),
+                (name = "usage", description = "Usage statistics"),
                 (name = "model_aliases", description = "Model alias management"),
                 (name = "quotas", description = "Quota management"),
                 (name = "auth", description = "Authentication"),
@@ -2336,8 +2361,8 @@ mod tests {
             State(state),
             admin,
             Json(CreateApiKeyRequest {
-                key: "test-secret-key".to_string(),
-                user_id: "user-id".to_string(),
+                key: Some("test-secret-key".to_string()),
+                user_id: Some("user-id".to_string()),
                 team_id: "team-id".to_string(),
                 name: Some("Test Key".to_string()),
             }),
@@ -2345,6 +2370,66 @@ mod tests {
         .await;
         let resp = response.into_response();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_api_key_defaults_key_and_user_id() {
+        use chrono::Utc;
+
+        let mut state = create_test_state();
+        let now = Utc::now();
+
+        state
+            .db
+            .expect_create_api_key()
+            .withf(|key_hash, user_id, team_id, name| {
+                !key_hash.is_empty()
+                    && user_id == "admin-123"
+                    && team_id == "team-id"
+                    && name.as_deref() == Some("Dashboard Key")
+            })
+            .times(1)
+            .returning(move |key_hash, user_id, team_id, name| {
+                Ok(ApiKey {
+                    id: "auto-key-id".to_string(),
+                    key_hash: key_hash.to_string(),
+                    user_id: user_id.to_string(),
+                    team_id: team_id.to_string(),
+                    name,
+                    is_active: true,
+                    created_at: now,
+                    expires_at: None,
+                })
+            });
+
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
+        let req: CreateApiKeyRequest = serde_json::from_value(serde_json::json!({
+            "team_id": "team-id",
+            "name": "Dashboard Key"
+        }))
+        .unwrap();
+
+        let resp = create_api_key(State(state), admin, Json(req))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["id"], "auto-key-id");
+        assert!(json["key"]
+            .as_str()
+            .map(|k| k.starts_with("hi-"))
+            .unwrap_or(false));
+        assert!(json.get("key_hash").is_none());
     }
 
     #[tokio::test]

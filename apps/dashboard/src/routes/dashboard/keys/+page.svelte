@@ -11,6 +11,7 @@
 
     let keys = $state<ApiKey[]>([]);
     let loading = $state(true);
+    let loadError = $state<string | null>(null);
     let showCreate = $state(false);
     let newKeyName = $state('');
     let searchQuery = $state('');
@@ -30,12 +31,24 @@
     $effect(() => {
         if (!$auth.loading && $auth.user?.team_id) {
             loading = true;
-            Promise.all([
+            loadError = null;
+            Promise.allSettled([
                 api.getKeys($auth.user!.team_id),
                 api.getUsage($auth.user!.team_id)
             ])
-                .then(([k, u]) => { keys = k; usage = u; })
-                .catch((e) => { console.error('Failed to load keys', e); })
+                .then(([keysResult, usageResult]) => {
+                    if (keysResult.status === 'fulfilled') {
+                        keys = keysResult.value;
+                    } else {
+                        console.error('Failed to load keys', keysResult.reason);
+                        loadError = 'Failed to load API keys. Please try again.';
+                    }
+                    if (usageResult.status === 'fulfilled') {
+                        usage = usageResult.value;
+                    } else {
+                        console.error('Failed to load usage summary', usageResult.reason);
+                    }
+                })
                 .finally(() => { loading = false; });
         }
     });
@@ -98,6 +111,10 @@
         {#if loading}
             <div class="flex items-center justify-center h-32">
                 <span class="material-symbols-outlined animate-spin text-[var(--primary)]" style="font-size: 24px">progress_activity</span>
+            </div>
+        {:else if loadError}
+            <div class="p-8 text-center text-[var(--error)] text-sm">
+                {loadError}
             </div>
         {:else if filteredKeys.length === 0}
             <div class="p-8 text-center text-[var(--on-surface-variant)]">
