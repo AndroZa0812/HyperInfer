@@ -20,9 +20,9 @@
 //! be hot-swapped at runtime without restarting the client.
 
 use crate::util::rand_f64;
-use crate::HttpCaller;
 use crate::Router;
 use hyperinfer_core::{types::Provider, ChatRequest, Config};
+use hyperinfer_providers::ProviderRegistry;
 use std::sync::{Arc, OnceLock};
 use tokio::sync::{RwLock, Semaphore};
 use tracing::warn;
@@ -65,7 +65,7 @@ pub type MirrorHandle = Arc<RwLock<Option<MirrorConfig>>>;
 /// The function returns immediately; the mirror call runs concurrently.
 pub fn maybe_mirror(
     mirror_handle: MirrorHandle,
-    http_caller: Arc<HttpCaller>,
+    provider_registry: Arc<ProviderRegistry>,
     router: Arc<Router>,
     config_snapshot: Arc<Config>,
     _key: String,
@@ -135,14 +135,19 @@ pub fn maybe_mirror(
         }
     };
 
+    let provider_name = provider.to_string();
     tokio::spawn(async move {
         let _permit = permit;
 
-        let result = match provider {
-            Provider::OpenAI => http_caller.call_openai(&model, &api_key, &request).await,
-            Provider::Anthropic => http_caller.call_anthropic(&model, &api_key, &request).await,
-            _ => unreachable!(),
+        let llm_provider = match provider_registry.get(&provider_name) {
+            Some(p) => p,
+            None => {
+                warn!("Mirror: provider '{}' not found in registry", provider_name);
+                return;
+            }
         };
+
+        let result = llm_provider.chat(&request, &api_key).await;
 
         match result {
             Ok(resp) => {
@@ -202,7 +207,7 @@ mod tests {
             model: "gpt-4o".to_string(),
             sample_rate: 0.0,
         })));
-        let http = Arc::new(HttpCaller::new().unwrap());
+        let registry = Arc::new(ProviderRegistry::new());
         let router = Arc::new(Router::new(vec![]));
         let config = Arc::new(empty_config());
 
@@ -216,7 +221,7 @@ mod tests {
             tools: None,
         };
 
-        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+        maybe_mirror(handle, registry, router, config, "key".to_string(), request);
         // Allow the task to run and exit.
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
@@ -225,7 +230,7 @@ mod tests {
     async fn test_maybe_mirror_none_config_no_panic() {
         // With None config nothing should happen.
         let handle: MirrorHandle = Arc::new(RwLock::new(None));
-        let http = Arc::new(HttpCaller::new().unwrap());
+        let registry = Arc::new(ProviderRegistry::new());
         let router = Arc::new(Router::new(vec![]));
         let config = Arc::new(empty_config());
 
@@ -239,7 +244,7 @@ mod tests {
             tools: None,
         };
 
-        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+        maybe_mirror(handle, registry, router, config, "key".to_string(), request);
         tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
 
@@ -250,7 +255,7 @@ mod tests {
             model: "unknown-llm-xyz".to_string(),
             sample_rate: 1.0,
         })));
-        let http = Arc::new(HttpCaller::new().unwrap());
+        let registry = Arc::new(ProviderRegistry::new());
         let router = Arc::new(Router::new(vec![]));
         let config = Arc::new(empty_config());
 
@@ -264,7 +269,7 @@ mod tests {
             tools: None,
         };
 
-        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+        maybe_mirror(handle, registry, router, config, "key".to_string(), request);
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
 
@@ -292,7 +297,7 @@ mod tests {
             model: "gpt-4o".to_string(),
             sample_rate: 1.0,
         })));
-        let http = Arc::new(HttpCaller::new().unwrap());
+        let registry = Arc::new(ProviderRegistry::new());
         let router = Arc::new(Router::new(vec![]));
         let config = Arc::new(empty_config());
 
@@ -306,7 +311,7 @@ mod tests {
             tools: None,
         };
 
-        maybe_mirror(handle, http, router, config, "key".to_string(), request);
+        maybe_mirror(handle, registry, router, config, "key".to_string(), request);
 
         drop(permits);
 
