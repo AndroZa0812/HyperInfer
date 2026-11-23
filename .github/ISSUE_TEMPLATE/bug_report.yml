@@ -1,0 +1,113 @@
+name: Bug Report
+description: Report a bug or unexpected behavior in HyperInfer
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the form below to help us diagnose and fix the issue.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of HyperInfer is affected?
+      options:
+        - hyperinfer-core
+        - hyperinfer-client
+        - hyperinfer-server
+        - hyperinfer-router
+        - hyperinfer-providers
+        - hyperinfer-python
+        - hypercode
+        - hyperinfer-langchain
+        - hyperinfer-llamaindex
+        - dashboard
+        - documentation
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear and concise description of the bug.
+      placeholder: "When I do X, Y happens instead of Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Provide detailed steps to reproduce the issue.
+      placeholder: |
+        1. Install HyperInfer version X
+        2. Configure with Y
+        3. Run Z
+        4. Observe the error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: HyperInfer Version
+      description: Which version of HyperInfer are you using?
+      placeholder: "0.2.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What OS are you running?
+      placeholder: "Ubuntu 24.04 / macOS 15.0 / Windows 11"
+    validations:
+      required: true
+
+  - type: input
+    id: rust_version
+    attributes:
+      label: Rust Version
+      description: What Rust version are you using? (if applicable)
+      placeholder: "1.85.0"
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python Version
+      description: What Python version are you using? (if applicable)
+      placeholder: "3.12.0"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant logs or stack traces. Use code blocks for formatting.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other information that might be helpful.

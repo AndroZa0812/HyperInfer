@@ -24,3 +24,21 @@ pub use types::{
     Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, ToolCall, ToolDefinition,
     UpdateRoutingConfigRequest, Usage, UsageRecord,
 };
+
+/// SHA-256 hash of a key, returned as a hex string.
+pub fn hash_key(key: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(key.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+/// Truncated hash suffix of a key for safe logging (last 8 hex chars).
+pub fn key_id(key: &str) -> String {
+    let hash = hash_key(key);
+    if hash.len() >= 8 {
+        format!("...{}", &hash[hash.len() - 8..])
+    } else {
+        hash
+    }
+}

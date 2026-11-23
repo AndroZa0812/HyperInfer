@@ -19,6 +19,7 @@ pub struct ListDeploymentsQuery {
 
 pub async fn list_deployments<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Query(query): Query<ListDeploymentsQuery>,
 ) -> impl IntoResponse {
     match state
@@ -40,6 +41,7 @@ pub async fn list_deployments<D: Database, C: ConfigStore>(
 
 pub async fn get_deployment<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match state.db.get_deployment(&id).await {

@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security Policy
+    url: https://github.com/AndroZa0812/HyperInfer/blob/main/SECURITY.md
+    about: Report security vulnerabilities privately
+  - name: Documentation
+    url: https://docs.hyperinfer.dev
+    about: Read the official documentation
+  - name: Contributing Guide
+    url: https://github.com/AndroZa0812/HyperInfer/blob/main/docs/contributing.md
+    about: Learn how to contribute to HyperInfer

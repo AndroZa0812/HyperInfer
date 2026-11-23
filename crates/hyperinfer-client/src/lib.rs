@@ -3,7 +3,6 @@
 #![allow(clippy::double_must_use)]
 
 pub mod cache;
-pub mod http_client;
 pub mod mirroring;
 pub mod router;
 pub mod router_engine;
@@ -13,7 +12,6 @@ pub mod telemetry_otlp;
 mod util;
 
 pub use cache::ExactMatchCache;
-pub use http_client::HttpCaller;
 pub use mirroring::{MirrorConfig, MirrorHandle};
 pub use router::Router;
 pub use router_engine::RouterEngine;
@@ -28,20 +26,13 @@ use hyperinfer_core::{
     rate_limiting::RateLimiter, ChatChunk, ChatRequest, ChatResponse, Config, HyperInferError,
     Provider,
 };
-use hyperinfer_providers::ProviderRegistry;
+use hyperinfer_providers::{
+    anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAiProvider, LlmProvider,
+    ProviderRegistry,
+};
 use std::pin::Pin;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 use std::task::{Context, Poll};
-
-static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
-    reqwest::Client::builder()
-        .dns_resolver(Arc::new(safe_resolver::SafeResolver))
-        .redirect(reqwest::redirect::Policy::none())
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .read_timeout(std::time::Duration::from_secs(60))
-        .build()
-        .expect("Failed to build secure reqwest HTTP client")
-});
 use tokio::sync::RwLock;
 use tracing::Instrument as _;
 
@@ -150,9 +141,57 @@ impl Stream for AccountedStream {
     }
 }
 
+fn default_base_url_for_provider(provider: &Provider) -> String {
+    match provider {
+        Provider::Anthropic => "https://api.anthropic.com".to_string(),
+        Provider::Gemini => "https://generativelanguage.googleapis.com".to_string(),
+        Provider::Antigravity => "https://cloudcode-pa.googleapis.com".to_string(),
+        Provider::OpenAI | Provider::Other => "https://api.openai.com".to_string(),
+    }
+}
+
+fn normalize_provider_base_url(base_url: &str, provider: &Provider) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    match provider {
+        Provider::OpenAI | Provider::Anthropic | Provider::Other => {
+            trimmed.trim_end_matches("/v1").to_string()
+        }
+        Provider::Gemini | Provider::Antigravity => trimmed.to_string(),
+    }
+}
+
+fn resolve_provider(
+    registry: &ProviderRegistry,
+    provider: &Provider,
+    base_url: &str,
+) -> Result<Arc<dyn LlmProvider>, HyperInferError> {
+    let default_url = default_base_url_for_provider(provider);
+    let normalized = normalize_provider_base_url(base_url, provider);
+
+    if normalized == default_url {
+        if let Some(p) = registry.get(&provider.to_string()) {
+            return Ok(p);
+        }
+    }
+
+    match provider {
+        Provider::Anthropic => AnthropicProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string()))),
+        Provider::Gemini => GeminiProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string()))),
+        Provider::Antigravity => GeminiProvider::antigravity_with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string()))),
+        Provider::OpenAI | Provider::Other => OpenAiProvider::with_base_url(normalized)
+            .map(|p| Arc::new(p) as Arc<dyn LlmProvider>)
+            .map_err(|e| HyperInferError::Config(std::io::Error::other(e.to_string()))),
+    }
+}
+
 pub struct HyperInferClient {
     config: Arc<RwLock<Config>>,
-    http_caller: Arc<HttpCaller>,
     router: Arc<Router>,
     router_engine: Arc<RouterEngine>,
     rate_limiter: RateLimiter,
@@ -164,7 +203,6 @@ pub struct HyperInferClient {
 
 impl HyperInferClient {
     pub async fn new(redis_url: &str, config: Config) -> Result<Self, HyperInferError> {
-        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
         let router = Arc::new(
             Router::new(config.routing_rules.clone())
                 .with_aliases(config.model_aliases.clone())
@@ -192,7 +230,6 @@ impl HyperInferClient {
 
         Ok(Self {
             config,
-            http_caller,
             router,
             router_engine: Arc::new(RouterEngine::with_redis(redis_url).await),
             rate_limiter,
@@ -205,7 +242,6 @@ impl HyperInferClient {
 
     /// Create a standalone in-memory `HyperInferClient` that requires no Redis or external server.
     pub async fn new_local(config: Config) -> Result<Self, HyperInferError> {
-        let http_caller = Arc::new(HttpCaller::new().map_err(HyperInferError::Http)?);
         let router = Arc::new(
             Router::new(config.routing_rules.clone())
                 .with_aliases(config.model_aliases.clone())
@@ -225,7 +261,6 @@ impl HyperInferClient {
 
         Ok(Self {
             config,
-            http_caller,
             router,
             router_engine: Arc::new(RouterEngine::new().await),
             rate_limiter,
@@ -371,155 +406,105 @@ impl HyperInferClient {
 
             // 2. Try deployment-based routing first (if deployments are loaded)
             let deployment_result = self.router_engine.select_deployment(&request).await;
-            if let Ok(routing_result) = deployment_result {
+            let (model, config_snapshot, response) = if let Ok(routing_result) = deployment_result {
                 let deployment = &routing_result.deployment;
-                let default_url = match &deployment.provider {
-                    Provider::Anthropic => "https://api.anthropic.com/v1",
-                    _ => "https://api.openai.com/v1",
-                };
-                let base_url = deployment.base_url.as_deref().unwrap_or(default_url);
+                let default_url = default_base_url_for_provider(&deployment.provider);
+                let base_url = deployment.base_url.as_deref().unwrap_or(&default_url);
                 let api_key = &deployment.api_key_ref;
 
-                let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+                let provider_name = deployment.provider.to_string();
+                crate::telemetry_otlp::set_gen_ai_attributes(
+                    &tracing::Span::current(),
+                    &provider_name,
+                    &deployment.model,
+                    "chat",
+                );
 
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert("content-type", "application/json".parse().unwrap());
-                if !api_key.is_empty() {
-                    match &deployment.provider {
-                        Provider::Anthropic => {
-                            headers.insert("x-api-key", api_key.parse().unwrap());
-                            headers.insert("anthropic-version", "2023-06-01".parse().unwrap());
+                let llm_provider = {
+                    let registry = self.provider_registry.read().await;
+                    match resolve_provider(&registry, &deployment.provider, base_url) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            self.router_engine.record_failure(&deployment.id).await;
+                            return Err(e);
                         }
-                        _ => {
-                            headers.insert(
-                                "authorization",
-                                format!("Bearer {}", api_key).parse().unwrap(),
-                            );
-                        }
+                    }
+                };
+
+                let mut resolved_request = request.clone();
+                resolved_request.model = deployment.model.clone();
+                match llm_provider.chat(&resolved_request, api_key).await {
+                    Ok(body) => {
+                        let latency = start.elapsed().as_secs_f64() * 1000.0;
+                        let actual_tokens =
+                            (body.usage.input_tokens + body.usage.output_tokens) as u64;
+                        self.router_engine
+                            .record_success(&deployment.id, latency, actual_tokens)
+                            .await;
+
+                        let config_snapshot = Arc::new(self.config.read().await.clone());
+                        (deployment.model.clone(), config_snapshot, body)
+                    }
+                    Err(e) => {
+                        self.router_engine.record_failure(&deployment.id).await;
+                        return Err(e);
                     }
                 }
+            } else {
+                // 3. Fallback to existing Router-based flow
+                let (model, provider, api_key, config_snapshot) = {
+                    let config = self.config.read().await;
+                    let resolved = self.router.resolve(&request.model, &config);
 
-                match HTTP_CLIENT
-                    .post(&url)
-                    .headers(headers)
-                    .json(&request)
-                    .send()
-                    .await
-                {
-                    Ok(response) => {
-                        let status = response.status();
-                        if status.is_success() {
-                            if let Ok(body) = response.json::<ChatResponse>().await {
-                                // Record success metrics
-                                let latency = start.elapsed().as_secs_f64() * 1000.0;
-                                let actual_tokens =
-                                    (body.usage.input_tokens + body.usage.output_tokens) as u64;
-                                self.router_engine
-                                    .record_success(&deployment.id, latency, actual_tokens)
-                                    .await;
-
-                                // Charge delta if actual usage exceeded our estimate
-                                if actual_tokens > estimated_tokens {
-                                    let delta = actual_tokens - estimated_tokens;
-                                    let quota_clone = key_quota.clone();
-                                    let rl = self.rate_limiter.clone();
-                                    let key_owned = key.to_string();
-                                    tokio::spawn(async move {
-                                        if let Err(e) = rl
-                                            .charge_tokens(&key_owned, delta, quota_clone.as_ref())
-                                            .await
-                                        {
-                                            tracing::warn!(
-                                                error = %e,
-                                                key = %key_owned,
-                                                "Failed to charge token delta"
-                                            );
-                                        }
-                                    });
-                                }
-
-                                // Record telemetry
-                                let elapsed = start.elapsed().as_millis() as u64;
-                                let telemetry = self.telemetry.clone();
-                                let key_owned = key.to_string();
-                                let model_owned = request.model.clone();
-                                tokio::spawn(async move {
-                                    let _ = telemetry
-                                        .record_with_tokens(
-                                            &key_owned,
-                                            &model_owned,
-                                            body.usage.input_tokens,
-                                            body.usage.output_tokens,
-                                            elapsed,
-                                        )
-                                        .await;
-                                });
-
-                                return Ok(body);
-                            }
-                        }
-                        // If request failed, record failure and fall through to fallback
-                        self.router_engine.record_failure(&deployment.id).await;
-                    }
-                    Err(_) => {
-                        // Request failed, record failure and fall through to fallback
-                        self.router_engine.record_failure(&deployment.id).await;
-                    }
-                }
-            }
-
-            // 3. Fallback to existing Router-based flow
-            let (model, provider, api_key, config_snapshot) = {
-                let config = self.config.read().await;
-                let resolved = self.router.resolve(&request.model, &config);
-
-                let (model, provider) = resolved.ok_or_else(|| {
-                    HyperInferError::Config(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!(
-                            "Unknown model: '{}'. No routing rule or alias found.",
-                            request.model
-                        ),
-                    ))
-                })?;
-
-                let api_key = config
-                    .api_keys
-                    .get(&provider.to_string())
-                    .cloned()
-                    .ok_or_else(|| {
+                    let (model, provider) = resolved.ok_or_else(|| {
                         HyperInferError::Config(std::io::Error::new(
                             std::io::ErrorKind::NotFound,
-                            format!("API key not found for provider: {:?}", provider),
+                            format!(
+                                "Unknown model: '{}'. No routing rule or alias found.",
+                                request.model
+                            ),
                         ))
                     })?;
 
-                (model, provider, api_key, Arc::new(config.clone()))
+                    let api_key = config
+                        .api_keys
+                        .get(&provider.to_string())
+                        .cloned()
+                        .ok_or_else(|| {
+                            HyperInferError::Config(std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                format!("API key not found for provider: {:?}", provider),
+                            ))
+                        })?;
+
+                    (model, provider, api_key, Arc::new(config.clone()))
+                };
+
+                // Enrich span with the resolved provider and final model name.
+                let provider_name = provider.to_string();
+                crate::telemetry_otlp::set_gen_ai_attributes(
+                    &tracing::Span::current(),
+                    &provider_name,
+                    &model,
+                    "chat",
+                );
+
+                // Execute HTTP call via provider registry
+                let llm_provider = {
+                    let registry = self.provider_registry.read().await;
+                    registry.get(&provider_name).ok_or_else(|| {
+                        HyperInferError::Config(std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("Provider '{}' not found in registry", provider_name),
+                        ))
+                    })?
+                };
+
+                let mut resolved_request = request.clone();
+                resolved_request.model = model.clone();
+                let response = llm_provider.chat(&resolved_request, &api_key).await?;
+                (model, config_snapshot, response)
             };
-
-            // Enrich span with the resolved provider and final model name.
-            let provider_name = provider.to_string();
-            crate::telemetry_otlp::set_gen_ai_attributes(
-                &tracing::Span::current(),
-                &provider_name,
-                &model,
-                "chat",
-            );
-
-            // 3. Execute HTTP call via provider registry
-            let llm_provider = {
-                let registry = self.provider_registry.read().await;
-                registry.get(&provider_name).ok_or_else(|| {
-                    HyperInferError::Config(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("Provider '{}' not found in registry", provider_name),
-                    ))
-                })?
-            };
-
-            let mut resolved_request = request.clone();
-            resolved_request.model = model.clone();
-            let response = llm_provider.chat(&resolved_request, &api_key).await?;
 
             // 4. Record OTel usage and response attributes on the span.
             let elapsed = start.elapsed().as_millis() as u64;
@@ -593,9 +578,13 @@ impl HyperInferClient {
             }
 
             // 5. Fire-and-forget traffic mirror (if configured).
+            let registry_for_mirror = {
+                let guard = self.provider_registry.read().await;
+                Arc::clone(&guard)
+            };
             mirroring::maybe_mirror(
                 self.mirror.clone(),
-                self.http_caller.clone(),
+                registry_for_mirror,
                 self.router.clone(),
                 config_snapshot,
                 key.to_string(),
@@ -637,8 +626,42 @@ impl HyperInferClient {
             ));
         }
 
-        // 2. Resolve model / provider / api key.
-        let (model, provider_name, api_key) = {
+        // 2. Try deployment-based routing first (if deployments are loaded)
+        let deployment_result = self.router_engine.select_deployment(&request).await;
+        let (model, provider_name, provider_stream) = if let Ok(routing_result) = deployment_result
+        {
+            let deployment = &routing_result.deployment;
+            let default_url = default_base_url_for_provider(&deployment.provider);
+            let base_url = deployment.base_url.as_deref().unwrap_or(&default_url);
+            let api_key = deployment.api_key_ref.clone();
+
+            let llm_provider = {
+                let registry = self.provider_registry.read().await;
+                match resolve_provider(&registry, &deployment.provider, base_url) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        self.router_engine.record_failure(&deployment.id).await;
+                        return Err(e);
+                    }
+                }
+            };
+
+            let mut resolved_request = request.clone();
+            resolved_request.model = deployment.model.clone();
+            let provider_stream = llm_provider.stream(&resolved_request, &api_key);
+
+            // Record success at stream start (streaming makes per-request latency tracking harder)
+            self.router_engine
+                .record_success(&deployment.id, 0.0, 0)
+                .await;
+
+            (
+                deployment.model.clone(),
+                deployment.provider.to_string(),
+                provider_stream,
+            )
+        } else {
+            // Fallback to existing Router-based flow
             let config = self.config.read().await;
             let resolved = self.router.resolve(&request.model, &config);
 
@@ -664,28 +687,25 @@ impl HyperInferClient {
                     ))
                 })?;
 
-            (model, provider_name, api_key)
-        };
+            // Get streaming provider from registry (already checks supports_streaming)
+            let streaming_provider = {
+                let registry = self.provider_registry.read().await;
+                registry.get_streaming(&provider_name).ok_or_else(|| {
+                    HyperInferError::Config(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!(
+                            "Provider '{}' not found in registry or does not support streaming",
+                            provider_name
+                        ),
+                    ))
+                })?
+            };
 
-        // 3. Get streaming provider from registry (already checks supports_streaming)
-        let streaming_provider = {
-            let registry = self.provider_registry.read().await;
-            registry.get_streaming(&provider_name).ok_or_else(|| {
-                HyperInferError::Config(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!(
-                        "Provider '{}' not found in registry or does not support streaming",
-                        provider_name
-                    ),
-                ))
-            })?
+            let mut resolved_request = request.clone();
+            resolved_request.model = model.clone();
+            let provider_stream = streaming_provider.into_stream(&resolved_request, &api_key);
+            (model, provider_name, provider_stream)
         };
-
-        let mut resolved_request = request.clone();
-        resolved_request.model = model.clone();
-        let provider_stream: Pin<
-            Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>,
-        > = streaming_provider.into_stream(&resolved_request, &api_key);
         // Note: streaming responses are not cached — the stream is consumed
         // incrementally by the caller so we cannot inspect it here.
 
@@ -717,5 +737,120 @@ impl HyperInferClient {
         };
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_base_url_for_provider() {
+        assert_eq!(
+            default_base_url_for_provider(&Provider::OpenAI),
+            "https://api.openai.com"
+        );
+        assert_eq!(
+            default_base_url_for_provider(&Provider::Anthropic),
+            "https://api.anthropic.com"
+        );
+        assert_eq!(
+            default_base_url_for_provider(&Provider::Gemini),
+            "https://generativelanguage.googleapis.com"
+        );
+        assert_eq!(
+            default_base_url_for_provider(&Provider::Antigravity),
+            "https://cloudcode-pa.googleapis.com"
+        );
+        assert_eq!(
+            default_base_url_for_provider(&Provider::Other),
+            "https://api.openai.com"
+        );
+    }
+
+    #[test]
+    fn test_normalize_provider_base_url() {
+        // OpenAI: strip /v1
+        assert_eq!(
+            normalize_provider_base_url("https://api.openai.com/v1", &Provider::OpenAI),
+            "https://api.openai.com"
+        );
+        assert_eq!(
+            normalize_provider_base_url("https://api.openai.com/v1/", &Provider::OpenAI),
+            "https://api.openai.com"
+        );
+        assert_eq!(
+            normalize_provider_base_url("https://api.openai.com", &Provider::OpenAI),
+            "https://api.openai.com"
+        );
+
+        // Anthropic: strip /v1
+        assert_eq!(
+            normalize_provider_base_url("https://api.anthropic.com/v1", &Provider::Anthropic),
+            "https://api.anthropic.com"
+        );
+
+        // Gemini: keep as-is
+        assert_eq!(
+            normalize_provider_base_url(
+                "https://generativelanguage.googleapis.com",
+                &Provider::Gemini
+            ),
+            "https://generativelanguage.googleapis.com"
+        );
+
+        // Custom base URL
+        assert_eq!(
+            normalize_provider_base_url("https://proxy.example.com/v1", &Provider::OpenAI),
+            "https://proxy.example.com"
+        );
+    }
+
+    #[test]
+    fn test_resolve_provider_default_registry() {
+        let registry = ProviderRegistry::new();
+        registry.register(OpenAiProvider::new().unwrap());
+        registry.register(AnthropicProvider::new().unwrap());
+        registry.register(GeminiProvider::new().unwrap());
+
+        // Default URLs should use registry providers
+        let openai = resolve_provider(&registry, &Provider::OpenAI, "https://api.openai.com/v1")
+            .expect("openai default");
+        assert_eq!(openai.name(), "openai");
+
+        let anthropic = resolve_provider(
+            &registry,
+            &Provider::Anthropic,
+            "https://api.anthropic.com/v1",
+        )
+        .expect("anthropic default");
+        assert_eq!(anthropic.name(), "anthropic");
+
+        let gemini = resolve_provider(
+            &registry,
+            &Provider::Gemini,
+            "https://generativelanguage.googleapis.com",
+        )
+        .expect("gemini default");
+        assert_eq!(gemini.name(), "gemini");
+    }
+
+    #[test]
+    fn test_resolve_provider_custom_base_url() {
+        let registry = ProviderRegistry::new();
+        registry.register(OpenAiProvider::new().unwrap());
+
+        // Custom base URL should create a new provider instance
+        let custom = resolve_provider(&registry, &Provider::OpenAI, "https://proxy.example.com/v1")
+            .expect("custom openai");
+        assert_eq!(custom.name(), "openai");
+
+        let custom_anthropic = resolve_provider(
+            &registry,
+            &Provider::Anthropic,
+            "https://proxy.example.com/v1",
+        )
+        .expect("custom anthropic");
+        assert_eq!(custom_anthropic.name(), "anthropic");
     }
 }

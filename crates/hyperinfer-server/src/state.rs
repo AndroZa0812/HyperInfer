@@ -8,7 +8,7 @@ use axum::{
     response::Response,
 };
 use hyperinfer_core::{Config, ConfigStore, Database, DbError, RateLimiter};
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
 use tokio::sync::RwLock;
@@ -80,21 +80,7 @@ pub fn can_access_team(claims: &AuthClaims, target_team_id: &str) -> bool {
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
-pub fn hash_key(key: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(key.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
-pub fn key_id(key: &str) -> String {
-    let hash = hash_key(key);
-    // Return last 8 characters of hash
-    if hash.len() >= 8 {
-        format!("...{}", &hash[hash.len() - 8..])
-    } else {
-        hash
-    }
-}
+pub use hyperinfer_core::{hash_key, key_id};
 
 pub fn build_cors_layer_from_string(origins_str: Option<&str>) -> Result<CorsLayer, &'static str> {
     let allowed_origins = origins_str.ok_or("ALLOWED_ORIGINS must be set to a non-empty value.")?;
@@ -116,7 +102,12 @@ pub fn build_cors_layer_from_string(origins_str: Option<&str>) -> Result<CorsLay
 
     Ok(CorsLayer::new()
         .allow_origin(origins)
-        .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+        .allow_methods([
+            axum::http::Method::GET,
+            axum::http::Method::POST,
+            axum::http::Method::PUT,
+            axum::http::Method::DELETE,
+        ])
         .allow_headers([
             axum::http::header::CONTENT_TYPE,
             axum::http::header::AUTHORIZATION,
