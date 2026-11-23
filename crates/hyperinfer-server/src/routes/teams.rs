@@ -1,0 +1,217 @@
+//! Team, model alias, and quota management routes.
+
+use axum::{
+    extract::{Extension, Json, Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
+use hyperinfer_core::{ConfigStore, Database, DbError};
+use serde::Deserialize;
+use utoipa::ToSchema;
+
+use crate::auth::{AuthClaims, RequireAdmin};
+use crate::state::{can_access_team, AppState};
+
+#[derive(Deserialize, ToSchema)]
+pub struct CreateTeamRequest {
+    pub name: String,
+    pub budget_cents: i64,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CreateModelAliasRequest {
+    pub team_id: String,
+    pub alias: String,
+    pub target_model: String,
+    pub provider: String,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CreateQuotaRequest {
+    pub team_id: String,
+    pub rpm_limit: i32,
+    pub tpm_limit: i32,
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/teams/{id}",
+    params(("id" = String, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "Team found"),
+        (status = 403, description = "Access denied"),
+        (status = 404, description = "Team not found")
+    ),
+    tag = "teams"
+)]
+pub async fn get_team<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(team_id): Path<String>,
+) -> impl IntoResponse {
+    if !can_access_team(&claims, &team_id) {
+        return (StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+    match state.db.get_team(&team_id).await {
+        Ok(Some(team)) => Json(team).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/teams",
+    request_body = CreateTeamRequest,
+    responses(
+        (status = 200, description = "Team created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required"),
+        (status = 409, description = "Team name already exists")
+    ),
+    tag = "teams"
+)]
+pub async fn create_team<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Json(req): Json<CreateTeamRequest>,
+) -> impl IntoResponse {
+    match state.db.create_team(&req.name, req.budget_cents).await {
+        Ok(team) => Json(team).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create team").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/model_aliases/{id}",
+    params(("id" = String, Path, description = "Model alias ID")),
+    responses(
+        (status = 200, description = "Model alias found"),
+        (status = 403, description = "Access denied"),
+        (status = 404, description = "Model alias not found")
+    ),
+    tag = "model_aliases"
+)]
+pub async fn get_model_alias<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(alias_id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.get_model_alias(&alias_id).await {
+        Ok(Some(alias)) => {
+            if !can_access_team(&claims, &alias.team_id) {
+                return (StatusCode::FORBIDDEN, "Access denied").into_response();
+            }
+            Json(alias).into_response()
+        }
+        Ok(None) => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/model_aliases",
+    request_body = CreateModelAliasRequest,
+    responses(
+        (status = 200, description = "Model alias created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "model_aliases"
+)]
+pub async fn create_model_alias<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Json(req): Json<CreateModelAliasRequest>,
+) -> impl IntoResponse {
+    match state
+        .db
+        .create_model_alias(&req.team_id, &req.alias, &req.target_model, &req.provider)
+        .await
+    {
+        Ok(alias) => Json(alias).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to create model alias",
+            )
+                .into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/quotas/{team_id}",
+    params(("team_id" = String, Path, description = "Team ID")),
+    responses(
+        (status = 200, description = "Quota found"),
+        (status = 403, description = "Access denied"),
+        (status = 404, description = "Quota not found")
+    ),
+    tag = "quotas"
+)]
+pub async fn get_quota<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Path(team_id): Path<String>,
+) -> impl IntoResponse {
+    if !can_access_team(&claims, &team_id) {
+        return (StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+    match state.db.get_quota(&team_id).await {
+        Ok(Some(quota)) => Json(quota).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Quota not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/v1/quotas",
+    request_body = CreateQuotaRequest,
+    responses(
+        (status = 200, description = "Quota created"),
+        (status = 400, description = "Invalid request"),
+        (status = 403, description = "Admin access required")
+    ),
+    tag = "quotas"
+)]
+pub async fn create_quota<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Json(req): Json<CreateQuotaRequest>,
+) -> impl IntoResponse {
+    match state
+        .db
+        .create_quota(&req.team_id, req.rpm_limit, req.tpm_limit)
+        .await
+    {
+        Ok(quota) => Json(quota).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
+        },
+    }
+}
+
+// ── Deployment Handlers ────────────────────────────────────────────────────
