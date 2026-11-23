@@ -425,6 +425,8 @@ impl Agent {
                 stream: None,
                 stop: None,
                 tools: tool_defs.clone(),
+                tool_choice: None,
+                response_format: None,
             };
 
             let response = self.backend.chat(&self.config.api_key_id, request).await?;

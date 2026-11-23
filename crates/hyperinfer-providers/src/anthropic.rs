@@ -94,10 +94,69 @@ pub(crate) fn build_anthropic_request_body(
                 i += 1;
             }
             _ => {
-                messages.push(serde_json::json!({
-                    "role": "user",
-                    "content": m.content,
-                }));
+                if let Some(ref parts) = m.content_parts {
+                    if !parts.is_empty() {
+                        let blocks: Vec<serde_json::Value> = parts
+                            .iter()
+                            .map(|p| match p {
+                                hyperinfer_core::ContentPart::Text { text } => {
+                                    serde_json::json!({ "type": "text", "text": text })
+                                }
+                                hyperinfer_core::ContentPart::ImageUrl { image_url } => {
+                                    if image_url.url.starts_with("data:") {
+                                        let parts: Vec<&str> =
+                                            image_url.url.splitn(2, ';').collect();
+                                        let media_type = if parts[0].starts_with("data:") {
+                                            parts[0].strip_prefix("data:").unwrap_or("image/png")
+                                        } else {
+                                            "image/png"
+                                        };
+                                        let data = if image_url.url.contains("base64,") {
+                                            image_url
+                                                .url
+                                                .split("base64,")
+                                                .nth(1)
+                                                .unwrap_or("")
+                                                .to_string()
+                                        } else {
+                                            image_url.url.to_string()
+                                        };
+                                        serde_json::json!({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "base64",
+                                                "media_type": media_type,
+                                                "data": data
+                                            }
+                                        })
+                                    } else {
+                                        serde_json::json!({
+                                            "type": "image",
+                                            "source": {
+                                                "type": "url",
+                                                "url": image_url.url
+                                            }
+                                        })
+                                    }
+                                }
+                            })
+                            .collect();
+                        messages.push(serde_json::json!({
+                            "role": "user",
+                            "content": blocks,
+                        }));
+                    } else {
+                        messages.push(serde_json::json!({
+                            "role": "user",
+                            "content": m.content,
+                        }));
+                    }
+                } else {
+                    messages.push(serde_json::json!({
+                        "role": "user",
+                        "content": m.content,
+                    }));
+                }
                 i += 1;
             }
         }
@@ -137,6 +196,32 @@ pub(crate) fn build_anthropic_request_body(
                 .collect();
             body.insert("tools".to_string(), serde_json::json!(anthropic_tools));
         }
+    }
+
+    // Translate OpenAI-style tool_choice to Anthropic format
+    if let Some(ref tool_choice) = request.tool_choice {
+        let anthropic_tool_choice = if tool_choice == &serde_json::json!("auto") {
+            serde_json::json!({ "type": "auto" })
+        } else if tool_choice == &serde_json::json!("required") {
+            serde_json::json!({ "type": "any" })
+        } else if let Some(obj) = tool_choice.as_object() {
+            if obj.get("type") == Some(&serde_json::json!("function")) {
+                if let Some(func) = obj.get("function") {
+                    if let Some(name) = func.get("name") {
+                        serde_json::json!({ "type": "tool", "name": name })
+                    } else {
+                        serde_json::json!({ "type": "auto" })
+                    }
+                } else {
+                    serde_json::json!({ "type": "auto" })
+                }
+            } else {
+                serde_json::json!({ "type": "auto" })
+            }
+        } else {
+            serde_json::json!({ "type": "auto" })
+        };
+        body.insert("tool_choice".to_string(), anthropic_tool_choice);
     }
 
     (system, messages, body)
@@ -269,6 +354,7 @@ impl LlmProvider for AnthropicProvider {
                     },
                     tool_call_id: None,
                     name: None,
+                    content_parts: None,
                 },
                 finish_reason: data.stop_reason,
             }],
@@ -498,5 +584,99 @@ mod tests {
         assert_eq!(messages[2]["role"], "user");
         assert_eq!(messages[2]["content"][0]["type"], "tool_result");
         assert_eq!(messages[2]["content"][0]["tool_use_id"], "toolu_01");
+    }
+
+    #[test]
+    fn test_anthropic_tool_choice_translation() {
+        let req_auto = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(serde_json::json!("auto")),
+            ..Default::default()
+        };
+        let (_s, _m, body_auto) = build_anthropic_request_body(&req_auto, false);
+        assert_eq!(body_auto["tool_choice"]["type"], "auto");
+
+        let req_required = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(serde_json::json!("required")),
+            ..Default::default()
+        };
+        let (_s, _m, body_required) = build_anthropic_request_body(&req_required, false);
+        assert_eq!(body_required["tool_choice"]["type"], "any");
+
+        let req_specific = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(
+                serde_json::json!({"type": "function", "function": {"name": "read_file"}}),
+            ),
+            ..Default::default()
+        };
+        let (_s, _m, body_specific) = build_anthropic_request_body(&req_specific, false);
+        assert_eq!(body_specific["tool_choice"]["type"], "tool");
+        assert_eq!(body_specific["tool_choice"]["name"], "read_file");
+    }
+
+    #[test]
+    fn test_anthropic_multimodal_content_parts() {
+        let req = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                content_parts: Some(vec![
+                    hyperinfer_core::ContentPart::Text {
+                        text: "Describe this:".to_string(),
+                    },
+                    hyperinfer_core::ContentPart::ImageUrl {
+                        image_url: hyperinfer_core::ImageUrl {
+                            url: "https://example.com/img.png".to_string(),
+                            detail: None,
+                        },
+                    },
+                ]),
+            }],
+            ..Default::default()
+        };
+        let (_s, messages, _body) = build_anthropic_request_body(&req, false);
+        let content = &messages[0]["content"];
+        assert!(content.is_array());
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "Describe this:");
+        assert_eq!(content[1]["type"], "image");
+        assert_eq!(content[1]["source"]["type"], "url");
+        assert_eq!(content[1]["source"]["url"], "https://example.com/img.png");
+    }
+
+    #[test]
+    fn test_anthropic_base64_image() {
+        let req = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                content_parts: Some(vec![hyperinfer_core::ContentPart::ImageUrl {
+                    image_url: hyperinfer_core::ImageUrl {
+                        url: "data:image/png;base64,SGVsbG8=".to_string(),
+                        detail: None,
+                    },
+                }]),
+            }],
+            ..Default::default()
+        };
+        let (_s, messages, _body) = build_anthropic_request_body(&req, false);
+        let content = &messages[0]["content"];
+        assert_eq!(content[0]["type"], "image");
+        assert_eq!(content[0]["source"]["type"], "base64");
+        assert_eq!(content[0]["source"]["media_type"], "image/png");
+        assert_eq!(content[0]["source"]["data"], "SGVsbG8=");
     }
 }

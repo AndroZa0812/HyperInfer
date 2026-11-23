@@ -59,7 +59,33 @@ pub(crate) fn chat_request_to_openai_body(request: &ChatRequest) -> serde_json::
         .map(|m| {
             let mut msg = serde_json::Map::new();
             msg.insert("role".to_string(), serde_json::json!(m.role));
-            if let Some(ref calls) = m.tool_calls {
+            if let Some(ref parts) = m.content_parts {
+                if !parts.is_empty() {
+                    let oai_parts: Vec<serde_json::Value> = parts
+                        .iter()
+                        .map(|p| match p {
+                            hyperinfer_core::ContentPart::Text { text } => {
+                                serde_json::json!({ "type": "text", "text": text })
+                            }
+                            hyperinfer_core::ContentPart::ImageUrl { image_url } => {
+                                let mut img = serde_json::Map::new();
+                                img.insert("type".to_string(), serde_json::json!("image_url"));
+                                let mut url_obj = serde_json::Map::new();
+                                url_obj.insert("url".to_string(), serde_json::json!(image_url.url));
+                                if let Some(ref detail) = image_url.detail {
+                                    url_obj.insert("detail".to_string(), serde_json::json!(detail));
+                                }
+                                img.insert(
+                                    "image_url".to_string(),
+                                    serde_json::Value::Object(url_obj),
+                                );
+                                serde_json::Value::Object(img)
+                            }
+                        })
+                        .collect();
+                    msg.insert("content".to_string(), serde_json::json!(oai_parts));
+                }
+            } else if let Some(ref calls) = m.tool_calls {
                 if m.content.is_empty() {
                     msg.insert("content".to_string(), serde_json::Value::Null);
                 } else {
@@ -119,6 +145,12 @@ pub(crate) fn chat_request_to_openai_body(request: &ChatRequest) -> serde_json::
                 .collect();
             body.insert("tools".to_string(), serde_json::json!(oai_tools));
         }
+    }
+    if let Some(ref tool_choice) = request.tool_choice {
+        body.insert("tool_choice".to_string(), tool_choice.clone());
+    }
+    if let Some(ref response_format) = request.response_format {
+        body.insert("response_format".to_string(), response_format.clone());
     }
     serde_json::Value::Object(body)
 }
@@ -247,6 +279,7 @@ impl LlmProvider for OpenAiProvider {
                             tool_calls,
                             tool_call_id: None,
                             name: None,
+                            content_parts: None,
                         },
                         finish_reason: c.finish_reason,
                     }
@@ -458,5 +491,56 @@ mod tests {
         assert_eq!(body["messages"][1]["tool_calls"][0]["id"], "call_abc");
         assert_eq!(body["messages"][2]["role"], "tool");
         assert_eq!(body["messages"][2]["tool_call_id"], "call_abc");
+    }
+
+    #[test]
+    fn test_openai_tool_choice_and_response_format() {
+        let req = ChatRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            tool_choice: Some(serde_json::json!("auto")),
+            response_format: Some(serde_json::json!({"type": "json_object"})),
+            ..Default::default()
+        };
+        let body = chat_request_to_openai_body(&req);
+        assert_eq!(body["tool_choice"], "auto");
+        assert_eq!(body["response_format"]["type"], "json_object");
+    }
+
+    #[test]
+    fn test_openai_multimodal_content_parts() {
+        let req = ChatRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                content_parts: Some(vec![
+                    hyperinfer_core::ContentPart::Text {
+                        text: "Describe this:".to_string(),
+                    },
+                    hyperinfer_core::ContentPart::ImageUrl {
+                        image_url: hyperinfer_core::ImageUrl {
+                            url: "https://example.com/img.png".to_string(),
+                            detail: Some("high".to_string()),
+                        },
+                    },
+                ]),
+            }],
+            ..Default::default()
+        };
+        let body = chat_request_to_openai_body(&req);
+        let content = &body["messages"][0]["content"];
+        assert!(content.is_array());
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "Describe this:");
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "https://example.com/img.png"
+        );
+        assert_eq!(content[1]["image_url"]["detail"], "high");
     }
 }

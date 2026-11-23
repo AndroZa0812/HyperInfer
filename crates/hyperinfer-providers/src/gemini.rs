@@ -129,10 +129,66 @@ pub(crate) fn build_gemini_request_body(request: &ChatRequest) -> serde_json::Va
                 i += 1;
             }
             _ => {
-                contents.push(serde_json::json!({
-                    "role": "user",
-                    "parts": [{ "text": m.content }],
-                }));
+                if let Some(ref parts) = m.content_parts {
+                    if !parts.is_empty() {
+                        let gemini_parts: Vec<serde_json::Value> = parts
+                            .iter()
+                            .map(|p| match p {
+                                hyperinfer_core::ContentPart::Text { text } => {
+                                    serde_json::json!({ "text": text })
+                                }
+                                hyperinfer_core::ContentPart::ImageUrl { image_url } => {
+                                    if image_url.url.starts_with("data:") {
+                                        let parts: Vec<&str> =
+                                            image_url.url.splitn(2, ';').collect();
+                                        let media_type = if parts[0].starts_with("data:") {
+                                            parts[0].strip_prefix("data:").unwrap_or("image/png")
+                                        } else {
+                                            "image/png"
+                                        };
+                                        let data = if image_url.url.contains("base64,") {
+                                            image_url
+                                                .url
+                                                .split("base64,")
+                                                .nth(1)
+                                                .unwrap_or("")
+                                                .to_string()
+                                        } else {
+                                            image_url.url.to_string()
+                                        };
+                                        serde_json::json!({
+                                            "inline_data": {
+                                                "mime_type": media_type,
+                                                "data": data
+                                            }
+                                        })
+                                    } else {
+                                        serde_json::json!({
+                                            "file_data": {
+                                                "mime_type": "image/png",
+                                                "file_uri": image_url.url
+                                            }
+                                        })
+                                    }
+                                }
+                            })
+                            .collect();
+                        contents.push(serde_json::json!({
+                            "role": "user",
+                            "parts": gemini_parts,
+                        }));
+                    } else {
+                        contents.push(serde_json::json!({
+                            "role": "user",
+                            "parts": [{ "text": m.content }],
+                        }));
+                    }
+                } else {
+                    contents.push(serde_json::json!({
+                        "role": "user",
+                        "parts": [{ "text": m.content }],
+                    }));
+                }
                 i += 1;
             }
         }
@@ -183,6 +239,22 @@ pub(crate) fn build_gemini_request_body(request: &ChatRequest) -> serde_json::Va
                 "tools".to_string(),
                 serde_json::json!([{ "functionDeclarations": declarations }]),
             );
+        }
+    }
+
+    // Handle response_format: if json_object or json_schema, set responseMimeType
+    if let Some(ref response_format) = request.response_format {
+        if let Some(rf_type) = response_format.get("type") {
+            if rf_type == &serde_json::json!("json_object")
+                || rf_type == &serde_json::json!("json_schema")
+            {
+                // Ensure generationConfig exists
+                if !body.contains_key("generationConfig") {
+                    body.insert("generationConfig".to_string(), serde_json::json!({}));
+                }
+                body["generationConfig"]["responseMimeType"] =
+                    serde_json::json!("application/json");
+            }
         }
     }
 
@@ -322,6 +394,7 @@ pub(crate) fn parse_gemini_response(
                 },
                 tool_call_id: None,
                 name: None,
+                content_parts: None,
             },
             finish_reason,
         }],
@@ -599,5 +672,78 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].name, "read_file");
         assert_eq!(calls[0].arguments, r#"{"path":"src/lib.rs"}"#);
+    }
+
+    #[test]
+    fn test_gemini_response_format_json() {
+        let req = ChatRequest {
+            model: "gemini-2.5-pro".to_string(),
+            messages: vec![ChatMessage::user("Hello")],
+            response_format: Some(serde_json::json!({"type": "json_object"})),
+            ..Default::default()
+        };
+        let body = wrap_request_body(&req, false);
+        assert_eq!(
+            body["generationConfig"]["responseMimeType"],
+            "application/json"
+        );
+    }
+
+    #[test]
+    fn test_gemini_multimodal_content_parts() {
+        let req = ChatRequest {
+            model: "gemini-2.5-pro".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                content_parts: Some(vec![
+                    hyperinfer_core::ContentPart::Text {
+                        text: "Describe this:".to_string(),
+                    },
+                    hyperinfer_core::ContentPart::ImageUrl {
+                        image_url: hyperinfer_core::ImageUrl {
+                            url: "https://example.com/img.png".to_string(),
+                            detail: None,
+                        },
+                    },
+                ]),
+            }],
+            ..Default::default()
+        };
+        let body = wrap_request_body(&req, false);
+        let parts = &body["contents"][0]["parts"];
+        assert_eq!(parts[0]["text"], "Describe this:");
+        assert_eq!(
+            parts[1]["file_data"]["file_uri"],
+            "https://example.com/img.png"
+        );
+    }
+
+    #[test]
+    fn test_gemini_base64_image() {
+        let req = ChatRequest {
+            model: "gemini-2.5-pro".to_string(),
+            messages: vec![ChatMessage {
+                role: MessageRole::User,
+                content: "".to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+                content_parts: Some(vec![hyperinfer_core::ContentPart::ImageUrl {
+                    image_url: hyperinfer_core::ImageUrl {
+                        url: "data:image/jpeg;base64,SGVsbG8=".to_string(),
+                        detail: None,
+                    },
+                }]),
+            }],
+            ..Default::default()
+        };
+        let body = wrap_request_body(&req, false);
+        let parts = &body["contents"][0]["parts"];
+        assert_eq!(parts[0]["inline_data"]["mime_type"], "image/jpeg");
+        assert_eq!(parts[0]["inline_data"]["data"], "SGVsbG8=");
     }
 }

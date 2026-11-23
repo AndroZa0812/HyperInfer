@@ -20,9 +20,9 @@ pub use traits::{
     ApiKey, ConfigStore, Database, ModelAlias, NewUsageLog, Quota, Team, UsageLog, User,
 };
 pub use types::{
-    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, CreateDeploymentRequest,
-    Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, ToolCall, ToolDefinition,
-    UpdateRoutingConfigRequest, Usage, UsageRecord,
+    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, ContentPart,
+    CreateDeploymentRequest, Deployment, ImageUrl, MessageRole, Provider, RoutingConfig,
+    RoutingRule, ToolCall, ToolDefinition, UpdateRoutingConfigRequest, Usage, UsageRecord,
 };
 
 /// SHA-256 hash of a key, returned as a hex string.

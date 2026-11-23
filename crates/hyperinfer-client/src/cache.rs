@@ -187,6 +187,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         }
     }
 
