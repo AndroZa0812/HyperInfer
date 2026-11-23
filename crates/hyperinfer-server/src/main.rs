@@ -26,7 +26,7 @@ use hyperinfer_server::{
     proxy, RedisConfigStore, SqlxDb,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::Digest;
 use std::collections::HashMap;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
@@ -138,15 +138,9 @@ async fn get_routing_config_handler<D: Database, C: ConfigStore>(
 
 async fn update_routing_config_handler<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
-    Json(req): Json<UpdateRoutingConfigRequest>,
+    Json(req): Json<hyperinfer_core::UpdateRoutingConfigRequest>,
 ) -> impl IntoResponse {
-    let core_req = hyperinfer_core::UpdateRoutingConfigRequest {
-        strategy: req.strategy,
-        strategy_params: req.strategy_params,
-        fallback_config: req.fallback_config,
-        routing_groups: req.routing_groups,
-    };
-    match state.db.update_routing_config(core_req).await {
+    match state.db.update_routing_config(req).await {
         Ok(config) => Json(config).into_response(),
         Err(e) => {
             tracing::error!("Failed to update routing config: {:?}", e);
@@ -353,7 +347,7 @@ async fn create_api_key<D: Database, C: ConfigStore>(
     _admin: RequireAdmin,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
-    let key_hash = hash_key(&req.key);
+    let key_hash = hyperinfer_core::hash_key(&req.key);
     match state
         .db
         .create_api_key(&key_hash, &req.user_id, &req.team_id, req.name)
@@ -967,13 +961,7 @@ struct CreateQuotaRequest {
     tpm_limit: i32,
 }
 
-#[derive(Deserialize)]
-struct UpdateRoutingConfigRequest {
-    strategy: Option<String>,
-    strategy_params: Option<serde_json::Value>,
-    fallback_config: Option<serde_json::Value>,
-    routing_groups: Option<serde_json::Value>,
-}
+// UpdateRoutingConfigRequest is now imported from hyperinfer_core
 
 #[derive(Deserialize, ToSchema)]
 struct ChangePasswordRequest {
@@ -1147,21 +1135,7 @@ async fn change_password_handler(
 
 // ── Helper Functions ─────────────────────────────────────────────────────────
 
-fn hash_key(key: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(key.as_bytes());
-    hex::encode(hasher.finalize())
-}
-
-fn key_id(key: &str) -> String {
-    let hash = hash_key(key);
-    // Return last 8 characters of hash
-    if hash.len() >= 8 {
-        format!("...{}", &hash[hash.len() - 8..])
-    } else {
-        hash
-    }
-}
+// hash_key and key_id are now provided by hyperinfer_core
 
 pub(crate) fn build_cors_layer_from_string(
     origins_str: Option<&str>,
@@ -1196,7 +1170,7 @@ async fn resolve_api_key<D: Database>(
     db: &D,
     key: &str,
 ) -> Result<Option<(String, String)>, DbError> {
-    let key_hash = hash_key(key);
+    let key_hash = hyperinfer_core::hash_key(key);
     match db.get_api_key_by_hash(&key_hash).await {
         Ok(Some(api_key)) => Ok(Some((api_key.team_id, api_key.id))),
         Ok(None) => Ok(None),
@@ -1276,7 +1250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     let mut cache_w = cache.write().await;
 
                     for record in records {
-                        let key_hash = hash_key(&record.key);
+                        let key_hash = hyperinfer_core::hash_key(&record.key);
                         let (team_id, api_key_id) = match cache_w.get(&key_hash) {
                             Some(v) => v.clone(),
                             None => match resolve_api_key(&db, &record.key).await {
@@ -1290,14 +1264,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                                 Ok(None) => {
                                     tracing::debug!(
                                         "API key not found for key_id: {}, skipping usage record",
-                                        key_id(&record.key)
+                                        hyperinfer_core::key_id(&record.key)
                                     );
                                     continue;
                                 }
                                 Err(e) => {
                                     tracing::error!(
                                         "Failed to resolve API key for key_id {}: {:?}",
-                                        key_id(&record.key),
+                                        hyperinfer_core::key_id(&record.key),
                                         e
                                     );
                                     return Err(e.into());
@@ -2067,8 +2041,8 @@ mod tests {
     #[test]
     fn test_hash_key() {
         let key = "test-api-key";
-        let hash1 = hash_key(key);
-        let hash2 = hash_key(key);
+        let hash1 = hyperinfer_core::hash_key(key);
+        let hash2 = hyperinfer_core::hash_key(key);
 
         // Same input should produce same hash
         assert_eq!(hash1, hash2);
@@ -2077,13 +2051,13 @@ mod tests {
         assert!(hash1.chars().all(|c| c.is_ascii_hexdigit()));
 
         // Different inputs should produce different hashes
-        let different_hash = hash_key("different-key");
+        let different_hash = hyperinfer_core::hash_key("different-key");
         assert_ne!(hash1, different_hash);
     }
 
     #[test]
     fn test_hash_key_empty_string() {
-        let hash = hash_key("");
+        let hash = hyperinfer_core::hash_key("");
         assert!(!hash.is_empty());
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -2091,7 +2065,7 @@ mod tests {
     #[test]
     fn test_hash_key_special_characters() {
         let key = "test-key-with-!@#$%^&*()";
-        let hash = hash_key(key);
+        let hash = hyperinfer_core::hash_key(key);
         assert!(!hash.is_empty());
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -2099,7 +2073,7 @@ mod tests {
     #[test]
     fn test_hash_key_unicode() {
         let key = "test-key-with-unicode-🔑";
-        let hash = hash_key(key);
+        let hash = hyperinfer_core::hash_key(key);
         assert!(!hash.is_empty());
         assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
     }
@@ -2107,7 +2081,7 @@ mod tests {
     #[test]
     fn test_hash_key_long_string() {
         let key = "a".repeat(10000);
-        let hash = hash_key(&key);
+        let hash = hyperinfer_core::hash_key(&key);
         assert!(!hash.is_empty());
         // SHA-256 produces 64 hex characters
         assert_eq!(hash.len(), 64);
@@ -2121,7 +2095,7 @@ mod tests {
         let now = Utc::now();
         let api_key = ApiKey {
             id: "key-id".to_string(),
-            key_hash: hash_key("test-key"),
+            key_hash: hyperinfer_core::hash_key("test-key"),
             user_id: "user-id".to_string(),
             team_id: "team-id".to_string(),
             name: None,
@@ -2132,7 +2106,7 @@ mod tests {
         let api_key_clone = api_key.clone();
 
         db.expect_get_api_key_by_hash()
-            .withf(|hash: &str| hash == hash_key("test-key"))
+            .withf(|hash: &str| hash == hyperinfer_core::hash_key("test-key"))
             .times(1)
             .returning(move |_| Ok(Some(api_key_clone.clone())));
 
@@ -2215,7 +2189,7 @@ mod tests {
         let mut db = MockDatabase::new();
         let now = Utc::now();
 
-        let expected_hash = hash_key("test-secret-key");
+        let expected_hash = hyperinfer_core::hash_key("test-secret-key");
 
         let api_key = ApiKey {
             id: "new-key-id".to_string(),

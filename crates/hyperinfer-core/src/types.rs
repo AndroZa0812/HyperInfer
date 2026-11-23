@@ -4,7 +4,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Instant;
 
 /// A tool (function) definition exposed to an LLM.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -171,15 +170,6 @@ pub enum MessageRole {
     Tool,
 }
 
-/// A token bucket for rate limiting
-#[derive(Debug, Clone)]
-pub struct TokenBucket {
-    pub capacity: u64,
-    pub tokens: u64,
-    pub refill_rate: u64, // tokens per second
-    pub last_refill: Instant,
-}
-
 /// Configuration structure for the system
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -338,6 +328,16 @@ impl CreateDeploymentRequest {
                 return Err("sort_order must be non-negative".to_string());
             }
         }
+        if let Some(max_tpm) = self.max_tpm {
+            if max_tpm < 0 {
+                return Err("max_tpm must be non-negative".to_string());
+            }
+        }
+        if let Some(max_rpm) = self.max_rpm {
+            if max_rpm < 0 {
+                return Err("max_rpm must be non-negative".to_string());
+            }
+        }
         Ok(())
     }
 }
@@ -371,6 +371,69 @@ fn default_weight() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_create_deployment_request_validate_negative_max_tpm() {
+        let req = CreateDeploymentRequest {
+            name: "test".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-4".to_string(),
+            api_key_ref: None,
+            base_url: "https://api.openai.com".to_string(),
+            is_active: true,
+            weight: 1,
+            priority: 0,
+            max_tpm: Some(-1),
+            max_rpm: None,
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: None,
+        };
+        assert!(req.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_deployment_request_validate_negative_max_rpm() {
+        let req = CreateDeploymentRequest {
+            name: "test".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-4".to_string(),
+            api_key_ref: None,
+            base_url: "https://api.openai.com".to_string(),
+            is_active: true,
+            weight: 1,
+            priority: 0,
+            max_tpm: None,
+            max_rpm: Some(-1),
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: None,
+        };
+        assert!(req.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_deployment_request_validate_zero_limits_ok() {
+        let req = CreateDeploymentRequest {
+            name: "test".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-4".to_string(),
+            api_key_ref: None,
+            base_url: "https://api.openai.com".to_string(),
+            is_active: true,
+            weight: 1,
+            priority: 0,
+            max_tpm: Some(0),
+            max_rpm: Some(0),
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: None,
+        };
+        assert!(req.validate().is_ok());
+    }
 
     #[test]
     fn test_chat_request_validate_empty_model() {
