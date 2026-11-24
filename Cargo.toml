@@ -24,9 +24,9 @@ resolver = "3"
 double_must_use = "allow"
 
 [workspace.dependencies]
-hyperinfer-core = { path = "crates/hyperinfer-core", version = "0.1.1" }
-hyperinfer-providers = { path = "crates/hyperinfer-providers", version = "0.1.0" }
-hyperinfer-router = { path = "crates/hyperinfer-router", version = "0.1.0" }
-hyperinfer-client = { path = "crates/hyperinfer-client", version = "0.2.0" }
-hyperinfer-server = { path = "crates/hyperinfer-server", version = "0.1.1" }
-hypercode = { path = "crates/hypercode", version = "0.1.0" }
+hyperinfer-core = { path = "crates/hyperinfer-core", version = "0.2.0" }
+hyperinfer-providers = { path = "crates/hyperinfer-providers", version = "0.2.0" }
+hyperinfer-router = { path = "crates/hyperinfer-router", version = "0.2.0" }
+hyperinfer-client = { path = "crates/hyperinfer-client", version = "0.3.0" }
+hyperinfer-server = { path = "crates/hyperinfer-server", version = "0.2.0" }
+hypercode = { path = "crates/hypercode", version = "0.2.0" }
