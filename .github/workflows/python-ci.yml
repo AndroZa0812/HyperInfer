@@ -87,12 +87,16 @@ jobs:
   # Unit tests — pytest -m "not integration"
   # ---------------------------------------------------------------------------
   unit-tests:
-    name: Unit Tests
+    name: Unit Tests (Python ${{ matrix.python-version }})
     needs: changes
     if: |
       needs.changes.outputs.python == 'true' ||
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
     permissions:
       contents: read
     steps:
@@ -120,17 +124,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       - name: Install workspace deps
-        run: uv sync --all-packages
+        run: uv sync --python ${{ matrix.python-version }} --all-packages
 
       - name: Build maturin extension
-        run: uv run maturin develop --uv
+        run: uv run --python ${{ matrix.python-version }} maturin develop --uv
         working-directory: crates/hyperinfer-python
 
       - name: Run unit tests
-        run: uv run pytest -m "not integration" --cov --cov-report=term-missing
+        run: uv run --python ${{ matrix.python-version }} pytest -m "not integration" --cov --cov-report=term-missing
 
   # ---------------------------------------------------------------------------
   # Integration tests — conditional on changed Python / test files, push to
