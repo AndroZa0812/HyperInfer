@@ -10,6 +10,11 @@ dependencies = [
     "langchain-core~=1.2",
     "langchain-community~=0.4"
 ]
+
+[project.urls]
+Homepage = "https://github.com/AndroZa0812/HyperInfer"
+Repository = "https://github.com/AndroZa0812/HyperInfer"
+Issues = "https://github.com/AndroZa0812/HyperInfer/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

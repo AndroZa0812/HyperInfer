@@ -7,6 +7,11 @@ license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.11"
 dependencies = ["typing-extensions>=4.0"]
 
+[project.urls]
+Homepage = "https://github.com/AndroZa0812/HyperInfer"
+Repository = "https://github.com/AndroZa0812/HyperInfer"
+Issues = "https://github.com/AndroZa0812/HyperInfer/issues"
+
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"

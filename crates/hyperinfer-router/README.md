@@ -46,4 +46,4 @@ Fallbacks can be configured per error kind:
 
 ## License
 
-MIT
+GNU Affero General Public License v3.0 (AGPL-3.0-only)
