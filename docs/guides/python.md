@@ -31,92 +31,106 @@ HyperInfer is published on PyPI. We recommend using a virtual environment to avo
     ```
 
 !!! info "Python Version Support"
-    HyperInfer requires **Python 3.10 or higher**.
+    HyperInfer requires **Python 3.11 or higher** (tested on 3.11–3.15).
 
 ---
 
 ## 2. Configuration with `Config`
 
-The `Config` class uses a **fluent builder API**. You chain `.with_*` methods to assemble your configuration, then pass it to the `Client`.
+You can configure `Client` directly with keyword arguments (or environment variables), or construct a reusable `Config` object.
 
-### 2.1. Available Builder Methods
+### 2.1. Keyword Arguments
 
-| Method | Purpose |
-| :--- | :--- |
-| `.with_api_key(provider, key)` | Register an API key for a provider (e.g., `"openai"`, `"anthropic"`). |
-| `.with_alias(alias, target)` | Map a short alias to a real model name (e.g., `"fast" → "gpt-4o-mini"`). |
-| `.with_routing_rule(name, priority, fallbacks)` | Add a routing rule with a priority and list of fallback models. |
-| `.with_quota(key, rpm, tpm, budget_cents)` | Set per-key limits for requests/min, tokens/min, and monthly budget. |
-| `.with_default_provider(provider)` | Set the provider used when none is specified for a model. |
+| Parameter | Type | Purpose |
+| :--- | :--- | :--- |
+| `api_keys` | `dict[str, str]` | Provider API keys (e.g., `{"openai": "sk-...", "anthropic": "sk-ant-..."}`). |
+| `model_aliases` | `dict[str, str]` | Map short aliases to real model names (e.g., `{"fast": "gpt-4o-mini"}`). |
+| `routing_rules` | `list[dict]` | Routing rules with priority and fallback model lists. |
+| `quotas` | `dict[str, dict]` | Per-key limits (`rpm`, `tpm`, `budget_cents`). |
+| `default_provider` | `str \| None` | Provider used when none is specified for a model. |
 
-### 2.2. Example
+### 2.2. Examples
 
 ```python
 from hyperinfer import Config
 
-config = (Config()
-    .with_api_key("openai", "sk-...")
-    .with_api_key("anthropic", "sk-ant-...")
-    .with_alias("fast", "gpt-4o-mini")
-    .with_routing_rule("default", priority=1, fallbacks=["gpt-4o-mini", "claude-3-haiku-20240307"])
-    .with_quota("my-team", rpm=100, tpm=50_000, budget_cents=10_000)
-    .with_default_provider("openai")
+# Direct keyword constructor
+config = Config(
+    api_keys={"openai": "sk-...", "anthropic": "sk-ant-..."},
+    model_aliases={"fast": "gpt-4o-mini"},
+    routing_rules=[
+        {"name": "default", "priority": 1, "fallback_models": ["gpt-4o-mini", "claude-3-haiku-20240307"]}
+    ],
+    quotas={"my-team": {"rpm": 100, "tpm": 50_000, "budget_cents": 10_000}},
+    default_provider="openai",
 )
+
+# Or load automatically from OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY
+config = Config.from_env()
 ```
 
-!!! tip "Builder Order"
-    The builder methods can be chained in any order. They just populate the config dict that's passed to the Rust core at `init()` time.
+!!! tip "Fluent Builder Compatibility"
+    The legacy fluent builder methods (`.with_api_key(...)`, `.with_alias(...)`, `.with_routing_rule(...)`, `.with_quota(...)`, `.with_default_provider(...)`) remain supported for backward compatibility.
 
 ---
 
 ## 3. Client Initialization
 
-The `Client` is the main entry point. It takes a Redis URL and an optional `Config`.
+The `Client` is the main entry point. It accepts configuration directly as keyword arguments, automatically reads `REDIS_URL` and provider API keys from environment variables when omitted, and initializes lazily on first use.
 
-### 3.1. Basic Initialization
+### 3.1. Minimal Initialization (Environment Variables)
 
 ```python
 from hyperinfer import Client
 
-# Minimal: just provide a Redis URL
-client = Client(redis_url="redis://localhost:6379")
+# Reads OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY and REDIS_URL from env
+client = Client()
 ```
 
-### 3.2. With Configuration
+### 3.2. Direct Keyword Configuration
 
 ```python
-from hyperinfer import Client, Config
+from hyperinfer import Client
 
-config = (Config()
-    .with_api_key("openai", "sk-...")
-    .with_alias("fast", "gpt-4o-mini")
+client = Client(
+    api_keys={"openai": "sk-..."},
+    model_aliases={"fast": "gpt-4o-mini"},
+    default_provider="openai",
+    virtual_key="my-team-key",
+    redis_url="redis://localhost:6379",
 )
-
-client = Client(redis_url="redis://localhost:6379", config=config)
-await client.init()
 ```
 
 ### 3.3. Async Context Manager
 
-Always use the `async with` syntax to ensure the client is properly initialized and cleaned up.
+Use `async with` to ensure the client is cleanly initialized and closed:
 
 ```python
 async def main():
-    async with Client(redis_url="redis://localhost:6379", config=config) as client:
+    async with Client(
+        api_keys={"openai": "sk-..."},
+        model_aliases={"fast": "gpt-4o-mini"},
+        virtual_key="my-team-key",
+    ) as client:
         response = await client.chat(
-            key="my-team-key",
             model="fast",
-            messages=[{"role": "user", "content": "Hello!"}]
+            messages=[{"role": "user", "content": "Hello!"}],
         )
-        print(response)
+        print(response["choices"][0]["message"]["content"])
 ```
 
 ### 3.4. `Client` Parameters
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `redis_url` | `str` | `"redis://localhost:6379"` | Connection string for the Redis state store. |
-| `config` | `Config \| None` | `None` | A pre-built `Config` object. |
+| `redis_url` | `str \| None` | `REDIS_URL` or `"redis://localhost:6379"` | Connection string for the Redis state store. |
+| `config` | `Config \| None` | `None` | Optional pre-built `Config` object. |
+| `api_keys` | `dict[str, str] \| None` | `None` | Provider API keys (merged over `config` if both are given). |
+| `model_aliases` | `dict[str, str] \| None` | `None` | Model alias mappings. |
+| `routing_rules` | `list[dict] \| None` | `None` | Routing rule definitions. |
+| `quotas` | `dict[str, dict] \| None` | `None` | Per-key quota definitions. |
+| `default_provider` | `str \| None` | `None` | Default provider name. |
+| `virtual_key` | `str` | `"default"` | Default virtual key used when `key` is omitted in `chat()` / `stream()`. |
 
 ---
 
@@ -128,16 +142,18 @@ Use `client.chat` when you need the complete response before proceeding.
 
 ```python
 response = await client.chat(
-    key="my-team-key",
     model="gpt-4o",
     messages=[
         {"role": "system", "content": "You are a helpful assistant."},
-        {"role": "user", "content": "Explain quantum entanglement in 3 sentences."}
+        {"role": "user", "content": "Explain quantum entanglement in 3 sentences."},
     ],
     temperature=0.7,
     max_tokens=150,
-    stop=["\n\n"]  # Stop generation at double newline
+    stop=["\n\n"],  # Stop generation at double newline
 )
+
+# Shorthand 2-arg form is also supported:
+response = await client.chat("gpt-4o", [{"role": "user", "content": "Hello!"}])
 ```
 
 The response is a `dict` with the standard OpenAI-style shape:
@@ -167,9 +183,8 @@ Use `client.stream` to receive tokens as soon as they are generated.
 
 ```python
 async for chunk in client.stream(
-    key="my-team-key",
     model="gpt-4o",
-    messages=[{"role": "user", "content": "Write a poem about Rust."}]
+    messages=[{"role": "user", "content": "Write a poem about Rust."}],
 ):
     # Each chunk is a dict with the following keys:
     #   "id", "model", "delta", "finish_reason", "usage"
@@ -183,12 +198,15 @@ async for chunk in client.stream(
 
 | Parameter | Type | Description |
 | :--- | :--- | :--- |
-| `key` | `str` | Your virtual API key (used for auth, quotas, and tracking). |
 | `model` | `str` | The model name or alias (e.g., `"gpt-4o"` or `"fast"`). |
 | `messages` | `list[dict]` | Conversation history. Each dict has `role` and `content`. |
+| `key` | `str \| None` | Optional virtual API key override (defaults to `Client`'s `virtual_key`). |
 | `temperature` | `float \| None` | Sampling temperature (0.0 = deterministic, 2.0 = creative). |
 | `max_tokens` | `int \| None` | Hard limit on generated tokens. |
 | `stop` | `list[str] \| None` | Sequences that will halt generation. |
+| `tools` | `list[dict] \| None` | Tool definitions for function calling. |
+| `tool_choice` | `Any` | Tool selection strategy (`"auto"`, `"none"`, `"required"`, or specific function). |
+| `response_format` | `dict \| None` | Structured output specification (e.g., `{"type": "json_object"}`). |
 
 ---
 
@@ -244,15 +262,16 @@ pip install hyperinfer-langchain
 ```
 
 ```python
-from hyperinfer import Config
 from hyperinfer_langchain import HyperInferChatModel
 
-# Construct a HyperInfer-backed LangChain chat model
-llm = await HyperInferChatModel.from_config(
-    config=config,
-    model="fast",
+# Direct idiomatic constructor (no async from_config needed)
+llm = HyperInferChatModel(
+    model="gpt-4o",
+    api_key="sk-...",
     virtual_key="my-team",
+    temperature=0.7,
 )
+response = llm.invoke("Hello!")
 ```
 
 ### 7.2. LlamaIndex
@@ -264,10 +283,12 @@ pip install hyperinfer-llamaindex
 ```python
 from hyperinfer_llamaindex import HyperInferLLM
 
-llm = HyperInferLLM.from_config(
-    config=config,
-    model="fast",
+llm = HyperInferLLM(
+    model="gpt-4o",
+    api_key="sk-...",
+    temperature=0.7,
 )
+response = llm.complete("Hello!")
 ```
 
 ---

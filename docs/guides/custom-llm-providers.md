@@ -137,29 +137,24 @@ If you are running a local model that is OpenAI-compatible (e.g., Ollama, vLLM),
 === "Python"
 
     ```python
-    from hyperinfer import Client, Config
+    import asyncio
+    from hyperinfer import Client
 
     # Configure the alias to point to your local model
     # and provide the API key for the local server
-    config = (Config()
-        .with_api_key("openai", "ollama")  # Local servers often accept any key
-        .with_alias("local-llama", "llama3")
-    )
-
-    client = Client(redis_url="redis://localhost:6379", config=config)
-
     async def main():
-        await client.init()
-
-        response = await client.chat(
-            key="local-key",
-            model="local-llama",
-            messages=[{"role": "user", "content": "Explain quantum physics."}]
-        )
-        print(response["choices"][0]["message"]["content"])
+        async with Client(
+            api_keys={"openai": "ollama"},  # Local servers often accept any key
+            model_aliases={"local-llama": "llama3"},
+            virtual_key="local-key",
+        ) as client:
+            response = await client.chat(
+                model="local-llama",
+                messages=[{"role": "user", "content": "Explain quantum physics."}],
+            )
+            print(response["choices"][0]["message"]["content"])
 
     if __name__ == "__main__":
-        import asyncio
         asyncio.run(main())
     ```
 

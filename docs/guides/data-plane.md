@@ -50,15 +50,13 @@ The data plane is available in both Rust and Python.
 === "Python"
 
     ```python
-    from hyperinfer import Client, Config
+    from hyperinfer import Client
 
-    config = (Config()
-        .with_api_key("openai", "sk-...")
-        .with_alias("fast", "gpt-4o-mini")
+    client = Client(
+        redis_url="redis://localhost:6379",
+        api_keys={"openai": "sk-..."},
+        model_aliases={"fast": "gpt-4o-mini"},
     )
-
-    client = Client(redis_url="redis://localhost:6379", config=config)
-    await client.init()
     ```
 
 === "Rust"
