@@ -60,16 +60,14 @@ async for chunk in client.stream(
 ### Advanced Configuration
 
 ```python
-from hyperinfer import Config, Client
+from hyperinfer import Client, Config, Quota, RoutingRule
 
-# Use Config for complex setups with aliases, quotas, routing
-config = (
-    Config()
-    .with_api_key("openai", "sk-...")
-    .with_api_key("anthropic", "sk-ant-...")
-    .with_alias("fast", "gpt-4o-mini")
-    .with_alias("smart", "claude-3-5-sonnet-20241022")
-    .with_quota("default", rpm=60, tpm=100000)
+# Use typed Config, Quota, and RoutingRule objects for complex setups
+config = Config(
+    api_keys={"openai": "sk-...", "anthropic": "sk-ant-..."},
+    model_aliases={"fast": "gpt-4o-mini", "smart": "claude-3-5-sonnet-20241022"},
+    routing_rules=[RoutingRule("default", priority=1, fallback_models=["gpt-4o-mini"])],
+    quotas={"default": Quota(rpm=60, tpm=100_000)},
 )
 
 client = Client(config=config)

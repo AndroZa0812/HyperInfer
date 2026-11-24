@@ -113,8 +113,8 @@ class Client:
                 from hyperinfer._hyperinfer import HyperInferClient
 
                 self._inner = HyperInferClient(
-                    self._redis_url or "redis://localhost:6379",
-                    self._config_dict if self._config_dict is not None else {},
+                    self._redis_url,
+                    self._config_dict,
                 )
             await self._inner.init()
             self._initialized = True
@@ -157,6 +157,11 @@ class Client:
             messages = model
             model = key
             key = None
+
+        if not isinstance(model, str) or not model:
+            raise ValueError("'model' is required and must be a non-empty string")
+        if messages is None:
+            raise ValueError("'messages' is required")
 
         if key is None:
             key = self._virtual_key
@@ -233,6 +238,11 @@ class Client:
             messages = model
             model = key
             key = None
+
+        if not isinstance(model, str) or not model:
+            raise ValueError("'model' is required and must be a non-empty string")
+        if messages is None:
+            raise ValueError("'messages' is required")
 
         if key is None:
             key = self._virtual_key

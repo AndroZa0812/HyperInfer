@@ -47,8 +47,8 @@ class HyperInferChatModel(BaseChatModel):
     virtual_key: str = Field(default="default")
     temperature: float | None = Field(default=None)
     max_tokens: int | None = Field(default=None)
-    api_key: str | None = Field(default=None)
-    api_keys: dict[str, str] | None = Field(default=None)
+    api_key: str | None = Field(default=None, repr=False, exclude=True)
+    api_keys: dict[str, str] | None = Field(default=None, repr=False, exclude=True)
     default_provider: str | None = Field(default=None)
     redis_url: str | None = Field(default=None)
     config: Config | None = Field(default=None)
@@ -65,36 +65,13 @@ class HyperInferChatModel(BaseChatModel):
             provider = self.default_provider or _infer_provider(self.model)
             keys[provider] = self.api_key
 
-        # Pass through None so Client honors REDIS_URL from the environment
-        redis = self.redis_url
-
-        # Build client
-        if self.config is not None:
-            # Merge api_keys onto config
-            if keys:
-                merged_config = Config(
-                    api_keys={**self.config.to_dict().get("api_keys", {}), **keys},
-                    model_aliases=self.config.to_dict().get("model_aliases"),
-                    routing_rules=self.config.to_dict().get("routing_rules"),
-                    quotas=self.config.to_dict().get("quotas"),
-                    default_provider=self.default_provider
-                    or self.config.to_dict().get("default_provider"),
-                )
-            else:
-                merged_config = self.config
-            self.client = Client(
-                redis_url=redis, config=merged_config, virtual_key=self.virtual_key
-            )
-        elif keys or self.default_provider:
-            self.client = Client(
-                redis_url=redis,
-                api_keys=keys,
-                default_provider=self.default_provider,
-                virtual_key=self.virtual_key,
-            )
-        else:
-            self.client = Client(redis_url=redis, virtual_key=self.virtual_key)
-
+        self.client = Client(
+            redis_url=self.redis_url,
+            config=self.config,
+            api_keys=keys or None,
+            default_provider=self.default_provider,
+            virtual_key=self.virtual_key,
+        )
         return self
 
     @property

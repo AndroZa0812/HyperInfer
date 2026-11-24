@@ -30,7 +30,7 @@ print(response.text)
 
 # Streaming
 for chunk in llm.stream_complete("Tell me a story"):
-    print(chunk.text, end="", flush=True)
+    print(chunk.delta, end="", flush=True)
 ```
 
 ### Multiple Providers

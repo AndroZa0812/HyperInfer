@@ -209,6 +209,18 @@ class TestClientChat:
         call_args = client._inner.chat.call_args
         assert call_args[0][1]["response_format"] == response_format
 
+    def test_chat_requires_model_and_messages(self):
+        """Test chat raises ValueError when model or messages are omitted."""
+        import asyncio
+
+        import pytest
+
+        client = Client()
+        with pytest.raises(ValueError, match="model"):
+            asyncio.run(client.chat(messages=[{"role": "user", "content": "Hello"}]))
+        with pytest.raises(ValueError, match="messages"):
+            asyncio.run(client.chat(model="gpt-4"))
+
 
 class TestClientStream:
     """Test Client.stream() method."""

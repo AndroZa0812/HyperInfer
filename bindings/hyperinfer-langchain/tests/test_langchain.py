@@ -377,3 +377,16 @@ class TestPythonicConstructor:
         model = HyperInferChatModel(model="gpt-4", api_key="sk-test")
         assert model.client is not None
         assert model.client._redis_url == "redis://env-host:6380"
+
+    def test_secrets_hidden_from_repr_and_dump(self):
+        """Test api_key and api_keys are excluded from repr() and model_dump()."""
+        model = HyperInferChatModel(
+            model="gpt-4",
+            api_key="sk-super-secret",
+            api_keys={"anthropic": "sk-ant-secret"},
+        )
+        assert "sk-super-secret" not in repr(model)
+        assert "sk-ant-secret" not in repr(model)
+        dumped = model.model_dump()
+        assert "api_key" not in dumped
+        assert "api_keys" not in dumped
