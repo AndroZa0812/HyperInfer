@@ -86,7 +86,7 @@ pub async fn jwt_auth_middleware(
 // extract_bearer_token is now imported from auth.rs
 
 pub fn validate_jwt(token: &str, secret: &str) -> Result<McpClaims, jsonwebtoken::errors::Error> {
-    let key = DecodingKey::from_secret(secret.as_bytes());
+    let key = DecodingKey::from_secret(secret.as_bytes())?;
     let validation = Validation::new(Algorithm::HS256);
     let data = decode::<McpClaims>(token, &key, &validation)?;
     Ok(data.claims)
@@ -108,12 +108,10 @@ pub fn create_jwt(sub: &str, secret: &str) -> String {
         .as_secs()
         + 3600;
 
-    encode(
-        &Header::default(),
-        &Claims { sub, exp },
-        &EncodingKey::from_secret(secret.as_bytes()),
-    )
-    .expect("JWT encoding should never fail for HS256")
+    let key =
+        EncodingKey::from_secret(secret.as_bytes()).expect("JWT secret should be valid for HS256");
+    encode(&Header::default(), &Claims { sub, exp }, &key)
+        .expect("JWT encoding should never fail for HS256")
 }
 
 // ── Session registry ─────────────────────────────────────────────────────────
@@ -743,7 +741,7 @@ mod tests {
         let token = encode(
             &Header::default(),
             &ClaimsNoExp { sub: "alice" },
-            &EncodingKey::from_secret(b"secret"),
+            &EncodingKey::from_secret(b"secret").unwrap(),
         )
         .unwrap();
 

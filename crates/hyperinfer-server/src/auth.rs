@@ -103,7 +103,7 @@ pub fn create_auth_token(
     encode(
         &Header::new(Algorithm::HS256),
         &claims,
-        &EncodingKey::from_secret(jwt_secret.as_bytes()),
+        &EncodingKey::from_secret(jwt_secret.as_bytes())?,
     )
 }
 
@@ -113,7 +113,7 @@ pub fn validate_auth_token(
 ) -> Result<AuthClaims, jsonwebtoken::errors::Error> {
     use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 
-    let key = DecodingKey::from_secret(jwt_secret.as_bytes());
+    let key = DecodingKey::from_secret(jwt_secret.as_bytes())?;
     let validation = Validation::new(Algorithm::HS256);
     let data = decode::<AuthClaims>(token, &key, &validation)?;
     Ok(data.claims)
