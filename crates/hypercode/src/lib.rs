@@ -4,6 +4,7 @@ pub mod a2a;
 pub mod agent;
 pub mod cli;
 pub mod context;
+pub mod output_filter;
 pub mod sandbox;
 pub mod tool;
 pub mod tools;
@@ -25,6 +26,10 @@ pub use context::{
     compact_history_with_llm, estimate_messages_tokens, estimate_tokens,
     find_safe_compaction_split, prune_old_tool_outputs, CompactionConfig, WorkspaceContext,
     INSTRUCTION_FILES,
+};
+pub use output_filter::{
+    FilterOutcome, FilterStats, OutputFilter, OutputFilterConfig, SessionFilterSnapshot,
+    SessionFilterStats,
 };
 pub use sandbox::{
     validate_sandbox_name, CommandExecution, CommandRunner, HostRunner, OpenShellRunner,
