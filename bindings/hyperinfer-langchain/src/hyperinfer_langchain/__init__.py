@@ -65,8 +65,8 @@ class HyperInferChatModel(BaseChatModel):
             provider = self.default_provider or _infer_provider(self.model)
             keys[provider] = self.api_key
 
-        # Determine redis_url
-        redis = self.redis_url or "redis://localhost:6379"
+        # Pass through None so Client honors REDIS_URL from the environment
+        redis = self.redis_url
 
         # Build client
         if self.config is not None:
@@ -82,7 +82,9 @@ class HyperInferChatModel(BaseChatModel):
                 )
             else:
                 merged_config = self.config
-            self.client = Client(redis_url=redis, config=merged_config)
+            self.client = Client(
+                redis_url=redis, config=merged_config, virtual_key=self.virtual_key
+            )
         elif keys or self.default_provider:
             self.client = Client(
                 redis_url=redis,

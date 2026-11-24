@@ -398,3 +398,10 @@ class TestPythonicConstructor:
         """Test provider inference for OpenAI models (default)."""
         llm = HyperInferLLM(model="gpt-4", api_key="sk-test")
         assert llm.client is not None
+
+    def test_constructor_honors_redis_url_env(self, monkeypatch):
+        """Test constructor honors REDIS_URL env var when redis_url is omitted."""
+        monkeypatch.setenv("REDIS_URL", "redis://env-host:6380")
+        llm = HyperInferLLM(model="gpt-4", api_key="sk-test")
+        assert llm.client is not None
+        assert llm.client._redis_url == "redis://env-host:6380"
