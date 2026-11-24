@@ -55,89 +55,35 @@
     <TabBar items={tabs} bind:active={activeTab} />
 
     {#if activeTab === 'profile'}
-        <div class="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-            <Card>
-                <div class="space-y-6">
-                    <h2 class="text-lg font-semibold text-[var(--on-surface)]">Personal Information</h2>
-                    <p class="text-sm text-[var(--on-surface-variant)]">Update your account identity and contact details.</p>
+        <Card>
+            <div class="space-y-6">
+                <h2 class="text-lg font-semibold text-[var(--on-surface)]">Account Overview</h2>
+                <p class="text-sm text-[var(--on-surface-variant)]">Your account identity and team membership.</p>
 
-                    <div class="grid grid-cols-2 gap-4">
-                        <Input label="First Name" value="" placeholder="First name" disabled />
-                        <Input label="Last Name" value="" placeholder="Last name" disabled />
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-primary)]" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
+                        {$auth.user?.email?.[0]?.toUpperCase() || '?'}
                     </div>
-
-                    <Input label="Email Address" value={$auth.user?.email || ''} disabled />
-
                     <div>
-                        <label for="bio" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Professional Bio</label>
-                        <textarea
-                            id="bio"
-                            class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors resize-none h-24 text-sm"
-                            placeholder="Tell us about yourself..."
-                        ></textarea>
-                    </div>
-
-                    <div class="flex items-center gap-4">
-                        <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-primary)]" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
-                            {$auth.user?.email?.[0]?.toUpperCase() || '?'}
-                        </div>
-                        <div>
-                            <p class="text-sm font-medium text-[var(--on-surface)]">Profile Picture</p>
-                            <p class="text-xs text-[var(--on-surface-variant)]">PNG, JPG or GIF. Max 2MB.</p>
-                            <div class="flex gap-2 mt-2">
-                                <Button variant="secondary" size="sm">Upload New</Button>
-                                <Button variant="ghost" size="sm">Remove</Button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="flex gap-3 justify-end pt-4 border-t border-[var(--ghost-border)]">
-                        <Button variant="ghost">Cancel</Button>
-                        <Button>Save Changes</Button>
+                        <p class="text-sm font-medium text-[var(--on-surface)]">{$auth.user?.email}</p>
+                        <p class="text-xs text-[var(--on-surface-variant)]">Enterprise identity verified</p>
                     </div>
                 </div>
-            </Card>
 
-            <div class="space-y-4">
-                <Card>
-                    <div class="flex items-center gap-3 mb-4">
-                        <span class="material-symbols-outlined text-[var(--success)]" style="font-size: 20px">verified_user</span>
-                        <div>
-                            <p class="text-sm font-medium text-[var(--on-surface)]">Account Verified</p>
-                            <p class="text-xs text-[var(--on-surface-variant)]">Enterprise identity verified</p>
-                        </div>
-                    </div>
-                </Card>
+                <Input label="Email Address" value={$auth.user?.email || ''} disabled />
 
-                <Card>
-                    <h3 class="text-xs font-semibold uppercase tracking-wider text-[var(--on-surface-variant)] mb-4">Quick Stats</h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-[var(--on-surface-variant)]">Keys Managed</span>
-                            <span class="text-sm font-semibold text-[var(--on-surface)]">12</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-[var(--on-surface-variant)]">Active Sessions</span>
-                            <span class="text-sm font-semibold text-[var(--on-surface)]">3</span>
-                        </div>
-                        <div class="flex items-center justify-between">
-                            <span class="text-sm text-[var(--on-surface-variant)]">Role</span>
-                            <Badge variant="info" label={$auth.user?.role || 'member'} />
-                        </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Role</p>
+                        <Badge variant="info" label={$auth.user?.role || 'member'} />
                     </div>
-                </Card>
-
-                <Card>
-                    <div class="flex items-center gap-2">
-                        <span class="material-symbols-outlined text-[var(--primary)]" style="font-size: 18px">cloud</span>
-                        <div>
-                            <p class="text-sm font-medium text-[var(--on-surface)]">HyperInfer Cloud</p>
-                            <p class="text-xs text-[var(--on-surface-variant)]">Enterprise Tier Active</p>
-                        </div>
+                    <div>
+                        <p class="text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Team ID</p>
+                        <p class="text-sm font-medium text-[var(--on-surface)] font-mono">{$auth.user?.team_id || '—'}</p>
                     </div>
-                </Card>
+                </div>
             </div>
-        </div>
+        </Card>
 
     {:else if activeTab === 'preferences'}
         <Card>

@@ -14,16 +14,24 @@ test.describe('API Keys', () => {
 		await expect(dialog.getByRole('heading', { name: 'Create API Key' })).toBeVisible();
 		await dialog.getByPlaceholder('e.g. Production-Main').fill(activeKeyName);
 		await dialog.getByRole('button', { name: 'Create Key' }).click();
+
+		// One-time secret modal should display the raw hi-... key
+		await expect(dialog.getByRole('heading', { name: 'API Key Created' })).toBeVisible();
+		await expect(dialog.getByText(/^hi-/)).toBeVisible();
+		await dialog.getByRole('button', { name: 'Done' }).click();
 		await expect(dialog).toBeHidden();
 
 		const activeRow = page.locator('tbody tr', { hasText: activeKeyName });
 		await expect(activeRow).toBeVisible();
 		await expect(activeRow.getByText('Active', { exact: true })).toBeVisible();
+		await expect(activeRow).not.toContainText('undefined');
 
 		// Create second key to revoke
 		await page.getByRole('button', { name: /Create New Key/ }).click();
 		await dialog.getByPlaceholder('e.g. Production-Main').fill(revokeKeyName);
 		await dialog.getByRole('button', { name: 'Create Key' }).click();
+		await expect(dialog.getByRole('heading', { name: 'API Key Created' })).toBeVisible();
+		await dialog.getByRole('button', { name: 'Done' }).click();
 		await expect(dialog).toBeHidden();
 
 		const revokeRow = page.locator('tbody tr', { hasText: revokeKeyName });

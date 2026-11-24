@@ -10,18 +10,16 @@ test.describe('Routing Deployments', () => {
 
 		// Open Create Deployment modal
 		await page.getByRole('button', { name: 'Add Deployment' }).click();
-		const modal = page.locator('.fixed.inset-0');
+		const modal = page.getByRole('dialog');
 		await expect(modal.getByRole('heading', { name: 'Create Deployment' })).toBeVisible();
 
-		await modal.locator('div:has(> label:text-is("Name")) input').fill(depName);
-		await modal.locator('div:has(> label:text-is("Provider")) select').selectOption('openai');
-		await modal.locator('div:has(> label:text-is("Model")) input').fill('gpt-4');
-		await modal
-			.locator('div:has(> label:text-is("Base URL")) input')
-			.fill('https://api.openai.com/v1');
-		await modal.locator('div:has(> label:text-is("API Key Ref")) input').fill('env:OPENAI_API_KEY');
-		await modal.locator('div:has(> label:text-is("Weight")) input').fill('5');
-		await modal.locator('div:has(> label:text-is("Priority")) input').fill('1');
+		await modal.getByLabel('Name').fill(depName);
+		await modal.getByLabel('Provider').selectOption('openai');
+		await modal.getByLabel('Model').fill('gpt-4');
+		await modal.getByLabel('Base URL').fill('https://api.openai.com/v1');
+		await modal.getByLabel('API Key Ref').fill('env:OPENAI_API_KEY');
+		await modal.getByLabel('Weight').fill('5');
+		await modal.getByLabel('Priority').fill('1');
 
 		await modal.getByRole('button', { name: 'Create', exact: true }).click();
 		await expect(modal).toBeHidden();
@@ -41,8 +39,8 @@ test.describe('Routing Deployments', () => {
 		// Edit deployment
 		await persistedRow.getByRole('button', { name: 'Edit' }).click();
 		await expect(modal.getByRole('heading', { name: 'Edit Deployment' })).toBeVisible();
-		await modal.locator('div:has(> label:text-is("Name")) input').fill(updatedName);
-		await modal.locator('div:has(> label:text-is("Weight")) input').fill('10');
+		await modal.getByLabel('Name').fill(updatedName);
+		await modal.getByLabel('Weight').fill('10');
 		await modal.getByRole('button', { name: 'Update', exact: true }).click();
 		await expect(modal).toBeHidden();
 
@@ -56,13 +54,16 @@ test.describe('Routing Deployments', () => {
 		await filterInput.press('Enter');
 		await expect(page.getByText('No deployments found for model "nonexistent-model-xyz"')).toBeVisible();
 
-		// Filter back to gpt-4 and delete
+		// Filter back to gpt-4 and delete via styled confirmation modal
 		await filterInput.fill('gpt-4');
 		await filterInput.press('Enter');
 		await expect(updatedRow).toBeVisible();
 
-		page.once('dialog', (dialog) => dialog.accept());
 		await updatedRow.getByRole('button', { name: 'Delete' }).click();
+		const confirmModal = page.getByRole('dialog');
+		await expect(confirmModal.getByRole('heading', { name: 'Delete Deployment' })).toBeVisible();
+		await confirmModal.getByRole('button', { name: 'Delete', exact: true }).click();
+		await expect(confirmModal).toBeHidden();
 		await expect(page.locator('tbody tr', { hasText: updatedName })).toHaveCount(0);
 	});
 });

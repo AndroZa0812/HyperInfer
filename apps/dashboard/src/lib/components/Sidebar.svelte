@@ -31,7 +31,7 @@
 </script>
 
 <div class="flex h-screen">
-	<aside class="w-[260px] flex flex-col shrink-0 relative" style="background: var(--surface-variant); opacity: 0.6; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
+	<aside class="w-[260px] flex flex-col shrink-0 relative" style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
 		<div class="absolute inset-0 bg-[var(--surface-variant)]/60 backdrop-blur-xl -z-10"></div>
 
 		<div class="p-6 pb-4">

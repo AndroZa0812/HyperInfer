@@ -5,6 +5,11 @@ test.describe('Authentication', () => {
 		await page.goto('/');
 		await expect(page).toHaveURL(/\/login$/);
 		await expect(page.getByRole('heading', { name: 'Welcome Back' })).toBeVisible();
+		await expect(page.getByText('2027 HyperInfer')).toBeVisible();
+		await expect(page.getByRole('button', { name: 'Google' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'SSO' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Forgot password?' })).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Request Access' })).toHaveCount(0);
 
 		await page.goto('/dashboard/keys');
 		await expect(page).toHaveURL(/\/login$/);

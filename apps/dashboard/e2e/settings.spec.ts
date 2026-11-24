@@ -6,9 +6,10 @@ test.describe('Settings', () => {
 		await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
 		// Profile tab is active by default
-		await expect(page.getByRole('heading', { name: 'Personal Information' })).toBeVisible();
-		await expect(page.locator('input[disabled]').nth(2)).toHaveValue(ADMIN_EMAIL);
+		await expect(page.getByRole('heading', { name: 'Account Overview' })).toBeVisible();
+		await expect(page.locator('input[disabled]').first()).toHaveValue(ADMIN_EMAIL);
 		await expect(page.getByText('admin', { exact: true }).first()).toBeVisible();
+		await expect(page.getByText('Keys Managed')).toHaveCount(0);
 
 		// Preferences tab: switch theme to Dark and back to Light
 		await page.getByRole('button', { name: 'Preferences', exact: true }).click();

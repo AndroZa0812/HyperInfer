@@ -1,7 +1,7 @@
 <script lang="ts">
     import { page } from '$app/state';
     import { api } from '$lib/api';
-    import type { Team } from '$lib/types';
+    import type { Team, ApiKey, UsageData } from '$lib/types';
     import StatCard from '$lib/components/StatCard.svelte';
     import Card from '$lib/components/Card.svelte';
     import Badge from '$lib/components/Badge.svelte';
@@ -9,35 +9,41 @@
     import Button from '$lib/components/Button.svelte';
 
     let team = $state<Team | null>(null);
+    let keys = $state<ApiKey[]>([]);
+    let usage = $state<UsageData | null>(null);
     let loading = $state(true);
     let error = $state<string | null>(null);
 
     let teamId = $derived(page.params.id);
 
     $effect(() => {
-        if (teamId) {
-            loading = true;
-            error = null;
-            api.getTeam(teamId)
-                .then((t) => {
-                    team = t;
-                    loading = false;
-                })
-                .catch((e) => {
-                    console.error('Failed to load team', e);
-                    error = 'Failed to load team';
-                    loading = false;
-                });
-        }
+        if (!teamId) return;
+        let cancelled = false;
+        loading = true;
+        error = null;
+        Promise.all([
+            api.getTeam(teamId),
+            api.getKeys(teamId).catch(() => []),
+            api.getUsage(teamId).catch(() => null),
+        ])
+            .then(([t, k, u]) => {
+                if (cancelled) return;
+                team = t;
+                keys = k;
+                usage = u;
+                loading = false;
+            })
+            .catch((e) => {
+                if (cancelled) return;
+                console.error('Failed to load team', e);
+                error = 'Failed to load team';
+                loading = false;
+            });
+        return () => { cancelled = true; };
     });
 
-    const activityLog = [
-        { timestamp: 'Oct 24, 14:22:10', key: 'Production-Main', action: 'Inference', tokens: '1,240' },
-        { timestamp: 'Oct 24, 14:18:45', key: 'Staging-API-V2', action: 'Embedding', tokens: '4,812' },
-        { timestamp: 'Oct 24, 14:05:01', key: 'Dev-Test-Lambda', action: 'Inference', tokens: '240' },
-        { timestamp: 'Oct 24, 13:58:22', key: 'Production-Main', action: 'Fine-Tune', tokens: '0' },
-        { timestamp: 'Oct 24, 13:42:15', key: 'Legacy-Web-App', action: 'Inference', tokens: '892' },
-    ];
+    let activeKeys = $derived(keys.filter(k => k.is_active).length);
+    let totalTokens = $derived(usage ? usage.total_input_tokens + usage.total_output_tokens : 0);
 </script>
 
 {#if loading}
@@ -65,102 +71,41 @@
                     </div>
                 </div>
             </div>
-            <div class="flex gap-3">
-                <Button variant="secondary" size="sm">
-                    <span class="material-symbols-outlined" style="font-size: 18px">edit</span>
-                    Edit Team
-                </Button>
-                <Button size="sm">
-                    <span class="material-symbols-outlined" style="font-size: 18px">vpn_key</span>
-                    Generate New Key
-                </Button>
-            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatCard icon="vpn_key" label="Total Keys" value="42" trend="12% from last month" trendDirection="up" />
-            <StatCard icon="sensors" label="Active Keys" value="38" trend="90.4% connectivity" trendDirection="up" />
-            <StatCard icon="data_usage" label="Usage This Month" value="14.2M" trend="Tokens processed" trendDirection="neutral" />
-            <StatCard icon="account_balance_wallet" label="Budget Left" value="${'$'}{(team.budget_cents / 100).toFixed(0)}" trend="Renewal in 12 days" trendDirection="neutral" />
+            <StatCard icon="vpn_key" label="Total Keys" value={keys.length} trend="API keys configured" trendDirection="neutral" />
+            <StatCard icon="sensors" label="Active Keys" value={activeKeys} trend={`${activeKeys > 0 ? Math.round((activeKeys / keys.length) * 100) : 0}% connectivity`} trendDirection="up" />
+            <StatCard icon="data_usage" label="Usage This Month" value={totalTokens.toLocaleString()} trend="Tokens processed" trendDirection="neutral" />
+            <StatCard icon="account_balance_wallet" label="Budget Left" value={`$${(team.budget_cents / 100).toFixed(2)}`} trend="Monthly budget" trendDirection="neutral" />
         </div>
 
         <Card>
             <div class="space-y-6">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-lg font-semibold text-[var(--on-surface)]">Monthly Budget Allocation</h2>
-                        <p class="text-sm text-[var(--on-surface-variant)]">Team: {team.name}</p>
-                    </div>
-                    <Button variant="ghost" size="sm">
-                        <span class="material-symbols-outlined" style="font-size: 18px">tune</span>
-                        Adjust Limits
-                    </Button>
+                <div>
+                    <h2 class="text-lg font-semibold text-[var(--on-surface)]">Monthly Budget</h2>
+                    <p class="text-sm text-[var(--on-surface-variant)]">Team: {team.name}</p>
                 </div>
 
                 <div>
                     <div class="flex items-end justify-between mb-3">
                         <span class="text-3xl font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">
-                            {'$'}{(team.budget_cents * 0.752 / 100).toFixed(0)}
+                            {'$'}{(team.budget_cents / 100).toFixed(2)}
                         </span>
                         <span class="text-sm text-[var(--on-surface-variant)]">
-                            / {'$'}{(team.budget_cents / 100).toFixed(0)} remaining
+                            Monthly budget
                         </span>
-                    </div>
-                    <div class="h-3 bg-[var(--surface-container)] rounded-full overflow-hidden">
-                        <div class="h-full rounded-full transition-all duration-500" style="width: 75.2%; background: linear-gradient(90deg, var(--primary), var(--primary-container))"></div>
                     </div>
                     <div class="flex gap-8 mt-4">
                         <div>
-                            <p class="text-xs text-[var(--on-surface-variant)] uppercase tracking-wider">Burn Rate</p>
-                            <p class="text-sm font-medium text-[var(--on-surface)]">{'$'}142.20 /day</p>
+                            <p class="text-xs text-[var(--on-surface-variant)] uppercase tracking-wider">Total Requests</p>
+                            <p class="text-sm font-medium text-[var(--on-surface)]">{usage ? usage.total_requests.toLocaleString() : '0'}</p>
                         </div>
                         <div>
-                            <p class="text-xs text-[var(--on-surface-variant)] uppercase tracking-wider">Est. Exhaustion</p>
-                            <p class="text-sm font-medium text-[var(--on-surface)]">26 Days</p>
+                            <p class="text-xs text-[var(--on-surface-variant)] uppercase tracking-wider">Avg Latency</p>
+                            <p class="text-sm font-medium text-[var(--on-surface)]">{usage ? `${usage.avg_response_time_ms}ms` : '—'}</p>
                         </div>
                     </div>
-                </div>
-            </div>
-        </Card>
-
-        <Card>
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-lg font-semibold text-[var(--on-surface)]">Recent Activity</h2>
-                        <p class="text-sm text-[var(--on-surface-variant)]">Latest API transactions across all keys</p>
-                    </div>
-                    <Button variant="ghost" size="sm">View All Logs</Button>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead>
-                            <tr class="bg-[var(--surface-container-low)]">
-                                <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Timestamp</th>
-                                <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Key Name</th>
-                                <th class="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Action</th>
-                                <th class="px-5 py-3 text-right text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Tokens</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {#each activityLog as entry, i}
-                                <tr class="{i > 0 ? 'border-t border-[var(--ghost-border)]' : ''} hover:bg-[var(--surface-container-low)]/50 transition-colors">
-                                    <td class="px-5 py-3.5 text-sm text-[var(--on-surface-variant)] font-mono">{entry.timestamp}</td>
-                                    <td class="px-5 py-3.5">
-                                        <div class="flex items-center gap-2">
-                                            <span class="material-symbols-outlined text-[var(--primary)]" style="font-size: 16px">vpn_key</span>
-                                            <span class="text-sm font-medium text-[var(--on-surface)]">{entry.key}</span>
-                                        </div>
-                                    </td>
-                                    <td class="px-5 py-3.5">
-                                        <Badge variant={entry.action === 'Inference' ? 'info' : entry.action === 'Embedding' ? 'success' : 'neutral'} label={entry.action} />
-                                    </td>
-                                    <td class="px-5 py-3.5 text-sm text-[var(--on-surface)] text-right font-mono">{entry.tokens}</td>
-                                </tr>
-                            {/each}
-                        </tbody>
-                    </table>
                 </div>
             </div>
         </Card>

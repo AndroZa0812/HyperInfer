@@ -1,4 +1,4 @@
-import type { User, Team, ApiKey, UsageData, Deployment, CreateDeploymentRequest } from "./types";
+import type { User, Team, ApiKey, CreateApiKeyResponse, UsageData, Deployment, CreateDeploymentRequest } from "./types";
 
 const API_BASE = "/v1";
 
@@ -59,7 +59,7 @@ export const api = {
     return fetchApi<ApiKey[]>(`/api_keys${params}`);
   },
   createKey: (teamId: string, name: string) =>
-    fetchApi<ApiKey>("/api_keys", {
+    fetchApi<CreateApiKeyResponse>("/api_keys", {
       method: "POST",
       body: JSON.stringify({ team_id: teamId, name }),
     }),
