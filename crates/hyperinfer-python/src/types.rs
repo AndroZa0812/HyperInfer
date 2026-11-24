@@ -37,6 +37,7 @@ pub fn message_from_py(dict: &Bound<'_, PyDict>) -> PyResult<ChatMessage> {
         tool_calls: None,
         tool_call_id: None,
         name: None,
+        content_parts: None,
     })
 }
 
@@ -80,6 +81,8 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         stream: None,
         stop,
         tools: None,
+        tool_choice: None,
+        response_format: None,
     })
 }
 

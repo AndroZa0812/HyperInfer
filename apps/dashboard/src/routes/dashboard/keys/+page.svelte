@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '$lib/api';
     import { auth } from '$lib/stores/auth';
-    import type { ApiKey } from '$lib/types';
+    import type { ApiKey, UsageData } from '$lib/types';
     import Button from '$lib/components/Button.svelte';
     import Input from '$lib/components/Input.svelte';
     import Modal from '$lib/components/Modal.svelte';
@@ -11,10 +11,12 @@
 
     let keys = $state<ApiKey[]>([]);
     let loading = $state(true);
+    let loadError = $state<string | null>(null);
     let showCreate = $state(false);
     let newKeyName = $state('');
     let searchQuery = $state('');
     let statusFilter = $state('all');
+    let usage = $state<UsageData | null>(null);
 
     let filteredKeys = $derived(
         keys.filter(k => {
@@ -29,9 +31,24 @@
     $effect(() => {
         if (!$auth.loading && $auth.user?.team_id) {
             loading = true;
-            api.getKeys($auth.user!.team_id)
-                .then((k) => { keys = k; })
-                .catch((e) => { console.error('Failed to load keys', e); })
+            loadError = null;
+            Promise.allSettled([
+                api.getKeys($auth.user!.team_id),
+                api.getUsage($auth.user!.team_id)
+            ])
+                .then(([keysResult, usageResult]) => {
+                    if (keysResult.status === 'fulfilled') {
+                        keys = keysResult.value;
+                    } else {
+                        console.error('Failed to load keys', keysResult.reason);
+                        loadError = 'Failed to load API keys. Please try again.';
+                    }
+                    if (usageResult.status === 'fulfilled') {
+                        usage = usageResult.value;
+                    } else {
+                        console.error('Failed to load usage summary', usageResult.reason);
+                    }
+                })
                 .finally(() => { loading = false; });
         }
     });
@@ -94,6 +111,10 @@
         {#if loading}
             <div class="flex items-center justify-center h-32">
                 <span class="material-symbols-outlined animate-spin text-[var(--primary)]" style="font-size: 24px">progress_activity</span>
+            </div>
+        {:else if loadError}
+            <div class="p-8 text-center text-[var(--error)] text-sm">
+                {loadError}
             </div>
         {:else if filteredKeys.length === 0}
             <div class="p-8 text-center text-[var(--on-surface-variant)]">
@@ -164,9 +185,9 @@
     </Card>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard icon="speed" label="API Calls (24h)" value="4.2M" trend="+12%" trendDirection="up" />
-        <StatCard icon="security" label="Unauthorized Attempts" value="0" />
-        <StatCard icon="timer" label="Average Latency" value="42ms" trend="Stable" trendDirection="neutral" />
+        <StatCard icon="speed" label="Total Requests" value={usage ? usage.total_requests.toLocaleString() : '0'} />
+        <StatCard icon="security" label="Total Tokens" value={usage ? (usage.total_input_tokens + usage.total_output_tokens).toLocaleString() : '0'} />
+        <StatCard icon="timer" label="Average Latency" value={usage ? `${Math.round(usage.avg_response_time_ms)}ms` : '0ms'} />
     </div>
 </div>
 

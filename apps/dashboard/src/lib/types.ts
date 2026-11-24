@@ -22,10 +22,10 @@ export interface ApiKey {
 }
 
 export interface UsageData {
-    date: string;
-    tokens: number;
-    cost: number;
-    latency_ms: number;
+    total_requests: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+    avg_response_time_ms: number;
 }
 
 export interface Deployment {

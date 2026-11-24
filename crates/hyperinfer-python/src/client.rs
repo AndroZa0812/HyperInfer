@@ -319,7 +319,7 @@ impl HyperInferClient {
         let registry = registry_wrapper.get_registry();
 
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let client = create_client(&redis_url, &inner, &config_dict).await?;
+            let mut client = create_client(&redis_url, &inner, &config_dict).await?;
             client.inject_provider_registry(registry).await;
             store_and_clear(client, &inner, &config_dict).await;
             Python::try_attach(|py| Ok(py.None())).ok_or_else(|| {

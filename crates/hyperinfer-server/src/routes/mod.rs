@@ -50,13 +50,16 @@ pub async fn healthz_handler<D: Database, C: ConfigStore>(
 #[derive(OpenApi)]
 #[openapi(
     paths(
+        teams::list_teams,
         teams::get_team,
         teams::create_team,
         users::get_user,
         users::create_user,
+        keys::list_api_keys,
         keys::get_api_key,
         keys::create_api_key,
         keys::revoke_api_key,
+        teams::get_usage_summary,
         teams::get_model_alias,
         teams::create_model_alias,
         teams::get_quota,
@@ -81,6 +84,7 @@ pub async fn healthz_handler<D: Database, C: ConfigStore>(
         (name = "teams", description = "Team management"),
         (name = "users", description = "User management"),
         (name = "api_keys", description = "API key management"),
+        (name = "usage", description = "Usage statistics"),
         (name = "model_aliases", description = "Model alias management"),
         (name = "quotas", description = "Quota management"),
         (name = "auth", description = "Authentication"),
@@ -127,12 +131,16 @@ where
     // Dashboard-facing v1 routes protected by JWT auth (role checks via RequireAdmin extractor)
     let v1_jwt_router = Router::new()
         .route("/v1/teams/{id}", get(teams::get_team))
-        .route("/v1/teams", post(teams::create_team))
+        .route("/v1/teams", get(teams::list_teams).post(teams::create_team))
         .route("/v1/users/{id}", get(users::get_user))
         .route("/v1/users", post(users::create_user))
         .route("/v1/api_keys/{id}", get(keys::get_api_key))
         .route("/v1/api_keys/{id}/revoke", post(keys::revoke_api_key))
-        .route("/v1/api_keys", post(keys::create_api_key))
+        .route(
+            "/v1/api_keys",
+            get(keys::list_api_keys).post(keys::create_api_key),
+        )
+        .route("/v1/usage/summary", get(teams::get_usage_summary))
         .route("/v1/model_aliases/{id}", get(teams::get_model_alias))
         .route("/v1/model_aliases", post(teams::create_model_alias))
         .route("/v1/quotas/{team_id}", get(teams::get_quota))

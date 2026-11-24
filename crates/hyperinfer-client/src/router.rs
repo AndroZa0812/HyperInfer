@@ -2,16 +2,13 @@ use hyperinfer_core::types::{Config, Provider};
 use tracing::warn;
 
 pub struct Router {
-    #[allow(dead_code)]
-    rules: Vec<hyperinfer_core::types::RoutingRule>,
     model_aliases: std::collections::HashMap<String, (String, Option<Provider>)>,
     default_provider: Option<Provider>,
 }
 
 impl Router {
-    pub fn new(rules: Vec<hyperinfer_core::types::RoutingRule>) -> Self {
+    pub fn new(_rules: Vec<hyperinfer_core::types::RoutingRule>) -> Self {
         Self {
-            rules,
             model_aliases: std::collections::HashMap::new(),
             default_provider: None,
         }

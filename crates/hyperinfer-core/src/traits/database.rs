@@ -7,6 +7,14 @@ use crate::types::{
     CreateDeploymentRequest, Deployment, RoutingConfig, UpdateRoutingConfigRequest,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UsageSummary {
+    pub total_requests: i64,
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub avg_response_time_ms: f64,
+}
+
 #[async_trait]
 #[allow(clippy::double_must_use)]
 pub trait Database: Clone + Send + Sync + 'static {
@@ -97,6 +105,21 @@ pub trait Database: Clone + Send + Sync + 'static {
     ) -> Result<RoutingConfig, DbError>;
 
     async fn ping(&self) -> Result<(), DbError>;
+
+    // --- List operations ---
+    async fn list_teams(&self) -> Result<Vec<Team>, DbError> {
+        Ok(vec![])
+    }
+
+    async fn list_api_keys(&self, team_id: Option<String>) -> Result<Vec<ApiKey>, DbError> {
+        let _ = team_id;
+        Ok(vec![])
+    }
+
+    async fn get_usage_summary(&self, team_id: Option<String>) -> Result<UsageSummary, DbError> {
+        let _ = team_id;
+        Ok(UsageSummary::default())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -122,6 +145,7 @@ pub struct User {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiKey {
     pub id: String,
+    #[serde(default, skip_serializing)]
     pub key_hash: String,
     pub user_id: String,
     pub team_id: String,

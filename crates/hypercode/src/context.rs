@@ -317,6 +317,8 @@ pub async fn compact_history_with_llm(
         stream: None,
         stop: None,
         tools: None,
+        tool_choice: None,
+        response_format: None,
     };
 
     let resp = backend.chat(api_key_id, sum_request).await?;

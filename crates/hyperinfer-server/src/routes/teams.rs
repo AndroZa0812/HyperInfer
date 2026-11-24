@@ -1,12 +1,13 @@
 //! Team, model alias, and quota management routes.
 
 use axum::{
-    extract::{Extension, Json, Path, State},
+    extract::{Extension, Json, Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use hyperinfer_core::{ConfigStore, Database, DbError};
 use serde::Deserialize;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 
 use crate::auth::{AuthClaims, RequireAdmin};
@@ -210,6 +211,67 @@ pub async fn create_quota<D: Database, C: ConfigStore>(
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create quota").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/teams",
+    responses(
+        (status = 200, description = "List of teams"),
+        (status = 403, description = "Access denied")
+    ),
+    tag = "teams"
+)]
+pub async fn list_teams<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+) -> impl IntoResponse {
+    if claims.role == "admin" {
+        match state.db.list_teams().await {
+            Ok(teams) => Json(teams).into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to list teams").into_response(),
+        }
+    } else {
+        match state.db.get_team(&claims.team_id).await {
+            Ok(Some(team)) => Json(vec![team]).into_response(),
+            Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get team").into_response(),
+        }
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/usage/summary",
+    params(("team_id" = Option<String>, Query, description = "Filter by team ID")),
+    responses(
+        (status = 200, description = "Usage summary"),
+        (status = 403, description = "Access denied")
+    ),
+    tag = "usage"
+)]
+pub async fn get_usage_summary<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let team_id = if claims.role == "admin" {
+        params.get("team_id").cloned()
+    } else {
+        Some(claims.team_id.clone())
+    };
+
+    match state.db.get_usage_summary(team_id).await {
+        Ok(summary) => Json(summary).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get usage summary",
+            )
+                .into_response(),
         },
     }
 }

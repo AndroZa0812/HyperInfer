@@ -219,6 +219,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -242,6 +244,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -267,6 +271,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -309,6 +315,8 @@ mod tests {
             stream: None,
             stop: None,
             tools: None,
+            tool_choice: None,
+            response_format: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);

@@ -14,6 +14,7 @@
         name: '',
         provider: 'openai',
         model: 'gpt-4',
+        api_key_ref: '',
         base_url: 'https://api.openai.com/v1',
         is_active: true,
         weight: 1,
@@ -86,6 +87,7 @@
             name: deployment.name,
             provider: deployment.provider,
             model: deployment.model,
+            api_key_ref: deployment.api_key_ref || '',
             base_url: deployment.base_url,
             is_active: deployment.is_active,
             weight: deployment.weight,
@@ -104,6 +106,7 @@
             name: '',
             provider: 'openai',
             model: 'gpt-4',
+            api_key_ref: '',
             base_url: 'https://api.openai.com/v1',
             is_active: true,
             weight: 1,
@@ -206,6 +209,10 @@
                     <div>
                         <label class="block text-sm mb-1">Base URL</label>
                         <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.base_url} />
+                    </div>
+                    <div>
+                        <label class="block text-sm mb-1">API Key Ref</label>
+                        <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />
                     </div>
                     <div>
                         <label class="block text-sm mb-1">Weight</label>

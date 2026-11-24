@@ -17,12 +17,13 @@ pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY
 pub use redis::PolicyUpdate;
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{
-    ApiKey, ConfigStore, Database, ModelAlias, NewUsageLog, Quota, Team, UsageLog, User,
+    ApiKey, ConfigStore, Database, ModelAlias, NewUsageLog, Quota, Team, UsageLog, UsageSummary,
+    User,
 };
 pub use types::{
-    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, CreateDeploymentRequest,
-    Deployment, MessageRole, Provider, RoutingConfig, RoutingRule, ToolCall, ToolDefinition,
-    UpdateRoutingConfigRequest, Usage, UsageRecord,
+    ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, ContentPart,
+    CreateDeploymentRequest, Deployment, ImageUrl, MessageRole, Provider, RoutingConfig,
+    RoutingRule, ToolCall, ToolDefinition, UpdateRoutingConfigRequest, Usage, UsageRecord,
 };
 
 /// SHA-256 hash of a key, returned as a hex string.

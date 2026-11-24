@@ -13,6 +13,27 @@ pub mod openai;
 pub use provider_trait::LlmProvider;
 pub use registry::ProviderRegistry;
 
+/// Parse a `data:<media_type>;base64,<data>` URL into `(media_type, base64_data)`.
+pub fn parse_data_url(url: &str) -> Option<(&str, &str)> {
+    let rest = url.strip_prefix("data:")?;
+    let (meta, data) = rest.split_once(";base64,")?;
+    let media_type = meta.split(';').next().filter(|s| !s.is_empty())?;
+    Some((media_type, data))
+}
+
+/// Infer an image MIME type from a URL path extension, defaulting to `image/png`.
+pub fn infer_image_mime_type(url: &str) -> &'static str {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "png" => "image/png",
+        _ => "image/png",
+    }
+}
+
 pub fn drain_lines(raw_buf: &mut Vec<u8>, lines: &mut Vec<String>) {
     if raw_buf.is_empty() {
         return;
@@ -182,5 +203,48 @@ mod tests {
             vec!["data: line1", "data: line2", "data: café", "data: line4"]
         );
         assert!(remainder.is_empty());
+    }
+
+    #[test]
+    fn test_parse_data_url() {
+        assert_eq!(
+            parse_data_url("data:image/png;base64,SGVsbG8="),
+            Some(("image/png", "SGVsbG8="))
+        );
+        assert_eq!(
+            parse_data_url("data:image/jpeg;charset=utf-8;base64,QUJD"),
+            Some(("image/jpeg", "QUJD"))
+        );
+        assert_eq!(parse_data_url("https://example.com/a.png"), None);
+        assert_eq!(parse_data_url("data:;base64,QUJD"), None);
+        assert_eq!(parse_data_url("data:image/png,raw"), None);
+    }
+
+    #[test]
+    fn test_infer_image_mime_type() {
+        assert_eq!(
+            infer_image_mime_type("https://example.com/a.jpg"),
+            "image/jpeg"
+        );
+        assert_eq!(
+            infer_image_mime_type("https://example.com/a.JPEG?token=123#frag"),
+            "image/jpeg"
+        );
+        assert_eq!(
+            infer_image_mime_type("https://example.com/a.webp"),
+            "image/webp"
+        );
+        assert_eq!(
+            infer_image_mime_type("https://example.com/a.gif"),
+            "image/gif"
+        );
+        assert_eq!(
+            infer_image_mime_type("https://example.com/a.png"),
+            "image/png"
+        );
+        assert_eq!(
+            infer_image_mime_type("https://example.com/no-ext"),
+            "image/png"
+        );
     }
 }
