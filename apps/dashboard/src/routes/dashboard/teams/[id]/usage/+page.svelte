@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { UsageData } from '$lib/types';
     import UsageChart from '$lib/components/UsageChart.svelte';
@@ -13,7 +13,7 @@
     let loading = $state(true);
     let period = $state('30d');
 
-    let teamId = $derived($page.params.id);
+    let teamId = $derived(page.params.id);
 
     let totalTokens = $derived(data.reduce((sum, d) => sum + d.tokens, 0));
     let totalCost = $derived(data.reduce((sum, d) => sum + d.cost, 0));

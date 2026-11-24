@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { ApiKey } from '$lib/types';
     import { onMount } from 'svelte';
@@ -10,7 +10,7 @@
     let keyData = $state<ApiKey | null>(null);
     let loading = $state(true);
 
-    let keyId = $derived($page.params.id);
+    let keyId = $derived(page.params.id);
 
     onMount(async () => {
         if (!keyId) { loading = false; return; }
