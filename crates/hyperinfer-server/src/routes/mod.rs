@@ -91,7 +91,7 @@ pub async fn healthz_handler<D: Database, C: ConfigStore>(
     ),
     info(
         title = "HyperInfer Control Plane API",
-        version = "0.1.0",
+        version = "0.2.0",
         description = "Next-Generation LLM Gateway - Control Plane API",
     )
 )]

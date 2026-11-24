@@ -186,7 +186,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-crates:
     name: Publish Rust crates
-    if: github.event_name == 'workflow_dispatch' && inputs.rust-bump != 'none'
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.rust-bump != 'none')
     runs-on: ubuntu-latest
     environment: crates-io
     steps:
@@ -198,15 +198,16 @@ jobs:
         run: cargo install cargo-workspaces --locked
 
       - name: Bump crate versions
+        if: github.event_name == 'workflow_dispatch' && inputs.rust-bump != 'none'
         run: |
           if [ "${{ inputs.rust-bump }}" = "alpha" ] || [ "${{ inputs.rust-bump }}" = "beta" ] || [ "${{ inputs.rust-bump }}" = "rc" ]; then
-            cargo ws version --pre-id ${{ inputs.rust-bump }} --exact --yes
+            cargo ws version --pre-id ${{ inputs.rust-bump }} --exact --no-git-push --no-git-commit --yes
           else
-            cargo ws version ${{ inputs.rust-bump }} --exact --yes
+            cargo ws version ${{ inputs.rust-bump }} --exact --no-git-push --no-git-commit --yes
           fi
 
       - name: Publish crates to crates.io
-        run: cargo ws publish --from-git --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --allow-branch main
+        run: cargo ws publish --publish-as-is --token ${{ secrets.CARGO_REGISTRY_TOKEN }} --yes
 
   # ---------------------------------------------------------------------------
   # Create GitHub Release with all wheels attached

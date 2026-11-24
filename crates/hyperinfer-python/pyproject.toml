@@ -1,6 +1,6 @@
 [project]
 name = "hyperinfer"
-version = "0.1.1"
+version = "0.2.0"
 description = "High-performance Python SDK for HyperInfer LLM Gateway"
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }
