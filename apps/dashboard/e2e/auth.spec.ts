@@ -28,17 +28,20 @@ test.describe('Authentication', () => {
 	test('logs in as admin, persists session across reload, and logs out', async ({ page }) => {
 		await loginViaUi(page, ADMIN_EMAIL, ADMIN_PASSWORD);
 
-		// Admin lands on /dashboard/teams via /dashboard redirect
-		await expect(page).toHaveURL(/\/dashboard\/teams$/);
+		// Admin lands on /dashboard Overview
+		await expect(page).toHaveURL(/\/dashboard$/);
+		await expect(page.getByRole('heading', { name: 'Overview' })).toBeVisible();
 		await expect(page.locator('aside').getByText(ADMIN_EMAIL)).toBeVisible();
+		await expect(page.locator('aside nav').getByRole('link', { name: 'Overview' })).toBeVisible();
 		await expect(page.locator('aside nav').getByRole('link', { name: 'Teams' })).toBeVisible();
+		await expect(page.locator('aside nav').getByRole('link', { name: 'Users' })).toBeVisible();
 		await expect(page.locator('aside nav').getByRole('link', { name: 'Keys' })).toBeVisible();
 		await expect(page.locator('aside nav').getByRole('link', { name: 'Routing' })).toBeVisible();
 		await expect(page.locator('aside nav').getByRole('link', { name: 'Settings' })).toBeVisible();
 
 		// Session persists after full page reload
 		await page.reload();
-		await expect(page).toHaveURL(/\/dashboard\/teams$/);
+		await expect(page).toHaveURL(/\/dashboard$/);
 		await expect(page.locator('aside').getByText(ADMIN_EMAIL)).toBeVisible();
 
 		// Logout returns to /login and clears session

@@ -1,12 +1,13 @@
 //! User management and authentication routes.
 
 use axum::{
-    extract::{Extension, Json, Path, State},
+    extract::{Extension, Json, Path, Query, State},
     http::{header::SET_COOKIE, StatusCode},
     response::IntoResponse,
 };
 use hyperinfer_core::{ConfigStore, Database, DbError};
 use serde::Deserialize;
+use std::collections::HashMap;
 use utoipa::ToSchema;
 
 use crate::auth::{
@@ -19,6 +20,13 @@ use crate::state::{can_access_team, AppState};
 pub struct CreateUserRequest {
     pub team_id: String,
     pub email: String,
+    pub role: String,
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct UpdateUserRoleRequest {
     pub role: String,
 }
 
@@ -60,6 +68,21 @@ pub async fn get_user<D: Database, C: ConfigStore>(
     }
 }
 
+pub async fn list_users<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let team_id = params.get("team_id").cloned();
+    match state.db.list_users(team_id).await {
+        Ok(users) => Json(users).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to list users").into_response(),
+        },
+    }
+}
+
 #[utoipa::path(
     post,
     path = "/v1/users",
@@ -76,15 +99,90 @@ pub async fn create_user<D: Database, C: ConfigStore>(
     _admin: RequireAdmin,
     Json(req): Json<CreateUserRequest>,
 ) -> impl IntoResponse {
+    let email = req.email.trim();
+    if email.is_empty() || !email.contains('@') {
+        return (StatusCode::BAD_REQUEST, "Valid email is required").into_response();
+    }
+    if req.role != "admin" && req.role != "member" {
+        return (StatusCode::BAD_REQUEST, "Role must be 'admin' or 'member'").into_response();
+    }
+
+    let password_hash = match req.password.as_deref() {
+        Some(pwd) if !pwd.is_empty() => {
+            if pwd.len() < 8 {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    "Password must be at least 8 characters",
+                )
+                    .into_response();
+            }
+            match hash_password(pwd) {
+                Ok(h) => Some(h),
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to hash password")
+                        .into_response();
+                }
+            }
+        }
+        _ => None,
+    };
+
     match state
         .db
-        .create_user(&req.team_id, &req.email, &req.role, None) // Pass None as no password provided for API-created users
+        .create_user(&req.team_id, email, &req.role, password_hash)
         .await
     {
         Ok(user) => Json(user).into_response(),
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response(),
+        },
+    }
+}
+
+pub async fn update_user_role<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    RequireAdmin(claims): RequireAdmin,
+    Path(user_id): Path<String>,
+    Json(req): Json<UpdateUserRoleRequest>,
+) -> impl IntoResponse {
+    if req.role != "admin" && req.role != "member" {
+        return (StatusCode::BAD_REQUEST, "Role must be 'admin' or 'member'").into_response();
+    }
+    if claims.sub == user_id && req.role != "admin" {
+        return (StatusCode::BAD_REQUEST, "Cannot demote your own account").into_response();
+    }
+
+    match state.db.update_user_role(&user_id, &req.role).await {
+        Ok(user) => Json(user).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "User not found").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to update user role",
+            )
+                .into_response(),
+        },
+    }
+}
+
+pub async fn delete_user<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    RequireAdmin(claims): RequireAdmin,
+    Path(user_id): Path<String>,
+) -> impl IntoResponse {
+    if claims.sub == user_id {
+        return (StatusCode::BAD_REQUEST, "Cannot delete your own account").into_response();
+    }
+
+    match state.db.delete_user(&user_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "User not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response(),
         },
     }
 }

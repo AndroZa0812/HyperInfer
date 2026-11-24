@@ -668,6 +668,7 @@ async fn test_create_user_success() {
             team_id: "team-id".to_string(),
             email: "new@example.com".to_string(),
             role: "member".to_string(),
+            password: None,
         }),
     )
     .await;
