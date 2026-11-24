@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from hyperinfer import Config
 from hyperinfer_llamaindex import HyperInferLLM
 from llama_index.core.llms import CompletionResponse
 
@@ -331,3 +332,89 @@ class TestHyperInferLLMStreaming:
                 gen = await llm.astream_complete("Hi")
                 async for _ in gen:
                     pass
+
+
+class TestPythonicConstructor:
+    """Test Pythonic direct constructor without from_config."""
+
+    def test_constructor_with_api_key(self):
+        """Test constructor with api_key parameter."""
+        llm = HyperInferLLM(model="gpt-4", api_key="sk-test")
+        assert llm.client is not None
+        assert llm.model == "gpt-4"
+
+    def test_constructor_with_api_keys(self):
+        """Test constructor with api_keys dict."""
+        llm = HyperInferLLM(
+            model="gpt-4",
+            api_keys={"openai": "sk-test", "anthropic": "sk-ant"},
+        )
+        assert llm.client is not None
+
+    def test_constructor_with_default_provider(self):
+        """Test constructor with default_provider."""
+        llm = HyperInferLLM(
+            model="gpt-4",
+            api_key="sk-test",
+            default_provider="openai",
+        )
+        assert llm.client is not None
+
+    def test_constructor_with_redis_url(self):
+        """Test constructor with custom redis_url."""
+        llm = HyperInferLLM(
+            model="gpt-4",
+            api_key="sk-test",
+            redis_url="redis://custom:6379",
+        )
+        assert llm.client is not None
+        assert llm.client._redis_url == "redis://custom:6379"
+
+    def test_constructor_with_config(self):
+        """Test constructor with Config object."""
+        config = Config().with_api_key("openai", "sk-test")
+        llm = HyperInferLLM(model="gpt-4", config=config)
+        assert llm.client is not None
+
+    def test_constructor_with_explicit_client(self):
+        """Test constructor with explicit client (no auto-creation)."""
+        from hyperinfer import Client
+
+        explicit_client = Client(redis_url="redis://explicit:6379")
+        llm = HyperInferLLM(model="gpt-4", client=explicit_client)
+        assert llm.client is explicit_client
+
+    def test_constructor_infers_anthropic_provider(self):
+        """Test provider inference for Claude models."""
+        llm = HyperInferLLM(model="claude-3-5-sonnet-20241022", api_key="sk-ant")
+        assert llm.client is not None
+
+    def test_constructor_infers_gemini_provider(self):
+        """Test provider inference for Gemini models."""
+        llm = HyperInferLLM(model="gemini-1.5-pro", api_key="gemini-key")
+        assert llm.client is not None
+
+    def test_constructor_infers_openai_provider(self):
+        """Test provider inference for OpenAI models (default)."""
+        llm = HyperInferLLM(model="gpt-4", api_key="sk-test")
+        assert llm.client is not None
+
+    def test_constructor_honors_redis_url_env(self, monkeypatch):
+        """Test constructor honors REDIS_URL env var when redis_url is omitted."""
+        monkeypatch.setenv("REDIS_URL", "redis://env-host:6380")
+        llm = HyperInferLLM(model="gpt-4", api_key="sk-test")
+        assert llm.client is not None
+        assert llm.client._redis_url == "redis://env-host:6380"
+
+    def test_secrets_hidden_from_repr_and_dump(self):
+        """Test api_key and api_keys are excluded from repr() and model_dump()."""
+        llm = HyperInferLLM(
+            model="gpt-4",
+            api_key="sk-super-secret",
+            api_keys={"anthropic": "sk-ant-secret"},
+        )
+        assert "sk-super-secret" not in repr(llm)
+        assert "sk-ant-secret" not in repr(llm)
+        dumped = llm.model_dump()
+        assert "api_key" not in dumped
+        assert "api_keys" not in dumped

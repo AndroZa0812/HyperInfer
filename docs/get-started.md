@@ -25,12 +25,18 @@ pip install hyperinfer
 ```
 
 ```python
-from hyperinfer import Config, HyperInferClient
+import asyncio
+from hyperinfer import Client
 
-config = Config().with_api_key("openai", "sk-...")
-client = HyperInferClient(config)
-response = client.chat("gpt-4o-mini", "Hello!")
-print(response)
+async def main():
+    async with Client(api_keys={"openai": "sk-..."}) as client:
+        response = await client.chat(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "Hello!"}],
+        )
+        print(response["choices"][0]["message"]["content"])
+
+asyncio.run(main())
 ```
 
 ## Docker

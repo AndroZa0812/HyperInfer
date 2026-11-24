@@ -14,7 +14,7 @@ from langchain_core.callbacks.manager import (
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ._sync import run_sync, run_sync_generator
 
@@ -30,14 +30,49 @@ def _format_messages(messages: list[BaseMessage]) -> list[dict[str, Any]]:
     return [convert_message_to_dict(msg) for msg in messages]
 
 
+def _infer_provider(model: str) -> str:
+    """Infer provider from model name."""
+    if "claude" in model.lower():
+        return "anthropic"
+    if "gemini" in model.lower():
+        return "gemini"
+    return "openai"
+
+
 class HyperInferChatModel(BaseChatModel):
     """LangChain chat model backed by HyperInfer."""
 
-    client: Client = Field(default_factory=Client)
+    client: Client | None = Field(default=None)
     model: str = Field(default="gpt-4")
     virtual_key: str = Field(default="default")
     temperature: float | None = Field(default=None)
     max_tokens: int | None = Field(default=None)
+    api_key: str | None = Field(default=None, repr=False, exclude=True)
+    api_keys: dict[str, str] | None = Field(default=None, repr=False, exclude=True)
+    default_provider: str | None = Field(default=None)
+    redis_url: str | None = Field(default=None)
+    config: Config | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _ensure_client(self) -> HyperInferChatModel:
+        """Ensure a Client instance exists after construction."""
+        if self.client is not None:
+            return self
+
+        # Build api_keys dict from individual api_key if provided
+        keys = dict(self.api_keys) if self.api_keys else {}
+        if self.api_key:
+            provider = self.default_provider or _infer_provider(self.model)
+            keys[provider] = self.api_key
+
+        self.client = Client(
+            redis_url=self.redis_url,
+            config=self.config,
+            api_keys=keys or None,
+            default_provider=self.default_provider,
+            virtual_key=self.virtual_key,
+        )
+        return self
 
     @property
     def _llm_type(self) -> str:
@@ -65,13 +100,15 @@ class HyperInferChatModel(BaseChatModel):
         formatted_messages = _format_messages(messages)
 
         try:
+            if self.client is None:
+                raise RuntimeError("Client not initialized")
             response = await self.client.chat(
                 key=self.virtual_key,
                 model=self.model,
                 messages=formatted_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                **({"stop": stop} if stop else {}),
+                stop=stop,
             )
         except Exception as e:
             raise RuntimeError(f"Chat request failed: {e}") from e
@@ -122,13 +159,15 @@ class HyperInferChatModel(BaseChatModel):
         formatted_messages = _format_messages(messages)
 
         try:
+            if self.client is None:
+                raise RuntimeError("Client not initialized")
             async for chunk in self.client.stream(
                 key=self.virtual_key,
                 model=self.model,
                 messages=formatted_messages,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
-                **({"stop": stop} if stop else {}),
+                stop=stop,
             ):
                 delta = chunk.get("delta", "")
                 finish_reason = chunk.get("finish_reason")

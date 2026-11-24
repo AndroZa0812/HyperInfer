@@ -13,12 +13,45 @@ pip install hyperinfer-langchain
 
 ## Usage
 
-```python
-import asyncio
+### Quick Start (Pythonic)
 
-from hyperinfer import Config
+```python
 from hyperinfer_langchain import HyperInferChatModel
 from langchain_core.messages import HumanMessage
+
+# Pass API key directly — no Config object needed
+llm = HyperInferChatModel(
+    model="gpt-4",
+    api_key="sk-...",
+)
+
+# Non-streaming
+response = llm.invoke([HumanMessage(content="Hello!")])
+print(response.content)
+
+# Streaming
+for chunk in llm.stream([HumanMessage(content="Tell me a joke")]):
+    print(chunk.content, end="", flush=True)
+```
+
+### Multiple Providers
+
+```python
+llm = HyperInferChatModel(
+    model="claude-3-5-sonnet-20241022",
+    api_keys={
+        "openai": "sk-...",
+        "anthropic": "sk-ant-...",
+    },
+)
+```
+
+### Advanced Configuration
+
+```python
+import asyncio
+from hyperinfer import Config
+from hyperinfer_langchain import HyperInferChatModel
 
 async def main():
     config = (
@@ -33,13 +66,8 @@ async def main():
         virtual_key="my-team",
     )
 
-    # Non-streaming
     response = llm.invoke([HumanMessage(content="Hello!")])
     print(response.content)
-
-    # Streaming
-    for chunk in llm.stream([HumanMessage(content="Tell me a joke")]):
-        print(chunk.content, end="", flush=True)
 
 asyncio.run(main())
 ```
