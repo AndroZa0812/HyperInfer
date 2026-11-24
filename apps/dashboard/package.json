@@ -10,23 +10,23 @@
 		"sv": "svelte-kit sync && sv check"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-static": "^3.0.0",
-		"@sveltejs/kit": "^2.0.0",
+		"@sveltejs/adapter-static": "^4.0.1",
+		"@sveltejs/kit": "^3.1.1",
 		"@sveltejs/vite-plugin-svelte": "~7.0.0",
 		"@tailwindcss/postcss": "^4.0.0",
 		"@tailwindcss/vite": "^4.2.2",
 		"@types/node": "~25.6.0",
 		"autoprefixer": "^10.4.0",
-		"postcss": "^8.4.0",
+		"postcss": "^8.5.18",
 		"sv": "^0.15.1",
-		"svelte": "^5.0.0",
+		"svelte": "^5.55.7",
 		"svelte-check": "^4.0.0",
 		"tailwindcss": "^4.0.0",
 		"typescript": "~6.0.3",
-		"vite": "~8.0.8"
+		"vite": "^8.1.6"
 	},
 	"dependencies": {
-		"echarts": "~6.0.0"
+		"echarts": "^6.1.0"
 	},
 	"type": "module"
 }
