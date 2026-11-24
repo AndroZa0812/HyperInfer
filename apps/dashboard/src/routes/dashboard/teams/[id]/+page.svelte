@@ -77,7 +77,7 @@
             <StatCard icon="vpn_key" label="Total Keys" value={keys.length} trend="API keys configured" trendDirection="neutral" />
             <StatCard icon="sensors" label="Active Keys" value={activeKeys} trend={`${activeKeys > 0 ? Math.round((activeKeys / keys.length) * 100) : 0}% connectivity`} trendDirection="up" />
             <StatCard icon="data_usage" label="Usage This Month" value={totalTokens.toLocaleString()} trend="Tokens processed" trendDirection="neutral" />
-            <StatCard icon="account_balance_wallet" label="Budget Left" value={`$${(team.budget_cents / 100).toFixed(2)}`} trend="Monthly budget" trendDirection="neutral" />
+            <StatCard icon="account_balance_wallet" label="Monthly Budget" value={`$${(team.budget_cents / 100).toFixed(2)}`} trend="Allocated per month" trendDirection="neutral" />
         </div>
 
         <Card>

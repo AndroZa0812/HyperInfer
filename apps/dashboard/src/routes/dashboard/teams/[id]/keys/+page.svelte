@@ -41,11 +41,12 @@
     async function createKey() {
         if (!teamId) return;
         try {
-            const key = await api.createKey(teamId, newKeyName);
-            keys = [...keys, key];
+            const response = await api.createKey(teamId, newKeyName);
+            const { key: secret, ...keyMetadata } = response;
+            keys = [...keys, keyMetadata];
             showCreate = false;
             newKeyName = '';
-            createdKey = key;
+            createdKey = { ...keyMetadata, key: secret };
             showSecret = true;
             copied = false;
         } catch (e) {

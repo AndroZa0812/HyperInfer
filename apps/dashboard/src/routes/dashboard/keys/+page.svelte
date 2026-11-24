@@ -59,11 +59,12 @@
     async function createKey() {
         if (!$auth.user?.team_id) return;
         try {
-            const key = await api.createKey($auth.user!.team_id, newKeyName);
-            keys = [...keys, key];
+            const response = await api.createKey($auth.user!.team_id, newKeyName);
+            const { key: secret, ...keyMetadata } = response;
+            keys = [...keys, keyMetadata];
             showCreate = false;
             newKeyName = '';
-            createdKey = key;
+            createdKey = { ...keyMetadata, key: secret };
             showSecret = true;
             copied = false;
         } catch (e) {

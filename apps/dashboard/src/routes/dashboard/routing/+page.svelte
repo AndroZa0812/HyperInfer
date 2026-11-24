@@ -16,6 +16,7 @@
     let createError = $state('');
     let pendingDeleteId = $state<string | null>(null);
     let showDeleteConfirm = $state(false);
+    let deleteError = $state('');
 
     let formData = $state<CreateDeploymentRequest>({
         name: '',
@@ -81,19 +82,27 @@
 
     function confirmDelete(id: string) {
         pendingDeleteId = id;
+        deleteError = '';
         showDeleteConfirm = true;
+    }
+
+    function cancelDelete() {
+        pendingDeleteId = null;
+        deleteError = '';
+        showDeleteConfirm = false;
     }
 
     async function deleteDeployment() {
         if (!pendingDeleteId) return;
+        deleteError = '';
         try {
             await api.deleteDeployment(pendingDeleteId);
             deployments = deployments.filter(d => d.id !== pendingDeleteId);
-        } catch (e) {
-            console.error('Failed to delete deployment', e);
-        } finally {
             pendingDeleteId = null;
             showDeleteConfirm = false;
+        } catch (e) {
+            console.error('Failed to delete deployment', e);
+            deleteError = 'Failed to delete deployment. Please try again.';
         }
     }
 
@@ -256,12 +265,15 @@
         </div>
     </Modal>
 
-    <Modal bind:open={showDeleteConfirm} onclose={() => { pendingDeleteId = null; }}>
+    <Modal bind:open={showDeleteConfirm} onclose={cancelDelete}>
         <div class="p-6">
             <h2 class="text-xl font-bold text-[var(--on-surface)] mb-2">Delete Deployment</h2>
-            <p class="text-sm text-[var(--on-surface-variant)] mb-6">Are you sure you want to delete this deployment? This action cannot be undone.</p>
+            <p class="text-sm text-[var(--on-surface-variant)] mb-4">Are you sure you want to delete this deployment? This action cannot be undone.</p>
+            {#if deleteError}
+                <div class="text-[var(--error)] text-sm mb-4">{deleteError}</div>
+            {/if}
             <div class="flex justify-end gap-2">
-                <Button variant="ghost" onclick={() => { showDeleteConfirm = false; pendingDeleteId = null; }}>Cancel</Button>
+                <Button variant="ghost" onclick={cancelDelete}>Cancel</Button>
                 <button
                     type="button"
                     class="inline-flex items-center justify-center font-medium rounded-lg px-5 py-2.5 text-sm bg-[var(--error)] text-[var(--on-error)] hover:opacity-90 transition-all cursor-pointer"
