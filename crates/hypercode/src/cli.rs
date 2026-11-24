@@ -3,6 +3,7 @@
 use crate::a2a::A2aServer;
 use crate::agent::{Agent, AgentConfig, AgentEvent, ApprovalHandler, ApprovalMode, EventSink};
 use crate::context::WorkspaceContext;
+use crate::output_filter::OutputFilterConfig;
 use crate::sandbox::{HostRunner, OpenShellRunner};
 use crate::tool::{ToolContext, ToolRegistry};
 use async_trait::async_trait;
@@ -27,10 +28,14 @@ pub struct CliOptions {
     pub a2a_port: Option<u16>,
     pub a2a_stdio: bool,
     pub show_help: bool,
+    pub use_rtk: bool,
 }
 
 impl Default for CliOptions {
     fn default() -> Self {
+        let use_rtk = std::env::var("HYPERCODE_USE_RTK")
+            .map(|v| matches!(v.to_ascii_lowercase().as_str(), "1" | "true"))
+            .unwrap_or(false);
         Self {
             model: None,
             prompt: None,
@@ -42,6 +47,7 @@ impl Default for CliOptions {
             a2a_port: None,
             a2a_stdio: false,
             show_help: false,
+            use_rtk,
         }
     }
 }
@@ -126,6 +132,9 @@ impl CliOptions {
                 "--a2a-stdio" => {
                     opts.a2a_stdio = true;
                 }
+                "--use-rtk" => {
+                    opts.use_rtk = true;
+                }
                 other if other.starts_with('-') => {
                     return Err(format!("Unknown flag: '{}'. Use --help for usage.", other));
                 }
@@ -162,6 +171,7 @@ OPTIONS:
         --max-steps <N>          Max ReAct tool-calling iterations per turn (default: 50)
         --a2a-port <PORT>        Start an A2A HTTP/SSE JSON-RPC server on 127.0.0.1:<PORT>
         --a2a-stdio              Start an A2A JSON-RPC 2.0 server over stdin/stdout
+        --use-rtk                Wrap bash commands with rtk (requires rtk on PATH)
     -h, --help                   Show this help message
 
 ENVIRONMENT VARIABLES:
@@ -171,6 +181,7 @@ ENVIRONMENT VARIABLES:
     ANTIGRAVITY_API_KEY          API key for Antigravity models (antigravity/*)
     HYPERCODE_LOCAL_URL          Base URL for local Ollama / vLLM / LM Studio server
     HYPERCODE_OPENSHELL_SANDBOX  Default OpenShell sandbox name
+    HYPERCODE_USE_RTK            Enable rtk wrapping (1 or true)
 
 REPL COMMANDS:
     /compact                     Summarize older conversation turns to free context tokens
@@ -489,6 +500,10 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     let ws_context = WorkspaceContext::discover(&opts.workspace);
 
     let mut tool_ctx = ToolContext::new(&ws_context.workspace_root);
+    tool_ctx = tool_ctx.with_output_filter_config(OutputFilterConfig {
+        use_rtk: opts.use_rtk,
+        ..Default::default()
+    });
     let sandbox_label = if let Some(ref sb_name) = opts.openshell_sandbox {
         tool_ctx = tool_ctx.with_command_runner(OpenShellRunner::new(sb_name.clone()));
         format!("NVIDIA OpenShell ({})", sb_name)
@@ -622,12 +637,17 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                     }
                 },
                 Ok(ReplCommand::Tokens) => {
+                    let fs = agent.filter_stats();
                     println!(
                         "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
                         agent.history().len(),
                         agent.estimated_tokens(),
                         model,
                         sandbox_label
+                    );
+                    println!(
+                        "| Filter savings: ~{} tokens ({} cmds)",
+                        fs.total_tokens_saved, fs.commands_filtered
                     );
                 }
                 Ok(ReplCommand::Reset) => {
