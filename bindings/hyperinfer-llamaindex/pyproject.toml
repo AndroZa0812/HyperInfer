@@ -1,6 +1,6 @@
 [project]
 name = "hyperinfer-llamaindex"
-version = "0.2.0"
+version = "0.2.1"
 description = "LlamaIndex integration for HyperInfer LLM Gateway"
 readme = "README.md"
 license = { text = "AGPL-3.0-only" }

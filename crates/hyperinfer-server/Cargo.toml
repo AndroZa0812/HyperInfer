@@ -1,6 +1,6 @@
 [package]
 name = "hyperinfer-server"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "High-performance LLM Gateway server built with Axum"
 license = "AGPL-3.0-only"
@@ -20,9 +20,9 @@ name = "hyperinfer-server"
 path = "src/main.rs"
 
 [dependencies]
-hyperinfer-core = { path = "../hyperinfer-core", version = "0.2.0" }
-hyperinfer-providers = { path = "../hyperinfer-providers", version = "0.2.0" }
-hyperinfer-router = { path = "../hyperinfer-router", version = "0.2.0" }
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.2.1" }
+hyperinfer-providers = { path = "../hyperinfer-providers", version = "0.2.1" }
+hyperinfer-router = { path = "../hyperinfer-router", version = "0.2.1" }
 async-trait = "0.1"
 axum = "0.8"
 tokio = { version = "1.52", features = ["full"] }
@@ -68,7 +68,7 @@ utoipa-swagger-ui = { version = "9", features = ["axum"] }
 embedded-frontend = ["rust-embed", "mime_guess"]
 
 [dev-dependencies]
-hyperinfer-core = { path = "../hyperinfer-core", version = "0.2.0", features = ["test-mocks"] }
+hyperinfer-core = { path = "../hyperinfer-core", version = "0.2.1", features = ["test-mocks"] }
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres", "redis"] }

@@ -9,7 +9,7 @@ from hyperinfer.config import Config
 if TYPE_CHECKING:
     from hyperinfer._hyperinfer import HyperInferClient
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __all__ = ["HyperInferClient", "Client", "Config"]
 
 
