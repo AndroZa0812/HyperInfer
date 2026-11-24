@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { ApiKey } from '$lib/types';
     import { onMount } from 'svelte';
@@ -15,7 +15,7 @@
     let showCreate = $state(false);
     let newKeyName = $state('');
 
-    let teamId = $derived($page.params.id);
+    let teamId = $derived(page.params.id);
 
     async function loadKeys() {
         if (!teamId) return;

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { auth } from '$lib/stores/auth';
 	import { theme } from '$lib/stores/theme';
 	import type { Snippet } from 'svelte';
@@ -22,7 +22,7 @@
 	));
 
 	function isActive(path: string): boolean {
-		const currentPath = $page.url.pathname;
+		const currentPath = page.url.pathname;
 		if (path === '/dashboard/teams') {
 			return currentPath === path || currentPath.startsWith('/dashboard/teams/');
 		}

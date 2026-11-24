@@ -64,6 +64,7 @@
             const deployment = await api.updateDeployment(editingId, formData);
             deployments = deployments.map(d => d.id === editingId ? deployment : d);
             editingId = null;
+            showCreate = false;
             resetForm();
         } catch (e) {
             console.error('Failed to update deployment', e);

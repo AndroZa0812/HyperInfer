@@ -216,3 +216,8 @@ site/
 # Internal planning documents (superpowers specs/plans)
 # These are private working files - do not publish or commit
 docs/superpowers/
+
+# Playwright E2E test artifacts
+playwright-report/
+test-results/
+apps/dashboard/e2e/.e2e-runtime.json

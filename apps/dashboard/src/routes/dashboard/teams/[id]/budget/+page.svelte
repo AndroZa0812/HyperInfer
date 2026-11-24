@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { Team, UsageData } from '$lib/types';
     import Card from '$lib/components/Card.svelte';
@@ -9,7 +9,7 @@
     let usageData = $state<UsageData[]>([]);
     let loading = $state(true);
 
-    let teamId = $derived($page.params.id);
+    let teamId = $derived(page.params.id);
 
     let usedCents = $derived(usageData.reduce((sum, d) => sum + d.cost, 0));
     let usedPercent = $derived(team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0);

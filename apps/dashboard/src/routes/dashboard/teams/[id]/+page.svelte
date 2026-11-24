@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { Team } from '$lib/types';
     import StatCard from '$lib/components/StatCard.svelte';
@@ -12,7 +12,7 @@
     let loading = $state(true);
     let error = $state<string | null>(null);
 
-    let teamId = $derived($page.params.id);
+    let teamId = $derived(page.params.id);
 
     $effect(() => {
         if (teamId) {
