@@ -2,10 +2,10 @@
 
 import asyncio
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-from hyperinfer.config import Config
+from hyperinfer.config import Config, Quota, RoutingRule
 
 # This block is seen by IDEs/Linters but ignored at runtime
 if TYPE_CHECKING:
@@ -32,10 +32,10 @@ class Client:
         redis_url: str | None = None,
         config: Config | None = None,
         *,
-        api_keys: dict[str, str] | None = None,
-        model_aliases: dict[str, str] | None = None,
-        routing_rules: list[dict[str, Any]] | None = None,
-        quotas: dict[str, dict[str, int | None]] | None = None,
+        api_keys: Mapping[str, str] | None = None,
+        model_aliases: Mapping[str, str] | None = None,
+        routing_rules: Sequence[RoutingRule | dict[str, Any]] | None = None,
+        quotas: Mapping[str, Quota | dict[str, int | None]] | None = None,
         default_provider: str | None = None,
         virtual_key: str = "default",
     ) -> None:
@@ -70,9 +70,13 @@ class Client:
                     **model_aliases,
                 }
             if routing_rules:
-                config_dict["routing_rules"] = config_dict.get("routing_rules", []) + routing_rules
+                normalized_rules = [Config._normalize_routing_rule(r) for r in routing_rules]
+                config_dict["routing_rules"] = (
+                    config_dict.get("routing_rules", []) + normalized_rules
+                )
             if quotas:
-                config_dict["quotas"] = {**config_dict.get("quotas", {}), **quotas}
+                normalized_quotas = {k: Config._normalize_quota(v) for k, v in quotas.items()}
+                config_dict["quotas"] = {**config_dict.get("quotas", {}), **normalized_quotas}
             if default_provider:
                 config_dict["default_provider"] = default_provider
             self._config_dict = config_dict

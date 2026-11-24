@@ -233,3 +233,46 @@ class TestConfigFluentAPI:
         assert len(result["routing_rules"]) == 1
         assert result["quotas"]["default"]["max_requests_per_minute"] == 60
         assert result["default_provider"] == "openai"
+
+
+class TestTypedConfigObjects:
+    """Test Quota and RoutingRule typed dataclasses in Config and Client."""
+
+    def test_config_with_quota_and_routing_rule_dataclasses(self):
+        """Test Config accepts typed Quota and RoutingRule objects."""
+        from hyperinfer import Client, Quota, RoutingRule
+
+        config = Config(
+            api_keys={"openai": "sk-test"},
+            routing_rules=[
+                RoutingRule("primary", priority=10, fallback_models=["gpt-4o-mini", "claude-3"])
+            ],
+            quotas={"team-a": Quota(rpm=100, tpm=50_000, budget_cents=5_000)},
+            default_provider="openai",
+        )
+        d = config.to_dict()
+        assert d["routing_rules"] == [
+            {
+                "name": "primary",
+                "priority": 10,
+                "fallback_models": ["gpt-4o-mini", "claude-3"],
+            }
+        ]
+        assert d["quotas"]["team-a"] == {
+            "max_requests_per_minute": 100,
+            "max_tokens_per_minute": 50_000,
+            "budget_cents": 5_000,
+        }
+
+        client = Client(
+            config=config,
+            routing_rules=[RoutingRule("secondary", priority=5, fallback_models=["gpt-4o"])],
+            quotas={"team-b": Quota(rpm=30)},
+        )
+        assert client._config_dict is not None
+        assert len(client._config_dict["routing_rules"]) == 2
+        assert client._config_dict["quotas"]["team-b"] == {
+            "max_requests_per_minute": 30,
+            "max_tokens_per_minute": None,
+            "budget_cents": None,
+        }

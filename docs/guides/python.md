@@ -52,16 +52,16 @@ You can configure `Client` directly with keyword arguments (or environment varia
 ### 2.2. Examples
 
 ```python
-from hyperinfer import Config
+from hyperinfer import Config, Quota, RoutingRule
 
-# Direct keyword constructor
+# Direct keyword constructor with typed Quota & RoutingRule objects
 config = Config(
     api_keys={"openai": "sk-...", "anthropic": "sk-ant-..."},
     model_aliases={"fast": "gpt-4o-mini"},
     routing_rules=[
-        {"name": "default", "priority": 1, "fallback_models": ["gpt-4o-mini", "claude-3-haiku-20240307"]}
+        RoutingRule("default", priority=1, fallback_models=["gpt-4o-mini", "claude-3-haiku-20240307"])
     ],
-    quotas={"my-team": {"rpm": 100, "tpm": 50_000, "budget_cents": 10_000}},
+    quotas={"my-team": Quota(rpm=100, tpm=50_000, budget_cents=10_000)},
     default_provider="openai",
 )
 

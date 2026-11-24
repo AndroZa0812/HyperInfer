@@ -3,14 +3,14 @@
 from typing import TYPE_CHECKING
 
 from hyperinfer.client import Client
-from hyperinfer.config import Config
+from hyperinfer.config import Config, Quota, RoutingRule
 
 # This block is seen by IDEs/Linters but ignored at runtime
 if TYPE_CHECKING:
     from hyperinfer._hyperinfer import HyperInferClient
 
 __version__ = "0.2.1"
-__all__ = ["HyperInferClient", "Client", "Config"]
+__all__ = ["HyperInferClient", "Client", "Config", "Quota", "RoutingRule"]
 
 
 def __getattr__(name: str) -> type["HyperInferClient"]:

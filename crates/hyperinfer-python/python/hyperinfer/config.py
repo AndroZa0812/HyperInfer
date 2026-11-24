@@ -1,26 +1,65 @@
 """Configuration classes for HyperInfer."""
 
 import os
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
+
+
+@dataclass(slots=True)
+class Quota:
+    """Rate limit and budget quota for a virtual key."""
+
+    rpm: int | None = None
+    tpm: int | None = None
+    budget_cents: int | None = None
+
+    def to_dict(self) -> dict[str, int | None]:
+        """Convert quota to the internal dictionary format."""
+        return {
+            "max_requests_per_minute": self.rpm,
+            "max_tokens_per_minute": self.tpm,
+            "budget_cents": self.budget_cents,
+        }
+
+
+@dataclass(slots=True)
+class RoutingRule:
+    """Routing rule with priority and fallback models."""
+
+    name: str
+    priority: int = 0
+    fallback_models: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert routing rule to the internal dictionary format."""
+        return {
+            "name": self.name,
+            "priority": self.priority,
+            "fallback_models": list(self.fallback_models),
+        }
 
 
 class Config:
     """Configuration builder for HyperInfer client.
 
-    Provides a fluent API for configuring API keys, routing rules,
-    quotas, and model aliases.
+    Supports both direct keyword-argument construction (with typed :class:`Quota`
+    and :class:`RoutingRule` dataclasses or plain dicts) and fluent ``.with_*()``
+    builder methods.
     """
 
     def __init__(
         self,
-        api_keys: dict[str, str] | None = None,
-        model_aliases: dict[str, str] | None = None,
-        routing_rules: list[dict[str, Any]] | None = None,
-        quotas: dict[str, dict[str, int | None]] | None = None,
+        api_keys: Mapping[str, str] | None = None,
+        model_aliases: Mapping[str, str] | None = None,
+        routing_rules: Sequence[RoutingRule | dict[str, Any]] | None = None,
+        quotas: Mapping[str, Quota | dict[str, int | None]] | None = None,
         default_provider: str | None = None,
     ) -> None:
         self._api_keys: dict[str, str] = dict(api_keys) if api_keys else {}
-        self._routing_rules: list[dict[str, Any]] = list(routing_rules) if routing_rules else []
+        self._routing_rules: list[dict[str, Any]] = (
+            [self._normalize_routing_rule(rule) for rule in routing_rules] if routing_rules else []
+        )
         self._quotas: dict[str, dict[str, int | None]] = {}
         self._model_aliases: dict[str, str] = dict(model_aliases) if model_aliases else {}
         self._default_provider: str | None = default_provider
@@ -30,8 +69,17 @@ class Config:
                 self._quotas[key] = self._normalize_quota(quota)
 
     @staticmethod
-    def _normalize_quota(quota: dict[str, int | None]) -> dict[str, int | None]:
-        """Normalize quota dict, mapping shorthand keys to full names."""
+    def _normalize_routing_rule(rule: RoutingRule | dict[str, Any]) -> dict[str, Any]:
+        """Normalize a RoutingRule dataclass or raw dict."""
+        if isinstance(rule, RoutingRule):
+            return rule.to_dict()
+        return dict(rule)
+
+    @staticmethod
+    def _normalize_quota(quota: Quota | dict[str, int | None]) -> dict[str, int | None]:
+        """Normalize a Quota dataclass or raw dict, mapping shorthand keys to full names."""
+        if isinstance(quota, Quota):
+            return quota.to_dict()
         result: dict[str, int | None] = {}
         for k, v in quota.items():
             if k == "rpm":
