@@ -13,6 +13,40 @@ pip install hyperinfer-llamaindex
 
 ## Usage
 
+### Quick Start (Pythonic)
+
+```python
+from hyperinfer_llamaindex import HyperInferLLM
+
+# Pass API key directly — no Config object needed
+llm = HyperInferLLM(
+    model="gpt-4",
+    api_key="sk-...",
+)
+
+# Completion
+response = llm.complete("Hello!")
+print(response.text)
+
+# Streaming
+for chunk in llm.stream_complete("Tell me a story"):
+    print(chunk.text, end="", flush=True)
+```
+
+### Multiple Providers
+
+```python
+llm = HyperInferLLM(
+    model="claude-3-5-sonnet-20241022",
+    api_keys={
+        "openai": "sk-...",
+        "anthropic": "sk-ant-...",
+    },
+)
+```
+
+### Advanced Configuration
+
 ```python
 from hyperinfer import Config
 from hyperinfer_llamaindex import HyperInferLLM
@@ -28,13 +62,8 @@ llm = HyperInferLLM.from_config(
     model="fast",
 )
 
-# Completion
 response = llm.complete("Hello!")
 print(response.text)
-
-# Streaming
-for chunk in llm.stream_complete("Tell me a story"):
-    print(chunk.text, end="", flush=True)
 ```
 
 ## License

@@ -1,5 +1,6 @@
 """Configuration classes for HyperInfer."""
 
+import os
 from typing import Any
 
 
@@ -10,12 +11,72 @@ class Config:
     quotas, and model aliases.
     """
 
-    def __init__(self) -> None:
-        self._api_keys: dict[str, str] = {}
-        self._routing_rules: list[dict[str, Any]] = []
+    def __init__(
+        self,
+        api_keys: dict[str, str] | None = None,
+        model_aliases: dict[str, str] | None = None,
+        routing_rules: list[dict[str, Any]] | None = None,
+        quotas: dict[str, dict[str, int | None]] | None = None,
+        default_provider: str | None = None,
+    ) -> None:
+        self._api_keys: dict[str, str] = dict(api_keys) if api_keys else {}
+        self._routing_rules: list[dict[str, Any]] = list(routing_rules) if routing_rules else []
         self._quotas: dict[str, dict[str, int | None]] = {}
-        self._model_aliases: dict[str, str] = {}
-        self._default_provider: str | None = None
+        self._model_aliases: dict[str, str] = dict(model_aliases) if model_aliases else {}
+        self._default_provider: str | None = default_provider
+
+        if quotas:
+            for key, quota in quotas.items():
+                self._quotas[key] = self._normalize_quota(quota)
+
+    @staticmethod
+    def _normalize_quota(quota: dict[str, int | None]) -> dict[str, int | None]:
+        """Normalize quota dict, mapping shorthand keys to full names."""
+        result: dict[str, int | None] = {}
+        for k, v in quota.items():
+            if k == "rpm":
+                result["max_requests_per_minute"] = v
+            elif k == "tpm":
+                result["max_tokens_per_minute"] = v
+            else:
+                result[k] = v
+        return result
+
+    @classmethod
+    def from_env(cls, *, default_provider: str | None = None) -> "Config":
+        """Build a Config from environment variables.
+
+        Reads the following environment variables:
+        - OPENAI_API_KEY -> provider "openai"
+        - ANTHROPIC_API_KEY -> provider "anthropic"
+        - GEMINI_API_KEY or GOOGLE_API_KEY -> provider "gemini"
+        - HYPERINFER_DEFAULT_PROVIDER -> default provider (if default_provider not provided)
+
+        Args:
+            default_provider: Override the default provider. If None, reads
+                HYPERINFER_DEFAULT_PROVIDER from environment.
+
+        Returns:
+            A Config instance populated with API keys found in the environment.
+        """
+        api_keys: dict[str, str] = {}
+
+        openai_key = os.getenv("OPENAI_API_KEY")
+        if openai_key:
+            api_keys["openai"] = openai_key
+
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if anthropic_key:
+            api_keys["anthropic"] = anthropic_key
+
+        gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if gemini_key:
+            api_keys["gemini"] = gemini_key
+
+        if default_provider is None:
+            default_provider = os.getenv("HYPERINFER_DEFAULT_PROVIDER")
+
+        return cls(api_keys=api_keys, default_provider=default_provider)
 
     def with_api_key(self, provider: str, key: str) -> "Config":
         """Add an API key for a provider.

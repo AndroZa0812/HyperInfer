@@ -11,21 +11,77 @@ from llama_index.core.base.llms.types import (
 )
 from llama_index.core.llms import CompletionResponse, CustomLLM, LLMMetadata
 from llama_index.core.llms.callbacks import llm_completion_callback
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from ._sync import run_sync, run_sync_generator
+
+
+def _infer_provider(model: str) -> str:
+    """Infer provider from model name."""
+    if "claude" in model.lower():
+        return "anthropic"
+    if "gemini" in model.lower():
+        return "gemini"
+    return "openai"
 
 
 class HyperInferLLM(CustomLLM):
     """LlamaIndex LLM backed by HyperInfer."""
 
-    client: Client = Field(default_factory=Client)
+    client: Client | None = Field(default=None)
     model: str = Field(default="gpt-4")
     virtual_key: str = Field(default="default")
     temperature: float | None = Field(default=None)
     max_tokens: int | None = Field(default=None)
     context_window: int = Field(default=4096)
     num_output: int = Field(default=256)
+    api_key: str | None = Field(default=None)
+    api_keys: dict[str, str] | None = Field(default=None)
+    default_provider: str | None = Field(default=None)
+    redis_url: str | None = Field(default=None)
+    config: Config | None = Field(default=None)
+
+    @model_validator(mode="after")
+    def _ensure_client(self) -> HyperInferLLM:
+        """Ensure a Client instance exists after construction."""
+        if self.client is not None:
+            return self
+
+        # Build api_keys dict from individual api_key if provided
+        keys = dict(self.api_keys) if self.api_keys else {}
+        if self.api_key:
+            provider = self.default_provider or _infer_provider(self.model)
+            keys[provider] = self.api_key
+
+        # Determine redis_url
+        redis = self.redis_url or "redis://localhost:6379"
+
+        # Build client
+        if self.config is not None:
+            # Merge api_keys onto config
+            if keys:
+                merged_config = Config(
+                    api_keys={**self.config.to_dict().get("api_keys", {}), **keys},
+                    model_aliases=self.config.to_dict().get("model_aliases"),
+                    routing_rules=self.config.to_dict().get("routing_rules"),
+                    quotas=self.config.to_dict().get("quotas"),
+                    default_provider=self.default_provider
+                    or self.config.to_dict().get("default_provider"),
+                )
+            else:
+                merged_config = self.config
+            self.client = Client(redis_url=redis, config=merged_config)
+        elif keys or self.default_provider:
+            self.client = Client(
+                redis_url=redis,
+                api_keys=keys,
+                default_provider=self.default_provider,
+                virtual_key=self.virtual_key,
+            )
+        else:
+            self.client = Client(redis_url=redis, virtual_key=self.virtual_key)
+
+        return self
 
     @property
     def metadata(self) -> LLMMetadata:
@@ -42,6 +98,8 @@ class HyperInferLLM(CustomLLM):
     @llm_completion_callback()
     async def _acomplete(self, prompt: str, **kwargs: Any) -> CompletionResponse:
         try:
+            if self.client is None:
+                raise RuntimeError("Client not initialized")
             messages = [{"role": "user", "content": prompt}]
 
             response = await self.client.chat(
@@ -97,6 +155,8 @@ class HyperInferLLM(CustomLLM):
         """
         messages = [{"role": "user", "content": prompt}]
         client = self.client
+        if client is None:
+            raise RuntimeError("HyperInfer client is not initialized")
         virtual_key = self.virtual_key
         model = self.model
         temperature = self.temperature
@@ -104,6 +164,8 @@ class HyperInferLLM(CustomLLM):
 
         async def _gen() -> CompletionResponseAsyncGen:
             accumulated = ""
+            if client is None:
+                raise RuntimeError("Client not initialized")
             try:
                 async for chunk in client.stream(
                     key=virtual_key,

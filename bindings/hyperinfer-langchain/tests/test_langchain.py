@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from hyperinfer import Config
 from hyperinfer_langchain import HyperInferChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.outputs import ChatGenerationChunk
@@ -303,3 +304,69 @@ class TestHyperInferChatModelStreaming:
             with pytest.raises(RuntimeError, match="Streaming request failed"):
                 async for _ in model._astream([HumanMessage(content="Hi")]):
                     pass
+
+
+class TestPythonicConstructor:
+    """Test Pythonic direct constructor without from_config."""
+
+    def test_constructor_with_api_key(self):
+        """Test constructor with api_key parameter."""
+        model = HyperInferChatModel(model="gpt-4", api_key="sk-test")
+        assert model.client is not None
+        assert model.model == "gpt-4"
+
+    def test_constructor_with_api_keys(self):
+        """Test constructor with api_keys dict."""
+        model = HyperInferChatModel(
+            model="gpt-4",
+            api_keys={"openai": "sk-test", "anthropic": "sk-ant"},
+        )
+        assert model.client is not None
+
+    def test_constructor_with_default_provider(self):
+        """Test constructor with default_provider."""
+        model = HyperInferChatModel(
+            model="gpt-4",
+            api_key="sk-test",
+            default_provider="openai",
+        )
+        assert model.client is not None
+
+    def test_constructor_with_redis_url(self):
+        """Test constructor with custom redis_url."""
+        model = HyperInferChatModel(
+            model="gpt-4",
+            api_key="sk-test",
+            redis_url="redis://custom:6379",
+        )
+        assert model.client is not None
+        assert model.client._redis_url == "redis://custom:6379"
+
+    def test_constructor_with_config(self):
+        """Test constructor with Config object."""
+        config = Config().with_api_key("openai", "sk-test")
+        model = HyperInferChatModel(model="gpt-4", config=config)
+        assert model.client is not None
+
+    def test_constructor_with_explicit_client(self):
+        """Test constructor with explicit client (no auto-creation)."""
+        from hyperinfer import Client
+
+        explicit_client = Client(redis_url="redis://explicit:6379")
+        model = HyperInferChatModel(model="gpt-4", client=explicit_client)
+        assert model.client is explicit_client
+
+    def test_constructor_infers_anthropic_provider(self):
+        """Test provider inference for Claude models."""
+        model = HyperInferChatModel(model="claude-3-5-sonnet-20241022", api_key="sk-ant")
+        assert model.client is not None
+
+    def test_constructor_infers_gemini_provider(self):
+        """Test provider inference for Gemini models."""
+        model = HyperInferChatModel(model="gemini-1.5-pro", api_key="gemini-key")
+        assert model.client is not None
+
+    def test_constructor_infers_openai_provider(self):
+        """Test provider inference for OpenAI models (default)."""
+        model = HyperInferChatModel(model="gpt-4", api_key="sk-test")
+        assert model.client is not None
