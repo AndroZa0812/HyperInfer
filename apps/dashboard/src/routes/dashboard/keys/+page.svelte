@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '$lib/api';
     import { auth } from '$lib/stores/auth';
-    import type { ApiKey, UsageData } from '$lib/types';
+    import type { ApiKey, CreateApiKeyResponse, UsageData } from '$lib/types';
     import Button from '$lib/components/Button.svelte';
     import Input from '$lib/components/Input.svelte';
     import Modal from '$lib/components/Modal.svelte';
@@ -17,10 +17,13 @@
     let searchQuery = $state('');
     let statusFilter = $state('all');
     let usage = $state<UsageData | null>(null);
+    let showSecret = $state(false);
+    let createdKey = $state<CreateApiKeyResponse | null>(null);
+    let copied = $state(false);
 
     let filteredKeys = $derived(
         keys.filter(k => {
-            const matchesSearch = !searchQuery || k.name.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = !searchQuery || (k.name ?? '').toLowerCase().includes(searchQuery.toLowerCase());
             const matchesStatus = statusFilter === 'all' ||
                 (statusFilter === 'active' && k.is_active) ||
                 (statusFilter === 'revoked' && !k.is_active);
@@ -56,13 +59,31 @@
     async function createKey() {
         if (!$auth.user?.team_id) return;
         try {
-            const key = await api.createKey($auth.user!.team_id, newKeyName);
-            keys = [...keys, key];
+            const response = await api.createKey($auth.user!.team_id, newKeyName);
+            const { key: secret, ...keyMetadata } = response;
+            keys = [...keys, keyMetadata];
             showCreate = false;
             newKeyName = '';
+            createdKey = { ...keyMetadata, key: secret };
+            showSecret = true;
+            copied = false;
         } catch (e) {
             console.error('Failed to create key', e);
         }
+    }
+
+    function copyKey() {
+        if (!createdKey) return;
+        navigator.clipboard?.writeText(createdKey.key).then(() => {
+            copied = true;
+            setTimeout(() => { copied = false; }, 2000);
+        }).catch(() => {});
+    }
+
+    function closeSecretModal() {
+        showSecret = false;
+        createdKey = null;
+        copied = false;
     }
 
     async function revokeKey(keyId: string) {
@@ -139,10 +160,10 @@
                                 <td class="px-5 py-4">
                                     <div class="flex items-center gap-2">
                                         <span class="material-symbols-outlined text-[var(--primary)]" style="font-size: 18px">vpn_key</span>
-                                        <span class="text-sm font-medium text-[var(--on-surface)]">{key.name}</span>
+                                        <span class="text-sm font-medium text-[var(--on-surface)]">{key.name || 'Unnamed Key'}</span>
                                     </div>
                                 </td>
-                                <td class="px-5 py-4 text-sm font-mono text-[var(--on-surface-variant)]">{key.prefix}...</td>
+                                <td class="px-5 py-4 text-sm font-mono text-[var(--on-surface-variant)]">{key.prefix ? `${key.prefix}...` : `${key.id.slice(0, 8)}...`}</td>
                                 <td class="px-5 py-4 text-sm text-[var(--on-surface-variant)]">{new Date(key.created_at).toLocaleDateString()}</td>
                                 <td class="px-5 py-4 text-sm text-[var(--on-surface-variant)]">{key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}</td>
                                 <td class="px-5 py-4">
@@ -151,12 +172,9 @@
                                 <td class="px-5 py-4 text-right">
                                     {#if key.is_active}
                                         <div class="flex items-center justify-end gap-1">
-                                            <button class="p-1.5 rounded-md hover:bg-[var(--surface-container)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-all cursor-pointer" title="Copy">
-                                                <span class="material-symbols-outlined" style="font-size: 18px">content_copy</span>
-                                            </button>
-                                            <button class="p-1.5 rounded-md hover:bg-[var(--surface-container)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-all cursor-pointer" title="Metrics">
+                                            <a href="/dashboard/keys/{key.id}/metrics" class="p-1.5 rounded-md hover:bg-[var(--surface-container)] text-[var(--on-surface-variant)] hover:text-[var(--primary)] transition-all" title="Metrics">
                                                 <span class="material-symbols-outlined" style="font-size: 18px">monitoring</span>
-                                            </button>
+                                            </a>
                                             <button class="p-1.5 rounded-md hover:bg-[var(--error)]/10 text-[var(--on-surface-variant)] hover:text-[var(--error)] transition-all cursor-pointer" title="Revoke" onclick={() => revokeKey(key.id)}>
                                                 <span class="material-symbols-outlined" style="font-size: 18px">block</span>
                                             </button>
@@ -172,14 +190,6 @@
             </div>
             <div class="px-5 py-3 flex items-center justify-between border-t border-[var(--ghost-border)]">
                 <span class="text-xs text-[var(--on-surface-variant)]">Showing 1-{filteredKeys.length} of {keys.length} keys</span>
-                <div class="flex gap-1">
-                    <button class="p-1.5 rounded-md hover:bg-[var(--surface-container)] text-[var(--on-surface-variant)] cursor-pointer">
-                        <span class="material-symbols-outlined" style="font-size: 18px">chevron_left</span>
-                    </button>
-                    <button class="p-1.5 rounded-md hover:bg-[var(--surface-container)] text-[var(--on-surface-variant)] cursor-pointer">
-                        <span class="material-symbols-outlined" style="font-size: 18px">chevron_right</span>
-                    </button>
-                </div>
             </div>
         {/if}
     </Card>
@@ -203,4 +213,24 @@
             <Button type="submit">Create Key</Button>
         </div>
     </form>
+</Modal>
+
+<Modal bind:open={showSecret} onclose={closeSecretModal}>
+    <div class="p-6 space-y-6">
+        <div>
+            <h2 class="text-xl font-semibold text-[var(--on-surface)]">API Key Created</h2>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">Save this key now. It will only be shown once.</p>
+        </div>
+        <div class="bg-[var(--surface-container-low)] rounded-lg p-4">
+            <p class="text-xs text-[var(--on-surface-variant)] mb-2">Secret Key</p>
+            <p class="text-sm font-mono text-[var(--on-surface)] break-all">{createdKey?.key}</p>
+        </div>
+        <div class="flex gap-3 justify-end">
+            <Button variant="ghost" onclick={copyKey}>
+                <span class="material-symbols-outlined" style="font-size: 18px">{copied ? 'check' : 'content_copy'}</span>
+                {copied ? 'Copied!' : 'Copy Key'}
+            </Button>
+            <Button onclick={closeSecretModal}>Done</Button>
+        </div>
+    </div>
 </Modal>
