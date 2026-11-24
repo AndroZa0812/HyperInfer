@@ -54,27 +54,19 @@ export const api = {
   getKey: (id: string) => fetchApi<ApiKey>(`/api_keys/${id}`),
   revokeKey: (id: string) =>
     fetchApi<ApiKey>(`/api_keys/${id}/revoke`, { method: "POST" }),
-  getKeys: async (teamId: string) => {
-    console.warn('getKeys not implemented - returning empty array');
-    return [];
+  getKeys: (teamId?: string) => {
+    const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    return fetchApi<ApiKey[]>(`/api_keys${params}`);
   },
-  createKey: async (teamId: string, name: string) => {
-    console.warn('createKey not implemented');
-    throw new Error('Not implemented');
-  },
+  createKey: (teamId: string, name: string) =>
+    fetchApi<ApiKey>("/api_keys", {
+      method: "POST",
+      body: JSON.stringify({ team_id: teamId, name }),
+    }),
 
-  getUsage: async (teamId: string, period: string) => {
-    console.warn('getUsage not implemented - returning empty array');
-    return [];
-  },
-
-  getConversations: async () => {
-    console.warn('getConversations not implemented - returning empty array');
-    return [];
-  },
-  getConversation: async (id: string) => {
-    console.warn('getConversation not implemented');
-    throw new Error('Not implemented');
+  getUsage: (teamId?: string) => {
+    const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    return fetchApi<UsageData>(`/usage/summary${params}`);
   },
 
   // Deployment management

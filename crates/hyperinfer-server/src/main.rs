@@ -344,16 +344,28 @@ async fn get_api_key<D: Database, C: ConfigStore>(
 )]
 async fn create_api_key<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
-    _admin: RequireAdmin,
+    RequireAdmin(claims): RequireAdmin,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
-    let key_hash = hyperinfer_core::hash_key(&req.key);
+    let raw_key = req
+        .key
+        .filter(|k| !k.trim().is_empty())
+        .unwrap_or_else(|| format!("hi-{}", uuid::Uuid::new_v4()));
+    let user_id = req
+        .user_id
+        .filter(|u| !u.trim().is_empty())
+        .unwrap_or(claims.sub);
+    let key_hash = hyperinfer_core::hash_key(&raw_key);
     match state
         .db
-        .create_api_key(&key_hash, &req.user_id, &req.team_id, req.name)
+        .create_api_key(&key_hash, &user_id, &req.team_id, req.name)
         .await
     {
-        Ok(key) => Json(key).into_response(),
+        Ok(api_key) => Json(CreateApiKeyResponse {
+            api_key,
+            key: raw_key,
+        })
+        .into_response(),
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (
@@ -389,6 +401,97 @@ async fn revoke_api_key<D: Database, C: ConfigStore>(
             _ => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to revoke API key",
+            )
+                .into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/teams",
+    responses(
+        (status = 200, description = "List of teams"),
+        (status = 403, description = "Access denied")
+    ),
+    tag = "teams"
+)]
+async fn list_teams<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+) -> impl IntoResponse {
+    if claims.role == "admin" {
+        match state.db.list_teams().await {
+            Ok(teams) => Json(teams).into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to list teams").into_response(),
+        }
+    } else {
+        match state.db.get_team(&claims.team_id).await {
+            Ok(Some(team)) => Json(vec![team]).into_response(),
+            Ok(None) => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to get team").into_response(),
+        }
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/api_keys",
+    params(("team_id" = Option<String>, Query, description = "Filter by team ID")),
+    responses(
+        (status = 200, description = "List of API keys"),
+        (status = 403, description = "Access denied")
+    ),
+    tag = "api_keys"
+)]
+async fn list_api_keys<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let team_id = if claims.role == "admin" {
+        params.get("team_id").cloned()
+    } else {
+        Some(claims.team_id.clone())
+    };
+
+    match state.db.list_api_keys(team_id).await {
+        Ok(keys) => Json(keys).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to list API keys").into_response(),
+        },
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/v1/usage/summary",
+    params(("team_id" = Option<String>, Query, description = "Filter by team ID")),
+    responses(
+        (status = 200, description = "Usage summary"),
+        (status = 403, description = "Access denied")
+    ),
+    tag = "usage"
+)]
+async fn get_usage_summary<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let team_id = if claims.role == "admin" {
+        params.get("team_id").cloned()
+    } else {
+        Some(claims.team_id.clone())
+    };
+
+    match state.db.get_usage_summary(team_id).await {
+        Ok(summary) => Json(summary).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to get usage summary",
             )
                 .into_response(),
         },
@@ -940,10 +1043,19 @@ struct CreateUserRequest {
 
 #[derive(Deserialize, ToSchema)]
 struct CreateApiKeyRequest {
-    key: String,
-    user_id: String,
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    user_id: Option<String>,
     team_id: String,
     name: Option<String>,
+}
+
+#[derive(Serialize)]
+struct CreateApiKeyResponse {
+    #[serde(flatten)]
+    api_key: hyperinfer_core::ApiKey,
+    key: String,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -1384,16 +1496,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Dashboard-facing v1 routes protected by JWT auth (role checks via RequireAdmin extractor)
     let v1_jwt_router = Router::new()
         .route("/v1/teams/{id}", get(get_team))
-        .route("/v1/teams", post(create_team))
+        .route("/v1/teams", get(list_teams).post(create_team))
         .route("/v1/users/{id}", get(get_user))
         .route("/v1/users", post(create_user))
         .route("/v1/api_keys/{id}", get(get_api_key))
         .route("/v1/api_keys/{id}/revoke", post(revoke_api_key))
-        .route("/v1/api_keys", post(create_api_key))
+        .route("/v1/api_keys", get(list_api_keys).post(create_api_key))
         .route("/v1/model_aliases/{id}", get(get_model_alias))
         .route("/v1/model_aliases", post(create_model_alias))
         .route("/v1/quotas/{team_id}", get(get_quota))
         .route("/v1/quotas", post(create_quota))
+        .route("/v1/usage/summary", get(get_usage_summary))
         .route(
             "/v1/deployments",
             get(list_deployments).post(create_deployment),
@@ -1458,13 +1571,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[derive(OpenApi)]
         #[openapi(
             paths(
+                list_teams,
                 get_team,
                 create_team,
                 get_user,
                 create_user,
+                list_api_keys,
                 get_api_key,
                 create_api_key,
                 revoke_api_key,
+                get_usage_summary,
                 get_model_alias,
                 create_model_alias,
                 get_quota,
@@ -1489,6 +1605,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 (name = "teams", description = "Team management"),
                 (name = "users", description = "User management"),
                 (name = "api_keys", description = "API key management"),
+                (name = "usage", description = "Usage statistics"),
                 (name = "model_aliases", description = "Model alias management"),
                 (name = "quotas", description = "Quota management"),
                 (name = "auth", description = "Authentication"),
@@ -1522,7 +1639,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 mod tests {
     use super::*;
     use hyperinfer_core::{
-        ApiKey, ConfigError, DbError, ModelAlias, PolicyUpdate, Quota, Team, UsageLog, User,
+        ApiKey, ConfigError, DbError, ModelAlias, PolicyUpdate, Quota, Team, UsageLog,
+        UsageSummary, User,
     };
     use mockall::mock;
     use mockall::predicate::*;
@@ -1562,6 +1680,9 @@ mod tests {
             async fn get_routing_config(&self) -> Result<Option<hyperinfer_core::RoutingConfig>, DbError>;
             async fn update_routing_config(&self, req: hyperinfer_core::UpdateRoutingConfigRequest) -> Result<hyperinfer_core::RoutingConfig, DbError>;
             async fn ping(&self) -> Result<(), DbError>;
+            async fn list_teams(&self) -> Result<Vec<Team>, DbError>;
+            async fn list_api_keys(&self, team_id: Option<String>) -> Result<Vec<ApiKey>, DbError>;
+            async fn get_usage_summary(&self, team_id: Option<String>) -> Result<UsageSummary, DbError>;
         }
     }
 
@@ -2240,8 +2361,8 @@ mod tests {
             State(state),
             admin,
             Json(CreateApiKeyRequest {
-                key: "test-secret-key".to_string(),
-                user_id: "user-id".to_string(),
+                key: Some("test-secret-key".to_string()),
+                user_id: Some("user-id".to_string()),
                 team_id: "team-id".to_string(),
                 name: Some("Test Key".to_string()),
             }),
@@ -2249,6 +2370,66 @@ mod tests {
         .await;
         let resp = response.into_response();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_create_api_key_defaults_key_and_user_id() {
+        use chrono::Utc;
+
+        let mut state = create_test_state();
+        let now = Utc::now();
+
+        state
+            .db
+            .expect_create_api_key()
+            .withf(|key_hash, user_id, team_id, name| {
+                !key_hash.is_empty()
+                    && user_id == "admin-123"
+                    && team_id == "team-id"
+                    && name.as_deref() == Some("Dashboard Key")
+            })
+            .times(1)
+            .returning(move |key_hash, user_id, team_id, name| {
+                Ok(ApiKey {
+                    id: "auto-key-id".to_string(),
+                    key_hash: key_hash.to_string(),
+                    user_id: user_id.to_string(),
+                    team_id: team_id.to_string(),
+                    name,
+                    is_active: true,
+                    created_at: now,
+                    expires_at: None,
+                })
+            });
+
+        let admin = RequireAdmin(AuthClaims {
+            sub: "admin-123".to_string(),
+            email: "admin@test.com".to_string(),
+            role: "admin".to_string(),
+            team_id: "team-id".to_string(),
+            exp: 9999999999,
+        });
+
+        let req: CreateApiKeyRequest = serde_json::from_value(serde_json::json!({
+            "team_id": "team-id",
+            "name": "Dashboard Key"
+        }))
+        .unwrap();
+
+        let resp = create_api_key(State(state), admin, Json(req))
+            .await
+            .into_response();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(json["id"], "auto-key-id");
+        assert!(json["key"]
+            .as_str()
+            .map(|k| k.starts_with("hi-"))
+            .unwrap_or(false));
+        assert!(json.get("key_hash").is_none());
     }
 
     #[tokio::test]
@@ -2449,5 +2630,134 @@ mod tests {
             whitespace_cors.unwrap_err(),
             "ALLOWED_ORIGINS must contain at least one valid origin."
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_teams_admin() {
+        let mut state = create_test_state();
+        let team = Team {
+            id: "team-1".to_string(),
+            name: "Test Team".to_string(),
+            budget_cents: 10000,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        state
+            .db
+            .expect_list_teams()
+            .times(1)
+            .returning(move || Ok(vec![team.clone()]));
+
+        let res = list_teams(State(state), Extension(admin_claims()))
+            .await
+            .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_list_teams_non_admin() {
+        let mut state = create_test_state();
+        let team = Team {
+            id: "team-1".to_string(),
+            name: "Test Team".to_string(),
+            budget_cents: 10000,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+        state
+            .db
+            .expect_get_team()
+            .with(eq("team-1"))
+            .times(1)
+            .returning(move |_| Ok(Some(team.clone())));
+
+        let res = list_teams(State(state), Extension(member_claims("team-1")))
+            .await
+            .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_list_api_keys_admin() {
+        let mut state = create_test_state();
+        state
+            .db
+            .expect_list_api_keys()
+            .with(eq(None))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let res = list_api_keys(
+            State(state),
+            Extension(admin_claims()),
+            Query(HashMap::new()),
+        )
+        .await
+        .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_list_api_keys_non_admin_scoped() {
+        let mut state = create_test_state();
+        state
+            .db
+            .expect_list_api_keys()
+            .with(eq(Some("team-1".to_string())))
+            .times(1)
+            .returning(|_| Ok(vec![]));
+
+        let mut query = HashMap::new();
+        query.insert("team_id".to_string(), "other-team".to_string());
+        let res = list_api_keys(
+            State(state),
+            Extension(member_claims("team-1")),
+            Query(query),
+        )
+        .await
+        .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_usage_summary_admin() {
+        let mut state = create_test_state();
+        state
+            .db
+            .expect_get_usage_summary()
+            .with(eq(None))
+            .times(1)
+            .returning(|_| Ok(UsageSummary::default()));
+
+        let res = get_usage_summary(
+            State(state),
+            Extension(admin_claims()),
+            Query(HashMap::new()),
+        )
+        .await
+        .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_get_usage_summary_non_admin_scoped() {
+        let mut state = create_test_state();
+        state
+            .db
+            .expect_get_usage_summary()
+            .with(eq(Some("team-1".to_string())))
+            .times(1)
+            .returning(|_| Ok(UsageSummary::default()));
+
+        let mut query = HashMap::new();
+        query.insert("team_id".to_string(), "other-team".to_string());
+        let res = get_usage_summary(
+            State(state),
+            Extension(member_claims("team-1")),
+            Query(query),
+        )
+        .await
+        .into_response();
+        assert_eq!(res.status(), StatusCode::OK);
     }
 }
