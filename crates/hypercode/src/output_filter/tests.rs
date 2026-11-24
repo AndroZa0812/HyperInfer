@@ -261,3 +261,35 @@ fn test_cli_use_rtk_flag() {
     assert!(opts.use_rtk);
     assert!(opts.prompt.is_none());
 }
+
+#[test]
+fn test_split_leading_env_assignments() {
+    assert_eq!(
+        split_leading_env_assignments("FOO=bar BAZ=1 cargo test"),
+        ("FOO=bar BAZ=1", "cargo test")
+    );
+    assert_eq!(
+        split_leading_env_assignments("cargo test -- --nocapture"),
+        ("", "cargo test -- --nocapture")
+    );
+    assert_eq!(split_leading_env_assignments("FOO=bar"), ("FOO=bar", ""));
+}
+
+#[test]
+fn test_tee_does_not_overwrite_existing_log_file() {
+    let tmp = TempDir::new().unwrap();
+    let log_dir = tmp.path().join(".hypercode/logs");
+    fs::create_dir_all(&log_dir).unwrap();
+
+    // Pre-populate the next few sequence slots to simulate a prior process run
+    let current = LOG_SEQ.load(Ordering::Relaxed);
+    let existing_path = log_dir.join(format!("{:06}-cmd.log", current));
+    fs::write(&existing_path, "prior run log").unwrap();
+
+    let filter = OutputFilter::new(OutputFilterConfig::default());
+    let outcome = filter.filter_and_tee("cmd", 1, "new run log", "", tmp.path());
+    let new_path = outcome.tee_log_path.expect("expected new tee log path");
+    assert_ne!(new_path, existing_path);
+    assert_eq!(fs::read_to_string(&existing_path).unwrap(), "prior run log");
+    assert_eq!(fs::read_to_string(&new_path).unwrap(), "new run log");
+}

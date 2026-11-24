@@ -200,15 +200,32 @@ impl OutputFilter {
         let tee_log_path = if should_tee {
             let log_dir = workspace_root.join(".hypercode/logs");
             if fs::create_dir_all(&log_dir).is_ok() {
-                let seq = LOG_SEQ.fetch_add(1, Ordering::Relaxed);
                 let sanitized = sanitize_cmd(command);
-                let log_path = log_dir.join(format!("{:06}-{}.log", seq, sanitized));
-                if fs::write(&log_path, &raw).is_ok() {
-                    prune_logs(&log_dir, self.config.max_log_files);
-                    Some(log_path)
-                } else {
-                    None
+                let mut written_path = None;
+                for _ in 0..1000 {
+                    let seq = LOG_SEQ.fetch_add(1, Ordering::Relaxed);
+                    let log_path = log_dir.join(format!("{:06}-{}.log", seq, sanitized));
+                    match fs::OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&log_path)
+                    {
+                        Ok(mut file) => {
+                            if std::io::Write::write_all(&mut file, raw.as_bytes()).is_ok() {
+                                written_path = Some(log_path);
+                            } else {
+                                let _ = fs::remove_file(&log_path);
+                            }
+                            break;
+                        }
+                        Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                        Err(_) => break,
+                    }
                 }
+                if written_path.is_some() {
+                    prune_logs(&log_dir, self.config.max_log_files);
+                }
+                written_path
             } else {
                 None
             }
@@ -224,6 +241,27 @@ impl OutputFilter {
     }
 }
 
+/// Split leading `KEY=VALUE` environment variable assignments from the rest of a command.
+fn split_leading_env_assignments(trimmed: &str) -> (&str, &str) {
+    let mut offset = 0;
+    let bytes = trimmed.as_bytes();
+    while offset < bytes.len() {
+        while offset < bytes.len() && bytes[offset].is_ascii_whitespace() {
+            offset += 1;
+        }
+        let token_start = offset;
+        while offset < bytes.len() && !bytes[offset].is_ascii_whitespace() {
+            offset += 1;
+        }
+        let token = &trimmed[token_start..offset];
+        if token.contains('=') && !token.starts_with('-') && !token.starts_with('=') {
+            continue;
+        }
+        return (trimmed[..token_start].trim_end(), &trimmed[token_start..]);
+    }
+    (trimmed, "")
+}
+
 /// Optionally wrap `command` with an external `rtk` binary if `--use-rtk` is enabled,
 /// the command is a simple single command without bypass flags, and `rtk` is on `PATH`.
 pub fn maybe_wrap_with_rtk(command: &str, config: &OutputFilterConfig) -> Option<String> {
@@ -235,19 +273,25 @@ pub fn maybe_wrap_with_rtk(command: &str, config: &OutputFilterConfig) -> Option
     }
     let trimmed = command.trim_start();
     if trimmed.is_empty()
-        || trimmed.starts_with("rtk ")
-        || trimmed == "rtk"
         || trimmed.contains("&&")
         || trimmed.contains("||")
         || trimmed.contains(';')
     {
         return None;
     }
+    let (env_prefix, cmd_rest) = split_leading_env_assignments(trimmed);
+    if cmd_rest.is_empty() || cmd_rest.starts_with("rtk ") || cmd_rest == "rtk" {
+        return None;
+    }
     let path_os = std::env::var_os("PATH")?;
     for dir in std::env::split_paths(&path_os) {
         let candidate = dir.join("rtk");
         if candidate.is_file() {
-            return Some(format!("rtk {}", trimmed));
+            return if env_prefix.is_empty() {
+                Some(format!("rtk {}", cmd_rest))
+            } else {
+                Some(format!("{} rtk {}", env_prefix, cmd_rest))
+            };
         }
     }
     None
