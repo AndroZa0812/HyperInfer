@@ -141,6 +141,13 @@ pub async fn create_user<D: Database, C: ConfigStore>(
     }
 }
 
+fn same_id(a: &str, b: &str) -> bool {
+    match (uuid::Uuid::parse_str(a), uuid::Uuid::parse_str(b)) {
+        (Ok(ua), Ok(ub)) => ua == ub,
+        _ => a == b,
+    }
+}
+
 pub async fn update_user_role<D: Database, C: ConfigStore>(
     State(state): State<AppState<D, C>>,
     RequireAdmin(claims): RequireAdmin,
@@ -150,7 +157,7 @@ pub async fn update_user_role<D: Database, C: ConfigStore>(
     if req.role != "admin" && req.role != "member" {
         return (StatusCode::BAD_REQUEST, "Role must be 'admin' or 'member'").into_response();
     }
-    if claims.sub == user_id && req.role != "admin" {
+    if req.role != "admin" && same_id(&claims.sub, &user_id) {
         return (StatusCode::BAD_REQUEST, "Cannot demote your own account").into_response();
     }
 
@@ -173,7 +180,7 @@ pub async fn delete_user<D: Database, C: ConfigStore>(
     RequireAdmin(claims): RequireAdmin,
     Path(user_id): Path<String>,
 ) -> impl IntoResponse {
-    if claims.sub == user_id {
+    if same_id(&claims.sub, &user_id) {
         return (StatusCode::BAD_REQUEST, "Cannot delete your own account").into_response();
     }
 

@@ -318,7 +318,14 @@ pub async fn delete_team<D: Database, C: ConfigStore>(
     RequireAdmin(claims): RequireAdmin,
     Path(team_id): Path<String>,
 ) -> impl IntoResponse {
-    if claims.team_id == team_id {
+    let is_own_team = match (
+        uuid::Uuid::parse_str(&claims.team_id),
+        uuid::Uuid::parse_str(&team_id),
+    ) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => claims.team_id == team_id,
+    };
+    if is_own_team {
         return (StatusCode::BAD_REQUEST, "Cannot delete your own team").into_response();
     }
 
