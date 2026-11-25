@@ -1709,6 +1709,24 @@ mod tests {
         assert_eq!(history[3].content, "bar content");
     }
 
+    #[test]
+    fn test_deduplicate_ignores_failed_or_denied_later_call() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "important content"),
+            make_edit_call("call2", "foo.txt"),
+            make_tool_result(
+                "call2",
+                "Tool execution denied by user approval policy (requires approval).",
+            ),
+            make_read_call("call3", "foo.txt"),
+            make_tool_result("call3", "Error: failed to read file"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 0);
+        assert_eq!(history[1].content, "important content");
+    }
+
     // --- Agent prompt_caching and token_accounting integration test ---
 
     #[tokio::test]

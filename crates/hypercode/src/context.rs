@@ -356,14 +356,39 @@ impl TokenAccounting {
     }
 }
 
+/// Heuristic check for whether a tool result message represents an error or approval denial.
+fn is_failed_tool_result(content: &str) -> bool {
+    let trimmed = content.trim_start();
+    trimmed.starts_with("Error:")
+        || trimmed.starts_with("Access denied:")
+        || trimmed.starts_with("Tool execution denied")
+        || trimmed.starts_with("Approval denied:")
+        || trimmed.starts_with("Invalid arguments")
+        || trimmed.starts_with("Failed to ")
+}
+
 /// Deduplicate superseded `read_file` tool outputs in history.
 ///
 /// Walks history to find `read_file` calls and tracks the latest index where each
-/// file was read or mutated. Any earlier `read_file` results are replaced with a
-/// superseded marker. Returns the number of messages deduplicated.
+/// file was **successfully** read or mutated. Any earlier `read_file` results are
+/// replaced with a superseded marker. Failed or denied later calls do not invalidate
+/// earlier successful reads. Returns the number of messages deduplicated.
 pub fn deduplicate_read_file_outputs(history: &mut [ChatMessage]) -> usize {
+    // Collect successful tool_call_ids (a call only supersedes earlier reads if its
+    // corresponding Tool result exists and did not fail or get denied).
+    let mut succeeded_calls: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for msg in history.iter() {
+        if msg.role == MessageRole::Tool {
+            if let Some(ref call_id) = msg.tool_call_id {
+                if !is_failed_tool_result(&msg.content) {
+                    succeeded_calls.insert(call_id.clone());
+                }
+            }
+        }
+    }
+
     // First pass: collect tool_call_id -> (assistant_idx, path) for read_file calls
-    // and track the latest assistant index where each path was read or mutated.
+    // and track the latest assistant index where each path was successfully read or mutated.
     let mut call_paths: HashMap<String, (usize, String)> = HashMap::new();
     let mut latest_path_index: HashMap<String, usize> = HashMap::new();
     for (idx, msg) in history.iter().enumerate() {
@@ -376,7 +401,9 @@ pub fn deduplicate_read_file_outputs(history: &mut [ChatMessage]) -> usize {
                                 if tc.name == "read_file" {
                                     call_paths.insert(tc.id.clone(), (idx, path.to_string()));
                                 }
-                                latest_path_index.insert(path.to_string(), idx);
+                                if succeeded_calls.contains(&tc.id) {
+                                    latest_path_index.insert(path.to_string(), idx);
+                                }
                             }
                         }
                     }
