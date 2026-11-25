@@ -32,6 +32,27 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .expect("Failed to build secure reqwest HTTP client")
 });
 
+/// Check if a URL points to localhost or loopback addresses.
+pub fn is_localhost_url(url: &str) -> bool {
+    match url::Url::parse(url) {
+        Ok(parsed) => {
+            let host = parsed.host_str().unwrap_or("");
+            // Strip IPv6 brackets so [::1] is recognized
+            let host_clean = host
+                .strip_prefix('[')
+                .unwrap_or(host)
+                .strip_suffix(']')
+                .unwrap_or(host);
+            let host_lower = host_clean.to_lowercase();
+            host_lower == "localhost"
+                || host_lower.ends_with(".localhost")
+                || host_clean == "127.0.0.1"
+                || host_clean == "::1"
+        }
+        Err(_) => false,
+    }
+}
+
 pub struct ProxyAuth {
     pub team_id: String,
     pub api_key_id: String,
@@ -106,13 +127,22 @@ pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<Prox
     }
 }
 
-fn validate_base_url(url: &str) -> Result<(), u16> {
+fn validate_base_url(url: &str, allow_localhost: bool) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
+
+    // Scheme check first: reject non-HTTP(S) regardless of host
+    if parsed.scheme() != "https" && parsed.scheme() != "http" {
+        return Err(400);
+    }
+
     let host = parsed.host_str().ok_or(400u16)?;
 
-    // Reject localhost (case-insensitive)
+    // Reject localhost (case-insensitive) unless explicitly allowed
     let host_lower = host.to_lowercase();
     if host_lower == "localhost" || host_lower.ends_with(".localhost") {
+        if allow_localhost {
+            return Ok(());
+        }
         return Err(400);
     }
 
@@ -125,12 +155,11 @@ fn validate_base_url(url: &str) -> Result<(), u16> {
 
     if let Ok(ip) = host_clean.parse::<IpAddr>() {
         if crate::safe_resolver::is_blocked(ip) {
+            if allow_localhost && ip.is_loopback() {
+                return Ok(());
+            }
             return Err(400);
         }
-    }
-
-    if parsed.scheme() != "https" && parsed.scheme() != "http" {
-        return Err(400);
     }
 
     Ok(())
@@ -173,6 +202,7 @@ pub struct ProxyRouter {
     engine: Arc<RouterEngine>,
     state: Arc<dyn RoutingState>,
     providers: Arc<ProviderRegistry>,
+    allow_localhost: bool,
 }
 
 impl ProxyRouter {
@@ -186,6 +216,21 @@ impl ProxyRouter {
             engine: Arc::new(engine),
             state: Arc::new(NoopState),
             providers,
+            allow_localhost: false,
+        }
+    }
+
+    /// Create a `ProxyRouter` for standalone mode that allows localhost base URLs.
+    pub async fn new_standalone() -> Self {
+        let engine = RouterEngine::new(GlobalLimits::default());
+        Self::register_all_strategies(&engine).await;
+        let providers = Arc::new(ProviderRegistry::new());
+        hyperinfer_providers::init_default_registry(&providers);
+        Self {
+            engine: Arc::new(engine),
+            state: Arc::new(NoopState),
+            providers,
+            allow_localhost: true,
         }
     }
 
@@ -211,6 +256,7 @@ impl ProxyRouter {
             engine: Arc::new(engine),
             state,
             providers,
+            allow_localhost: false,
         }
     }
 
@@ -228,6 +274,11 @@ impl ProxyRouter {
 
     pub fn providers(&self) -> &Arc<ProviderRegistry> {
         &self.providers
+    }
+
+    /// Check if localhost URLs are allowed.
+    pub fn allows_localhost(&self) -> bool {
+        self.allow_localhost
     }
 
     /// Select a deployment using a per-request `RouterEngine` (to avoid pool races)
@@ -383,8 +434,9 @@ pub async fn forward_chat(
     base_url: &str,
     api_key: &str,
     provider: &Provider,
+    allow_localhost: bool,
 ) -> Result<ChatResponse, u16> {
-    validate_base_url(base_url)?;
+    validate_base_url(base_url, allow_localhost)?;
     let llm_provider = resolve_provider(registry, provider, base_url)?;
     llm_provider
         .chat(request, api_key)
@@ -399,8 +451,9 @@ pub async fn forward_chat_stream(
     base_url: &str,
     api_key: &str,
     provider: &Provider,
+    allow_localhost: bool,
 ) -> Result<Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>, u16> {
-    validate_base_url(base_url)?;
+    validate_base_url(base_url, allow_localhost)?;
     let llm_provider = resolve_provider(registry, provider, base_url)?;
     Ok(llm_provider.stream(request, api_key))
 }
@@ -541,7 +594,7 @@ pub async fn forward_request(
     api_key: &str,
     provider: &Provider,
 ) -> Result<serde_json::Value, u16> {
-    validate_base_url(base_url)?;
+    validate_base_url(base_url, false)?;
 
     let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
@@ -601,12 +654,21 @@ mod tests {
 
     #[test]
     fn test_validate_base_url_blocks_ssrf_targets() {
-        assert!(validate_base_url("https://api.openai.com/v1").is_ok());
-        assert!(validate_base_url("http://localhost:8080").is_err());
-        assert!(validate_base_url("http://sub.localhost:8080").is_err());
-        assert!(validate_base_url("http://[::1]:8080").is_err());
-        assert!(validate_base_url("http://127.0.0.1:8080").is_err());
-        assert!(validate_base_url("ftp://example.com").is_err());
+        assert!(validate_base_url("https://api.openai.com/v1", false).is_ok());
+        assert!(validate_base_url("http://localhost:8080", false).is_err());
+        assert!(validate_base_url("http://sub.localhost:8080", false).is_err());
+        assert!(validate_base_url("http://[::1]:8080", false).is_err());
+        assert!(validate_base_url("http://127.0.0.1:8080", false).is_err());
+        assert!(validate_base_url("ftp://example.com", false).is_err());
+    }
+
+    #[test]
+    fn test_validate_base_url_allows_localhost_when_enabled() {
+        assert!(validate_base_url("http://localhost:8080", true).is_ok());
+        assert!(validate_base_url("http://sub.localhost:8080", true).is_ok());
+        assert!(validate_base_url("http://[::1]:8080", true).is_ok());
+        assert!(validate_base_url("http://127.0.0.1:8080", true).is_ok());
+        assert!(validate_base_url("ftp://example.com", true).is_err());
     }
 
     #[test]
