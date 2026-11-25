@@ -325,10 +325,11 @@ fn core_to_router_deployment(d: &hyperinfer_core::Deployment) -> RouterDeploymen
         d.model.clone(),
         d.api_key_ref.clone(),
     );
-    router_deployment.id = d.id.clone();
     if !d.base_url.is_empty() {
         router_deployment = router_deployment.with_base_url(d.base_url.clone());
     }
+    // Preserve the database deployment ID (with_base_url recomputes a hash ID).
+    router_deployment.id = d.id.clone();
     router_deployment = router_deployment.with_weight(d.weight);
     if let Some(max_tpm) = d.max_tpm {
         router_deployment = router_deployment.with_tpm_limit(max_tpm as u64);
