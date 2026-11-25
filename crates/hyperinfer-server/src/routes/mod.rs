@@ -23,7 +23,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::{auth_middleware, LoginRequest, LoginResponse, MeResponse};
 use crate::frontend::spa_handler;
-use crate::mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState};
+use crate::mcp::{
+    jwt_auth_middleware, mcp_http_handler, mcp_message_handler, mcp_sse_handler, McpState,
+};
 use crate::state::{admin_auth_middleware, AppState};
 
 pub async fn healthz_handler<D: Database, C: ConfigStore>(
@@ -115,6 +117,7 @@ where
     let mcp_router = Router::new()
         .route("/mcp/sse", get(mcp_sse_handler))
         .route("/mcp/message", post(mcp_message_handler))
+        .route("/mcp", post(mcp_http_handler))
         .layer(middleware::from_fn_with_state(
             mcp_state.clone(),
             jwt_auth_middleware,

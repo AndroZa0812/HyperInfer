@@ -212,6 +212,7 @@ fn make_server() -> TestServer {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
     let cors = tower_http::cors::CorsLayer::permissive();
     let mcp_state = hyperinfer_server::mcp::McpState::new("test-jwt-secret");
@@ -434,6 +435,7 @@ async fn make_e2e_server(
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: Some(proxy_router),
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
     let cors = tower_http::cors::CorsLayer::permissive();
     let mcp_state = hyperinfer_server::mcp::McpState::new("test-jwt-secret");
