@@ -4,6 +4,7 @@ pub mod catalog;
 pub mod deployments;
 pub mod keys;
 pub mod mcp_admin;
+pub mod memories;
 pub mod multi_sdk;
 pub mod routing;
 pub mod teams;
@@ -247,6 +248,17 @@ where
         .route(
             "/v1/admin/routing/health",
             get(routing::admin_get_routing_health),
+        )
+        .route("/v1/memories/search", post(memories::search_memories))
+        .route(
+            "/v1/memories",
+            get(memories::list_memories).post(memories::create_memory),
+        )
+        .route(
+            "/v1/memories/{id}",
+            get(memories::get_memory)
+                .patch(memories::update_memory)
+                .delete(memories::delete_memory),
         )
         .layer(middleware::from_fn_with_state(
             state.jwt_secret.clone(),

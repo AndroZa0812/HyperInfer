@@ -3,8 +3,10 @@ use std::sync::{Arc, RwLock};
 use async_trait::async_trait;
 use chrono::Utc;
 use hyperinfer_core::{
-    ApiKey, CreateDeploymentRequest, Database, DbError, Deployment, ModelAlias, Quota,
-    RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog, UsageSummary, User,
+    ApiKey, CreateDeploymentRequest, CreateMemoryRequest, Database, DbError, Deployment,
+    ListMemoriesFilter, Memory, MemorySearchResult, ModelAlias, Quota, RoutingConfig,
+    SearchMemoriesRequest, Team, UpdateMemoryRequest, UpdateRoutingConfigRequest, UsageLog,
+    UsageSummary, User,
 };
 use uuid::Uuid;
 
@@ -18,6 +20,7 @@ struct MemoryStore {
     usage_logs: Vec<UsageLog>,
     deployments: Vec<Deployment>,
     routing_config: Option<RoutingConfig>,
+    memories: Vec<Memory>,
 }
 
 #[derive(Clone, Default)]
@@ -430,5 +433,203 @@ impl Database for InMemoryDb {
             total_output_tokens,
             avg_response_time_ms,
         })
+    }
+
+    async fn create_memory(&self, req: CreateMemoryRequest) -> Result<Memory, DbError> {
+        let mut store = self.store.write().unwrap();
+        let now = Utc::now();
+        let new_id = Uuid::new_v4().to_string();
+
+        if let Some(ref old_id) = req.supersedes_id {
+            let old = store
+                .memories
+                .iter_mut()
+                .find(|m| m.id == *old_id && m.team_id == req.team_id && m.valid_to.is_none())
+                .ok_or(DbError::NotFound)?;
+            old.valid_to = Some(now);
+            old.status = "expired".to_string();
+            old.superseded_by = Some(new_id.clone());
+            old.updated_at = now;
+        }
+
+        let memory = Memory {
+            id: new_id,
+            team_id: req.team_id,
+            user_id: req.user_id,
+            repo_id: req.repo_id,
+            scope: req.scope,
+            content: req.content,
+            tags: req.tags,
+            status: req.status,
+            valid_from: now,
+            valid_to: None,
+            superseded_by: None,
+            created_at: now,
+            updated_at: now,
+        };
+        store.memories.push(memory.clone());
+        Ok(memory)
+    }
+
+    async fn get_memory(&self, id: &str) -> Result<Option<Memory>, DbError> {
+        let store = self.store.read().unwrap();
+        Ok(store.memories.iter().find(|m| m.id == id).cloned())
+    }
+
+    async fn list_memories(&self, filter: ListMemoriesFilter) -> Result<Vec<Memory>, DbError> {
+        let store = self.store.read().unwrap();
+        let mut results: Vec<Memory> = store
+            .memories
+            .iter()
+            .filter(|m| m.team_id == filter.team_id)
+            .filter(|m| {
+                filter
+                    .user_id
+                    .as_deref()
+                    .is_none_or(|uid| m.scope != "user" || m.user_id == uid)
+            })
+            .filter(|m| filter.scope.as_deref().is_none_or(|s| m.scope == s))
+            .filter(|m| {
+                filter
+                    .repo_id
+                    .as_deref()
+                    .is_none_or(|r| m.repo_id.as_deref() == Some(r))
+            })
+            .filter(|m| {
+                filter
+                    .tag
+                    .as_deref()
+                    .is_none_or(|t| m.tags.iter().any(|mt| mt == t))
+            })
+            .filter(|m| filter.status.as_deref().is_none_or(|s| m.status == s))
+            .filter(|m| filter.include_expired || (m.valid_to.is_none() && m.status != "expired"))
+            .cloned()
+            .collect();
+
+        results.sort_by_key(|m| std::cmp::Reverse(m.updated_at));
+        let offset = filter.offset.max(0) as usize;
+        let limit = filter.limit.max(0) as usize;
+        Ok(results.into_iter().skip(offset).take(limit).collect())
+    }
+
+    async fn search_memories(
+        &self,
+        req: SearchMemoriesRequest,
+    ) -> Result<Vec<MemorySearchResult>, DbError> {
+        let store = self.store.read().unwrap();
+        let query_terms: Vec<String> = req
+            .query
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_lowercase())
+            .collect();
+
+        if query_terms.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let mut scored: Vec<MemorySearchResult> = store
+            .memories
+            .iter()
+            .filter(|m| m.team_id == req.team_id)
+            .filter(|m| m.valid_to.is_none() && m.status == "active")
+            .filter(|m| {
+                req.user_id
+                    .as_deref()
+                    .is_none_or(|uid| m.scope != "user" || m.user_id == uid)
+            })
+            .filter(|m| req.scope.as_deref().is_none_or(|s| m.scope == s))
+            .filter(|m| {
+                req.repo_id
+                    .as_deref()
+                    .is_none_or(|r| m.repo_id.as_deref() == Some(r))
+            })
+            .filter(|m| {
+                req.tags.is_empty()
+                    || req
+                        .tags
+                        .iter()
+                        .all(|t| m.tags.iter().any(|mt| mt.eq_ignore_ascii_case(t)))
+            })
+            .filter_map(|m| {
+                let haystack = format!("{} {}", m.content, m.tags.join(" ")).to_lowercase();
+                let mut matches = 0usize;
+                let mut total_hits = 0usize;
+                for term in &query_terms {
+                    let count = haystack.matches(term.as_str()).count();
+                    if count > 0 {
+                        matches += 1;
+                        total_hits += count;
+                    }
+                }
+                if matches == 0 {
+                    return None;
+                }
+                let coverage = (matches as f64) / (query_terms.len() as f64);
+                let tf_bonus = (total_hits as f64) * 0.1;
+                Some(MemorySearchResult {
+                    memory: m.clone(),
+                    score: coverage + tf_bonus,
+                })
+            })
+            .collect();
+
+        scored.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| b.memory.updated_at.cmp(&a.memory.updated_at))
+        });
+        scored.truncate(req.limit.max(0) as usize);
+        Ok(scored)
+    }
+
+    async fn update_memory(
+        &self,
+        id: &str,
+        team_id: &str,
+        req: UpdateMemoryRequest,
+    ) -> Result<Memory, DbError> {
+        let mut store = self.store.write().unwrap();
+        let now = Utc::now();
+        let mem = store
+            .memories
+            .iter_mut()
+            .find(|m| m.id == id && m.team_id == team_id)
+            .ok_or(DbError::NotFound)?;
+
+        if let Some(content) = req.content {
+            mem.content = content;
+        }
+        if let Some(tags) = req.tags {
+            mem.tags = tags;
+        }
+        if let Some(status) = req.status {
+            if status == "expired" && mem.valid_to.is_none() {
+                mem.valid_to = Some(now);
+            } else if status == "active" {
+                mem.valid_to = None;
+            }
+            mem.status = status;
+        }
+        mem.updated_at = now;
+        Ok(mem.clone())
+    }
+
+    async fn expire_memory(&self, id: &str, team_id: &str) -> Result<Memory, DbError> {
+        let mut store = self.store.write().unwrap();
+        let now = Utc::now();
+        let mem = store
+            .memories
+            .iter_mut()
+            .find(|m| m.id == id && m.team_id == team_id)
+            .ok_or(DbError::NotFound)?;
+
+        mem.status = "expired".to_string();
+        if mem.valid_to.is_none() {
+            mem.valid_to = Some(now);
+        }
+        mem.updated_at = now;
+        Ok(mem.clone())
     }
 }
