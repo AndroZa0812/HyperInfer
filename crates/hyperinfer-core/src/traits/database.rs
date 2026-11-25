@@ -188,6 +188,42 @@ pub trait Database: Clone + Send + Sync + 'static {
             tpm_limit,
             expires_at,
         );
+    // --- Shared Cross-Repo Memory ---
+    async fn create_memory(&self, req: CreateMemoryRequest) -> Result<Memory, DbError> {
+        let _ = req;
+        Err(DbError::NotFound)
+    }
+
+    async fn get_memory(&self, id: &str) -> Result<Option<Memory>, DbError> {
+        let _ = id;
+        Ok(None)
+    }
+
+    async fn list_memories(&self, filter: ListMemoriesFilter) -> Result<Vec<Memory>, DbError> {
+        let _ = filter;
+        Ok(vec![])
+    }
+
+    async fn search_memories(
+        &self,
+        req: SearchMemoriesRequest,
+    ) -> Result<Vec<MemorySearchResult>, DbError> {
+        let _ = req;
+        Ok(vec![])
+    }
+
+    async fn update_memory(
+        &self,
+        id: &str,
+        team_id: &str,
+        req: UpdateMemoryRequest,
+    ) -> Result<Memory, DbError> {
+        let _ = (id, team_id, req);
+        Err(DbError::NotFound)
+    }
+
+    async fn expire_memory(&self, id: &str, team_id: &str) -> Result<Memory, DbError> {
+        let _ = (id, team_id);
         Err(DbError::NotFound)
     }
 }
@@ -274,4 +310,73 @@ pub struct UsageLog {
     pub output_tokens: i32,
     pub response_time_ms: i64,
     pub recorded_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Memory {
+    pub id: String,
+    pub team_id: String,
+    pub user_id: String,
+    pub repo_id: Option<String>,
+    pub scope: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub status: String,
+    pub valid_from: DateTime<Utc>,
+    pub valid_to: Option<DateTime<Utc>>,
+    pub superseded_by: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CreateMemoryRequest {
+    pub team_id: String,
+    pub user_id: String,
+    pub repo_id: Option<String>,
+    pub scope: String,
+    pub content: String,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub status: String,
+    #[serde(default)]
+    pub supersedes_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UpdateMemoryRequest {
+    pub content: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListMemoriesFilter {
+    pub team_id: String,
+    pub user_id: Option<String>,
+    pub scope: Option<String>,
+    pub repo_id: Option<String>,
+    pub tag: Option<String>,
+    pub status: Option<String>,
+    pub include_expired: bool,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchMemoriesRequest {
+    pub team_id: String,
+    pub user_id: Option<String>,
+    pub query: String,
+    pub scope: Option<String>,
+    pub repo_id: Option<String>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub limit: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemorySearchResult {
+    pub memory: Memory,
+    pub score: f64,
 }

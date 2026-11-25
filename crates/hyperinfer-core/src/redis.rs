@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 pub const CONFIG_CHANNEL: &str = "hyperinfer:config_updates";
 pub const CONFIG_KEY: &str = "hyperinfer:config";
+pub const MEMORY_EVENTS_CHANNEL: &str = "hyperinfer:memory_events";
 
 /// Internal Redis serialization DTO for `Config` that preserves `api_keys`
 /// (unlike public `Config`, which skips `api_keys` during serialization to prevent HTTP leaks).
@@ -79,6 +80,27 @@ pub struct PolicyUpdate {
 pub enum PolicyAction {
     Revoke,
     Update,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryEventAction {
+    Created,
+    Updated,
+    Superseded,
+    Approved,
+    Expired,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MemoryUpdateEvent {
+    pub action: MemoryEventAction,
+    pub memory_id: String,
+    pub team_id: String,
+    pub user_id: String,
+    pub repo_id: Option<String>,
+    pub scope: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
 }
 
 #[derive(Clone)]
@@ -296,12 +318,49 @@ impl ConfigManager {
 
         Ok(())
     }
+
+    pub async fn publish_memory_event(&self, event: &MemoryUpdateEvent) -> Result<(), ConfigError> {
+        let mut conn = self.manager.clone();
+        let payload = serde_json::to_string(event)?;
+
+        redis::cmd("PUBLISH")
+            .arg(MEMORY_EVENTS_CHANNEL)
+            .arg(&payload)
+            .query_async::<()>(&mut conn)
+            .await?;
+
+        info!(
+            "Published memory event {:?} for memory {} on {}",
+            event.action, event.memory_id, MEMORY_EVENTS_CHANNEL
+        );
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Provider;
+
+    #[test]
+    fn test_memory_update_event_serialization() {
+        assert_eq!(MEMORY_EVENTS_CHANNEL, "hyperinfer:memory_events");
+        let evt = MemoryUpdateEvent {
+            action: MemoryEventAction::Superseded,
+            memory_id: "mem-1".to_string(),
+            team_id: "team-1".to_string(),
+            user_id: "user-1".to_string(),
+            repo_id: Some("org/repo".to_string()),
+            scope: "repo".to_string(),
+            timestamp: chrono::Utc::now(),
+        };
+        let json = serde_json::to_string(&evt).unwrap();
+        let parsed: MemoryUpdateEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.action, MemoryEventAction::Superseded);
+        assert_eq!(parsed.memory_id, "mem-1");
+        assert_eq!(parsed.repo_id.as_deref(), Some("org/repo"));
+    }
 
     #[test]
     fn test_config_update_serialization() {

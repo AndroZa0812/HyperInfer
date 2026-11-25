@@ -3,5 +3,7 @@ mod database;
 
 pub use config_store::ConfigStore;
 pub use database::{
-    ApiKey, Database, ModelAlias, NewUsageLog, Quota, Team, UsageLog, UsageSummary, User,
+    ApiKey, CreateMemoryRequest, Database, ListMemoriesFilter, Memory, MemorySearchResult,
+    ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team, UpdateMemoryRequest, UsageLog,
+    UsageSummary, User,
 };

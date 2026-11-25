@@ -5,9 +5,10 @@ use argon2::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use hyperinfer_core::{
-    ApiKey, ConfigStore, CreateDeploymentRequest, Database, DbError, Deployment, ModelAlias,
-    NewUsageLog, PolicyUpdate, Quota, RoutingConfig, Team, UpdateRoutingConfigRequest, UsageLog,
-    UsageSummary, User,
+    ApiKey, ConfigStore, CreateDeploymentRequest, CreateMemoryRequest, Database, DbError,
+    Deployment, ListMemoriesFilter, Memory, MemorySearchResult, MemoryUpdateEvent, ModelAlias,
+    NewUsageLog, PolicyUpdate, Quota, RoutingConfig, SearchMemoriesRequest, Team,
+    UpdateMemoryRequest, UpdateRoutingConfigRequest, UsageLog, UsageSummary, User,
 };
 use serde::Serialize;
 use sqlx::PgPool;
@@ -736,6 +737,197 @@ impl Database for SqlxDb {
         .await?;
 
         result.map(ApiKey::from).ok_or(DbError::NotFound)
+    async fn create_memory(&self, req: CreateMemoryRequest) -> Result<Memory, DbError> {
+        let team_uuid = uuid::Uuid::parse_str(&req.team_id).map_err(|_| DbError::InvalidUuid)?;
+        let user_uuid = uuid::Uuid::parse_str(&req.user_id).map_err(|_| DbError::InvalidUuid)?;
+        let supersedes_uuid = match req.supersedes_id.as_deref() {
+            Some(sid) => Some(uuid::Uuid::parse_str(sid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+
+        let mut tx = self.pool.begin().await?;
+
+        let row: MemoryRow = sqlx::query_as(
+            "INSERT INTO memories (team_id, user_id, repo_id, scope, content, tags, status) \
+             VALUES ($1, $2, $3, $4, $5, $6, $7) \
+             RETURNING id, team_id, user_id, repo_id, scope, content, tags, status, \
+                       valid_from, valid_to, superseded_by, created_at, updated_at",
+        )
+        .bind(team_uuid)
+        .bind(user_uuid)
+        .bind(&req.repo_id)
+        .bind(&req.scope)
+        .bind(&req.content)
+        .bind(&req.tags)
+        .bind(&req.status)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        if let Some(old_id) = supersedes_uuid {
+            let updated = sqlx::query(
+                "UPDATE memories \
+                 SET valid_to = NOW(), status = 'expired', superseded_by = $1, updated_at = NOW() \
+                 WHERE id = $2 AND team_id = $3 AND valid_to IS NULL",
+            )
+            .bind(row.id)
+            .bind(old_id)
+            .bind(team_uuid)
+            .execute(&mut *tx)
+            .await?;
+
+            if updated.rows_affected() == 0 {
+                return Err(DbError::NotFound);
+            }
+        }
+
+        tx.commit().await?;
+        Ok(Memory::from(row))
+    }
+
+    async fn get_memory(&self, id: &str) -> Result<Option<Memory>, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let row: Option<MemoryRow> = sqlx::query_as(
+            "SELECT id, team_id, user_id, repo_id, scope, content, tags, status, \
+                    valid_from, valid_to, superseded_by, created_at, updated_at \
+             FROM memories WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(Memory::from))
+    }
+
+    async fn list_memories(&self, filter: ListMemoriesFilter) -> Result<Vec<Memory>, DbError> {
+        let team_uuid = uuid::Uuid::parse_str(&filter.team_id).map_err(|_| DbError::InvalidUuid)?;
+        let user_uuid = match filter.user_id.as_deref() {
+            Some(uid) => Some(uuid::Uuid::parse_str(uid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+
+        let rows: Vec<MemoryRow> = sqlx::query_as(
+            "SELECT id, team_id, user_id, repo_id, scope, content, tags, status, \
+                    valid_from, valid_to, superseded_by, created_at, updated_at \
+             FROM memories \
+             WHERE team_id = $1 \
+               AND ($2::uuid IS NULL OR scope != 'user' OR user_id = $2) \
+               AND ($3::text IS NULL OR scope = $3) \
+               AND ($4::text IS NULL OR repo_id = $4) \
+               AND ($5::text IS NULL OR $5 = ANY(tags)) \
+               AND ($6::text IS NULL OR status = $6) \
+               AND ($7::bool OR (valid_to IS NULL AND status != 'expired')) \
+             ORDER BY updated_at DESC \
+             LIMIT $8 OFFSET $9",
+        )
+        .bind(team_uuid)
+        .bind(user_uuid)
+        .bind(&filter.scope)
+        .bind(&filter.repo_id)
+        .bind(&filter.tag)
+        .bind(&filter.status)
+        .bind(filter.include_expired)
+        .bind(filter.limit)
+        .bind(filter.offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(Memory::from).collect())
+    }
+
+    async fn search_memories(
+        &self,
+        req: SearchMemoriesRequest,
+    ) -> Result<Vec<MemorySearchResult>, DbError> {
+        let team_uuid = uuid::Uuid::parse_str(&req.team_id).map_err(|_| DbError::InvalidUuid)?;
+        let user_uuid = match req.user_id.as_deref() {
+            Some(uid) => Some(uuid::Uuid::parse_str(uid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let tags_filter: Option<Vec<String>> = if req.tags.is_empty() {
+            None
+        } else {
+            Some(req.tags.clone())
+        };
+
+        let rows: Vec<MemorySearchRow> = sqlx::query_as(
+            "SELECT id, team_id, user_id, repo_id, scope, content, tags, status, \
+                    valid_from, valid_to, superseded_by, created_at, updated_at, \
+                    ts_rank_cd(tsv, plainto_tsquery('english', $1))::float8 AS score \
+             FROM memories \
+             WHERE team_id = $2 \
+               AND valid_to IS NULL \
+               AND status = 'active' \
+               AND tsv @@ plainto_tsquery('english', $1) \
+               AND ($3::uuid IS NULL OR scope != 'user' OR user_id = $3) \
+               AND ($4::text IS NULL OR scope = $4) \
+               AND ($5::text IS NULL OR repo_id = $5) \
+               AND ($6::text[] IS NULL OR tags @> $6) \
+             ORDER BY score DESC, updated_at DESC \
+             LIMIT $7",
+        )
+        .bind(&req.query)
+        .bind(team_uuid)
+        .bind(user_uuid)
+        .bind(&req.scope)
+        .bind(&req.repo_id)
+        .bind(&tags_filter)
+        .bind(req.limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(MemorySearchResult::from).collect())
+    }
+
+    async fn update_memory(
+        &self,
+        id: &str,
+        team_id: &str,
+        req: UpdateMemoryRequest,
+    ) -> Result<Memory, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
+
+        let row: Option<MemoryRow> = sqlx::query_as(
+            "UPDATE memories \
+             SET content = COALESCE($3, content), \
+                 tags = COALESCE($4, tags), \
+                 status = COALESCE($5, status), \
+                 valid_to = CASE WHEN $5 = 'expired' THEN COALESCE(valid_to, NOW()) \
+                                 WHEN $5 = 'active' THEN NULL \
+                                 ELSE valid_to END, \
+                 updated_at = NOW() \
+             WHERE id = $1 AND team_id = $2 \
+             RETURNING id, team_id, user_id, repo_id, scope, content, tags, status, \
+                       valid_from, valid_to, superseded_by, created_at, updated_at",
+        )
+        .bind(uuid)
+        .bind(team_uuid)
+        .bind(&req.content)
+        .bind(&req.tags)
+        .bind(&req.status)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(Memory::from).ok_or(DbError::NotFound)
+    }
+
+    async fn expire_memory(&self, id: &str, team_id: &str) -> Result<Memory, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
+
+        let row: Option<MemoryRow> = sqlx::query_as(
+            "UPDATE memories \
+             SET status = 'expired', valid_to = COALESCE(valid_to, NOW()), updated_at = NOW() \
+             WHERE id = $1 AND team_id = $2 \
+             RETURNING id, team_id, user_id, repo_id, scope, content, tags, status, \
+                       valid_from, valid_to, superseded_by, created_at, updated_at",
+        )
+        .bind(uuid)
+        .bind(team_uuid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(Memory::from).ok_or(DbError::NotFound)
     }
 }
 
@@ -958,6 +1150,84 @@ impl From<RoutingConfigRow> for RoutingConfig {
     }
 }
 
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+struct MemoryRow {
+    id: uuid::Uuid,
+    team_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    repo_id: Option<String>,
+    scope: String,
+    content: String,
+    tags: Vec<String>,
+    status: String,
+    valid_from: DateTime<Utc>,
+    valid_to: Option<DateTime<Utc>>,
+    superseded_by: Option<uuid::Uuid>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl From<MemoryRow> for Memory {
+    fn from(row: MemoryRow) -> Self {
+        Memory {
+            id: row.id.to_string(),
+            team_id: row.team_id.to_string(),
+            user_id: row.user_id.to_string(),
+            repo_id: row.repo_id,
+            scope: row.scope,
+            content: row.content,
+            tags: row.tags,
+            status: row.status,
+            valid_from: row.valid_from,
+            valid_to: row.valid_to,
+            superseded_by: row.superseded_by.map(|u| u.to_string()),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow, Serialize)]
+struct MemorySearchRow {
+    id: uuid::Uuid,
+    team_id: uuid::Uuid,
+    user_id: uuid::Uuid,
+    repo_id: Option<String>,
+    scope: String,
+    content: String,
+    tags: Vec<String>,
+    status: String,
+    valid_from: DateTime<Utc>,
+    valid_to: Option<DateTime<Utc>>,
+    superseded_by: Option<uuid::Uuid>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+    score: f64,
+}
+
+impl From<MemorySearchRow> for MemorySearchResult {
+    fn from(row: MemorySearchRow) -> Self {
+        MemorySearchResult {
+            memory: Memory {
+                id: row.id.to_string(),
+                team_id: row.team_id.to_string(),
+                user_id: row.user_id.to_string(),
+                repo_id: row.repo_id,
+                scope: row.scope,
+                content: row.content,
+                tags: row.tags,
+                status: row.status,
+                valid_from: row.valid_from,
+                valid_to: row.valid_to,
+                superseded_by: row.superseded_by.map(|u| u.to_string()),
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            },
+            score: row.score,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct RedisConfigStore {
     manager: hyperinfer_core::redis::ConfigManager,
@@ -999,6 +1269,13 @@ impl ConfigStore for RedisConfigStore {
         update: &PolicyUpdate,
     ) -> Result<(), hyperinfer_core::ConfigError> {
         self.manager.publish_policy_update(update).await
+    }
+
+    async fn publish_memory_event(
+        &self,
+        event: &MemoryUpdateEvent,
+    ) -> Result<(), hyperinfer_core::ConfigError> {
+        self.manager.publish_memory_event(event).await
     }
 
     async fn ping(&self) -> Result<(), hyperinfer_core::ConfigError> {
