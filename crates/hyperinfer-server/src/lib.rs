@@ -11,8 +11,10 @@ pub mod proxy;
 pub mod routes;
 pub mod safe_resolver;
 pub mod seeding;
+pub mod standalone;
 pub mod state;
 
 pub use db::{RedisConfigStore, SqlxDb};
 pub use routes::build_router;
+pub use standalone::{InMemoryConfigStore, InMemoryDb};
 pub use state::AppState;

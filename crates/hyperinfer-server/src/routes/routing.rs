@@ -307,6 +307,7 @@ pub async fn chat_completions_handler<
             &selected.base_url,
             &selected.api_key,
             &selected.provider,
+            proxy_router.allows_localhost(),
         )
         .await
         {
@@ -418,6 +419,7 @@ pub async fn chat_completions_handler<
         &selected.base_url,
         &selected.api_key,
         &selected.provider,
+        proxy_router.allows_localhost(),
     )
     .await
     {

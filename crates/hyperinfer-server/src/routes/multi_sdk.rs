@@ -145,6 +145,7 @@ async fn dispatch_sdk_chat<D: Database + Clone + Send + Sync + 'static, C: Confi
             &selected.base_url,
             &selected.api_key,
             &selected.provider,
+            proxy_router.allows_localhost(),
         )
         .await
         {
@@ -237,6 +238,7 @@ async fn dispatch_sdk_chat<D: Database + Clone + Send + Sync + 'static, C: Confi
         &selected.base_url,
         &selected.api_key,
         &selected.provider,
+        proxy_router.allows_localhost(),
     )
     .await
     {
