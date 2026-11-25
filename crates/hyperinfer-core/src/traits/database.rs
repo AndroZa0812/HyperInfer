@@ -125,6 +125,50 @@ pub trait Database: Clone + Send + Sync + 'static {
         let _ = (api_key_id, cents);
         Ok(())
     }
+
+    async fn update_team(&self, id: &str, name: &str, budget_cents: i64) -> Result<Team, DbError> {
+        let _ = (id, name, budget_cents);
+        Err(DbError::NotFound)
+    }
+
+    async fn delete_team(&self, id: &str) -> Result<(), DbError> {
+        let _ = id;
+        Err(DbError::NotFound)
+    }
+
+    async fn list_users(&self, team_id: Option<String>) -> Result<Vec<User>, DbError> {
+        let _ = team_id;
+        Ok(vec![])
+    }
+
+    async fn update_user_role(&self, id: &str, role: &str) -> Result<User, DbError> {
+        let _ = (id, role);
+        Err(DbError::NotFound)
+    }
+
+    async fn delete_user(&self, id: &str) -> Result<(), DbError> {
+        let _ = id;
+        Err(DbError::NotFound)
+    }
+
+    async fn list_model_aliases(&self, team_id: &str) -> Result<Vec<ModelAlias>, DbError> {
+        let _ = team_id;
+        Ok(vec![])
+    }
+
+    async fn delete_model_alias(&self, id: &str) -> Result<(), DbError> {
+        let _ = id;
+        Err(DbError::NotFound)
+    }
+
+    async fn upsert_quota(
+        &self,
+        team_id: &str,
+        rpm_limit: i32,
+        tpm_limit: i32,
+    ) -> Result<Quota, DbError> {
+        self.create_quota(team_id, rpm_limit, tpm_limit).await
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

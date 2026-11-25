@@ -256,6 +256,7 @@ struct TaskRecord {
     state_notify: Arc<Notify>,
     pending_approval: Option<oneshot::Sender<bool>>,
     abort_handle: Option<tokio::task::AbortHandle>,
+    cancel_token: tokio_util::sync::CancellationToken,
 }
 
 impl TaskRecord {
@@ -277,6 +278,7 @@ impl TaskRecord {
             state_notify: Arc::new(Notify::new()),
             pending_approval: None,
             abort_handle: None,
+            cancel_token: tokio_util::sync::CancellationToken::new(),
         }
     }
 
@@ -357,7 +359,8 @@ impl EventSink for A2aEventSink {
             }
             AgentEvent::TurnStarted { .. }
             | AgentEvent::ToolApprovalChecked { .. }
-            | AgentEvent::TurnCompleted { .. } => return,
+            | AgentEvent::TurnCompleted { .. }
+            | AgentEvent::AssistantDelta { .. } => return,
         };
 
         let tasks = self.tasks.clone();
@@ -624,11 +627,18 @@ impl A2aServer {
                 tasks: server.tasks.clone(),
             });
 
-            let outcome = agent.run_turn(prompt).await;
+            let cancel_token = {
+                let rec = record_for_task.lock().await;
+                rec.cancel_token.clone()
+            };
+            let outcome = agent.run_turn_with_cancel(prompt, cancel_token).await;
             drop(agent);
 
             let mut rec = record_for_task.lock().await;
             rec.pending_approval = None;
+            if rec.task.status.state.is_terminal() {
+                return;
+            }
             match outcome {
                 Ok(res) => {
                     rec.push_artifact(
@@ -737,8 +747,14 @@ impl A2aServer {
                     Some(rec_arc) => {
                         let mut rec = rec_arc.lock().await;
                         if !rec.task.status.state.is_terminal() {
+                            rec.cancel_token.cancel();
+                            // Allow cooperative cancellation to kill running subprocesses cleanly
+                            // before falling back to a forced task abort.
                             if let Some(handle) = rec.abort_handle.take() {
-                                handle.abort();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                    handle.abort();
+                                });
                             }
                             rec.pending_approval = None;
                             rec.set_status(

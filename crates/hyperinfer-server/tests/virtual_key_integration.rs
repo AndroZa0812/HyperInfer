@@ -494,6 +494,7 @@ async fn build_vk_server(db: StubDb) -> axum_test::TestServer {
         jwt_secret: Arc::new("secret".to_string()),
         proxy_router: Some(proxy_router),
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
     let app = hyperinfer_server::build_router(
         state,

@@ -316,11 +316,19 @@ impl ProxyRouter {
             .clone()
             .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
 
+        // Look up the original core deployment to extract mutators from metadata.
+        let mutators = deployments
+            .iter()
+            .find(|d| d.id == selected.id)
+            .map(|d| crate::mutators::DeploymentMutators::from_metadata(&d.metadata))
+            .unwrap_or_default();
+
         Ok(SelectedDeployment {
             deployment: selected.as_ref().clone(),
             base_url,
             api_key: resolve_api_key_ref(&selected.api_key_ref),
             provider: selected.provider.clone(),
+            mutators,
         })
     }
 
@@ -357,10 +365,11 @@ fn core_to_router_deployment(d: &hyperinfer_core::Deployment) -> RouterDeploymen
         d.model.clone(),
         d.api_key_ref.clone(),
     );
-    router_deployment.id = d.id.clone();
     if !d.base_url.is_empty() {
         router_deployment = router_deployment.with_base_url(d.base_url.clone());
     }
+    // Preserve the database deployment ID (with_base_url recomputes a hash ID).
+    router_deployment.id = d.id.clone();
     router_deployment = router_deployment.with_weight(d.weight);
     if let Some(max_tpm) = d.max_tpm {
         router_deployment = router_deployment.with_tpm_limit(max_tpm as u64);
@@ -476,6 +485,7 @@ pub struct SelectedDeployment {
     pub base_url: String,
     pub api_key: String,
     pub provider: Provider,
+    pub mutators: crate::mutators::DeploymentMutators,
 }
 
 pub async fn select_deployment<D: Database>(
@@ -562,6 +572,13 @@ pub async fn select_deployment<D: Database>(
         .clone()
         .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
 
+    // Look up the original core deployment to extract mutators from metadata.
+    let mutators = deployments
+        .iter()
+        .find(|d| d.id == selected.id)
+        .map(|d| crate::mutators::DeploymentMutators::from_metadata(&d.metadata))
+        .unwrap_or_default();
+
     Ok(SelectedDeployment {
         deployment: RouterDeployment::new(
             selected.model_name.clone(),
@@ -572,6 +589,7 @@ pub async fn select_deployment<D: Database>(
         base_url,
         api_key: resolve_api_key_ref(&selected.api_key_ref),
         provider: selected.provider.clone(),
+        mutators,
     })
 }
 

@@ -1,4 +1,16 @@
-import type { User, Team, ApiKey, CreateApiKeyResponse, UsageData, Deployment, CreateDeploymentRequest } from "./types";
+import type {
+  User,
+  CreateUserRequest,
+  Team,
+  ApiKey,
+  CreateApiKeyResponse,
+  UsageData,
+  Deployment,
+  CreateDeploymentRequest,
+  ModelAlias,
+  CreateModelAliasRequest,
+  Quota,
+} from "./types";
 
 const API_BASE = "/v1";
 
@@ -49,6 +61,47 @@ export const api = {
     fetchApi<Team>("/teams", {
       method: "POST",
       body: JSON.stringify({ name, budget_cents }),
+    }),
+  updateTeam: (id: string, name: string, budget_cents: number) =>
+    fetchApi<Team>(`/teams/${id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name, budget_cents }),
+    }),
+  deleteTeam: (id: string) =>
+    fetchApi<void>(`/teams/${id}`, { method: "DELETE" }),
+
+  getUsers: (teamId?: string) => {
+    const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
+    return fetchApi<User[]>(`/users${params}`);
+  },
+  createUser: (req: CreateUserRequest) =>
+    fetchApi<User>("/users", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  updateUserRole: (id: string, role: 'admin' | 'member') =>
+    fetchApi<User>(`/users/${id}/role`, {
+      method: "PUT",
+      body: JSON.stringify({ role }),
+    }),
+  deleteUser: (id: string) =>
+    fetchApi<void>(`/users/${id}`, { method: "DELETE" }),
+
+  getModelAliases: (teamId: string) =>
+    fetchApi<ModelAlias[]>(`/model_aliases?team_id=${encodeURIComponent(teamId)}`),
+  createModelAlias: (req: CreateModelAliasRequest) =>
+    fetchApi<ModelAlias>("/model_aliases", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  deleteModelAlias: (id: string) =>
+    fetchApi<void>(`/model_aliases/${id}`, { method: "DELETE" }),
+
+  getQuota: (teamId: string) => fetchApi<Quota>(`/quotas/${teamId}`),
+  upsertQuota: (teamId: string, rpm_limit: number, tpm_limit: number) =>
+    fetchApi<Quota>(`/quotas/${teamId}`, {
+      method: "PUT",
+      body: JSON.stringify({ rpm_limit, tpm_limit }),
     }),
 
   getKey: (id: string) => fetchApi<ApiKey>(`/api_keys/${id}`),

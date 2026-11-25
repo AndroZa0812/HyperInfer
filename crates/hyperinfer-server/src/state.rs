@@ -7,7 +7,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
-use hyperinfer_core::{Config, ConfigStore, Database, DbError, RateLimiter};
+use hyperinfer_core::{Config, ConfigStore, Database, DbError, PluginPipeline, RateLimiter};
 use sha2::Digest;
 use std::sync::Arc;
 use subtle::ConstantTimeEq;
@@ -28,6 +28,7 @@ pub struct AppState<D: Database, C: ConfigStore> {
     pub jwt_secret: Arc<String>,
     pub proxy_router: Option<Arc<proxy::ProxyRouter>>,
     pub rate_limiter: Option<Arc<RateLimiter>>,
+    pub plugins: PluginPipeline,
 }
 
 pub type ProdState = AppState<SqlxDb, RedisConfigStore>;
