@@ -262,3 +262,104 @@ async fn test_standalone_proxy_chat_completions_to_local_mock() {
         .unwrap();
     assert_eq!(content, "hello from standalone mock");
 }
+
+#[tokio::test]
+async fn test_probe_ollama_local_mock() {
+    async fn mock_ollama_tags() -> impl IntoResponse {
+        (
+            StatusCode::OK,
+            [("Content-Type", "application/json")],
+            serde_json::json!({
+                "models": [
+                    { "name": "qwen2.5-coder:latest" },
+                    { "name": "llama3.2:latest" }
+                ]
+            })
+            .to_string(),
+        )
+    }
+
+    let app = Router::new().route("/api/tags", axum::routing::get(mock_ollama_tags));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+
+    let detected = hyperinfer_server::standalone::probe_ollama(&format!("http://{addr}"))
+        .await
+        .expect("should detect local mock Ollama");
+    assert_eq!(detected.name, "ollama");
+    assert_eq!(detected.provider, "openai");
+    assert_eq!(detected.base_url, Some(format!("http://{addr}/v1")));
+    assert_eq!(
+        detected.models,
+        vec!["qwen2.5-coder:latest", "llama3.2:latest"]
+    );
+}
+
+#[tokio::test]
+async fn test_standalone_proxy_chat_completions_streaming_to_local_mock() {
+    async fn mock_stream_completions() -> impl IntoResponse {
+        let body = concat!(
+            "data: {\"id\":\"chatcmpl-stream-1\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-stream\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"hello \"},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl-stream-1\",\"object\":\"chat.completion.chunk\",\"created\":1700000000,\"model\":\"mock-stream\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"stream\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":2,\"total_tokens\":5}}\n\n",
+            "data: [DONE]\n\n"
+        );
+        (
+            StatusCode::OK,
+            [("Content-Type", "text/event-stream")],
+            body,
+        )
+    }
+
+    let mock_app = Router::new().route("/v1/chat/completions", post(mock_stream_completions));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, mock_app).await.unwrap();
+    });
+
+    let boot = bootstrap_standalone(false).await.unwrap();
+    let dep_req = CreateDeploymentRequest {
+        name: "mock-stream".to_string(),
+        provider: "openai".to_string(),
+        model: "mock-stream".to_string(),
+        api_key_ref: Some("test-key".to_string()),
+        base_url: format!("http://{mock_addr}/v1"),
+        is_active: true,
+        weight: 1,
+        priority: 0,
+        max_tpm: None,
+        max_rpm: None,
+        cost_per_1k_input_tokens: None,
+        cost_per_1k_output_tokens: None,
+        metadata: None,
+        sort_order: None,
+    };
+    boot.state.db.create_deployment(dep_req).await.unwrap();
+
+    let cors = tower_http::cors::CorsLayer::permissive();
+    let app = build_router(
+        boot.state,
+        hyperinfer_server::mcp::McpState::new(boot.jwt_secret.clone()),
+        cors,
+        false,
+    );
+    let server = TestServer::new(app);
+
+    let chat_body = serde_json::json!({
+        "model": "mock-stream",
+        "stream": true,
+        "messages": [{ "role": "user", "content": "stream please" }]
+    });
+    let res = server
+        .post("/v1/chat/completions")
+        .add_header("Authorization", format!("Bearer {}", boot.api_key))
+        .json(&chat_body)
+        .await;
+    assert_eq!(res.status_code(), StatusCode::OK);
+    let sse = res.text();
+    assert!(sse.contains("hello "));
+    assert!(sse.contains("stream"));
+}
