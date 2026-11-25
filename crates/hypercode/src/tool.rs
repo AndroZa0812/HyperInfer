@@ -28,6 +28,11 @@ pub struct ToolContext {
     pub output_filter_config: OutputFilterConfig,
     /// Session-wide filter statistics.
     pub filter_stats: Arc<SessionFilterStats>,
+    /// Metadata directories that are read-only / approval-gated for writes.
+    pub protected_paths: Vec<PathBuf>,
+    /// Narrowly scoped override set by `Agent` only for a single explicitly approved
+    /// tool call targeting a protected metadata path. Defaults to `false`.
+    pub allow_protected_writes: bool,
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -38,6 +43,7 @@ impl std::fmt::Debug for ToolContext {
             .field("sandbox_policy", &self.sandbox_policy)
             .field("command_runner", &self.command_runner.name())
             .field("output_filter_config", &self.output_filter_config)
+            .field("protected_paths", &self.protected_paths)
             .finish()
     }
 }
@@ -47,6 +53,7 @@ impl ToolContext {
         let root = workspace_root.into();
         let canonical = std::fs::canonicalize(&root).unwrap_or(root);
         let sandbox_policy = SandboxPolicy::restricted_for_workspace(&canonical);
+        let protected_paths = vec![canonical.join(".git"), canonical.join(".hypercode")];
         Self {
             workspace_root: canonical,
             command_timeout: Duration::from_secs(30),
@@ -55,6 +62,8 @@ impl ToolContext {
             cancel_token: CancellationToken::new(),
             output_filter_config: OutputFilterConfig::default(),
             filter_stats: Arc::new(SessionFilterStats::default()),
+            protected_paths,
+            allow_protected_writes: false,
         }
     }
 
@@ -80,6 +89,20 @@ impl ToolContext {
 
     pub fn with_output_filter_config(mut self, config: OutputFilterConfig) -> Self {
         self.output_filter_config = config;
+        self
+    }
+
+    pub fn with_protected_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.protected_paths = paths
+            .into_iter()
+            .map(|p| {
+                if p.is_absolute() {
+                    p
+                } else {
+                    self.workspace_root.join(p)
+                }
+            })
+            .collect();
         self
     }
 
@@ -148,6 +171,41 @@ impl ToolContext {
             .unwrap_or(path)
             .to_string_lossy()
             .into_owned()
+    }
+
+    /// Check whether a resolved path targets a protected metadata directory.
+    pub fn is_protected_path(&self, resolved: &Path) -> bool {
+        for p in &self.protected_paths {
+            if resolved.starts_with(p) {
+                return true;
+            }
+            if p.exists() {
+                if let Ok(canon) = std::fs::canonicalize(p) {
+                    if resolved.starts_with(&canon) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    pub fn with_allow_protected_writes(mut self, allow: bool) -> Self {
+        self.allow_protected_writes = allow;
+        self
+    }
+
+    /// Resolve a path for writing, rejecting protected metadata directories
+    /// unless `allow_protected_writes` was explicitly granted for this call.
+    pub fn resolve_writable_path(&self, raw_path: &str) -> Result<PathBuf, String> {
+        let resolved = self.resolve_path(raw_path)?;
+        if !self.allow_protected_writes && self.is_protected_path(&resolved) {
+            return Err(format!(
+                "Write denied: path '{}' targets protected metadata directory",
+                raw_path
+            ));
+        }
+        Ok(resolved)
     }
 }
 

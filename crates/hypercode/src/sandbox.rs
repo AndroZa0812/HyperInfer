@@ -55,6 +55,9 @@ pub const SENSITIVE_ENV_VARS: &[&str] = &[
 pub struct SandboxPolicy {
     /// Directories where the sandboxed process is permitted to write files.
     pub writable_paths: Vec<PathBuf>,
+    /// Directories that are read-only (e.g. `.git/`, `.hypercode/`).
+    #[serde(default)]
+    pub read_only_paths: Vec<PathBuf>,
     /// Whether arbitrary outbound network access is allowed.
     pub allow_network: bool,
     /// Specific domains allowed via egress proxy when `allow_network` is false.
@@ -68,9 +71,12 @@ impl SandboxPolicy {
     /// - Writes restricted to `workspace_root` and `/tmp`
     /// - Outbound network disabled by default
     /// - Sensitive credential environment variables stripped
+    /// - `.git/` and `.hypercode/` marked read-only
     pub fn restricted_for_workspace(workspace_root: impl Into<PathBuf>) -> Self {
+        let root = workspace_root.into();
         Self {
-            writable_paths: vec![workspace_root.into(), PathBuf::from("/tmp")],
+            writable_paths: vec![root.clone(), PathBuf::from("/tmp")],
+            read_only_paths: vec![root.join(".git"), root.join(".hypercode")],
             allow_network: false,
             allowed_domains: Vec::new(),
             strip_env_secrets: true,
@@ -87,6 +93,11 @@ impl SandboxPolicy {
         self
     }
 
+    pub fn with_read_only_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.read_only_paths = paths;
+        self
+    }
+
     /// Render a declarative NVIDIA OpenShell policy YAML document matching this policy.
     pub fn to_openshell_policy_yaml(&self) -> String {
         let mut yaml = String::new();
@@ -94,6 +105,9 @@ impl SandboxPolicy {
         yaml.push_str("filesystem:\n");
         yaml.push_str("  read_only:\n");
         yaml.push_str("    - \"/\"\n");
+        for path in &self.read_only_paths {
+            yaml.push_str(&format!("    - {}\n", yaml_quoted(&path.to_string_lossy())));
+        }
         yaml.push_str("  read_write:\n");
         for path in &self.writable_paths {
             yaml.push_str(&format!("    - {}\n", yaml_quoted(&path.to_string_lossy())));
