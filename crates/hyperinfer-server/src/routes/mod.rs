@@ -2,6 +2,7 @@
 
 pub mod deployments;
 pub mod keys;
+pub mod mcp_admin;
 pub mod multi_sdk;
 pub mod routing;
 pub mod teams;
@@ -48,6 +49,44 @@ pub async fn healthz_handler<D: Database, C: ConfigStore>(
             "redis": if redis_ok { "ok" } else { "error" }
         })),
     )
+}
+
+pub async fn auth_config_handler<D: Database + 'static, C: ConfigStore>() -> impl IntoResponse {
+    let standalone =
+        std::any::TypeId::of::<D>() == std::any::TypeId::of::<crate::standalone::InMemoryDb>();
+    let env_map: std::collections::HashMap<String, String> = std::env::vars().collect();
+    let detected_providers: Vec<serde_json::Value> =
+        crate::standalone::auto_detect_providers_from_env(&env_map)
+            .into_iter()
+            .map(|p| {
+                serde_json::json!({
+                    "name": p.name,
+                    "provider": p.provider,
+                    "models": p.models,
+                })
+            })
+            .collect();
+
+    let admin_email_hint = if standalone {
+        Some(std::env::var("INITIAL_ADMIN_EMAIL").unwrap_or_else(|_| "admin@localhost".to_string()))
+    } else {
+        None
+    };
+
+    Json(serde_json::json!({
+        "standalone": standalone,
+        "mode": if standalone { "standalone" } else { "standard" },
+        "admin_email_hint": admin_email_hint,
+        "detected_providers": detected_providers,
+        "endpoints": {
+            "openai_chat": "/v1/chat/completions",
+            "openai_responses": "/v1/responses",
+            "anthropic_messages": "/v1/messages",
+            "gemini_generate": "/v1beta/models/{model}:generateContent",
+            "mcp_http": "/mcp",
+            "mcp_sse": "/mcp/sse"
+        }
+    }))
 }
 
 #[derive(OpenApi)]
@@ -121,6 +160,26 @@ where
         .layer(middleware::from_fn_with_state(
             mcp_state.clone(),
             jwt_auth_middleware,
+        ))
+        .with_state(mcp_state.clone());
+
+    let mcp_admin_router = Router::new()
+        .route(
+            "/v1/admin/mcp/upstreams",
+            get(mcp_admin::list_upstreams).post(mcp_admin::register_upstream),
+        )
+        .route(
+            "/v1/admin/mcp/upstreams/{name}",
+            axum::routing::delete(mcp_admin::remove_upstream),
+        )
+        .route("/v1/admin/mcp/tools", get(mcp_admin::list_tools))
+        .route(
+            "/v1/admin/mcp/policies/{team_id}",
+            get(mcp_admin::get_team_policy).put(mcp_admin::update_team_policy),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.jwt_secret.clone(),
+            auth_middleware,
         ))
         .with_state(mcp_state);
 
@@ -196,6 +255,7 @@ where
     // Auth routes for user/password authentication
     let auth_public_routes = Router::new()
         .route("/v1/auth/login", post(users::login_handler))
+        .route("/v1/auth/config", get(auth_config_handler::<D, C>))
         .route("/healthz", get(healthz_handler));
 
     let auth_protected_routes = Router::new()
@@ -240,6 +300,7 @@ where
         .merge(config_sync_router)
         .merge(v1_jwt_router)
         .merge(mcp_router)
+        .merge(mcp_admin_router)
         .merge(auth_public_routes)
         .merge(auth_protected_routes)
         .merge(proxy_router)

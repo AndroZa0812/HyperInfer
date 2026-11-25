@@ -1,7 +1,10 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
+    import { onMount } from 'svelte';
+    import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
     import { theme } from '#lib/stores/theme';
+    import type { ServerConfig } from '#lib/types';
     import Button from '#lib/components/Button.svelte';
     import Input from '#lib/components/Input.svelte';
 
@@ -9,6 +12,18 @@
     let password = $state('');
     let error = $state('');
     let loading = $state(false);
+    let serverConfig = $state<ServerConfig | null>(null);
+
+    onMount(async () => {
+        try {
+            serverConfig = await api.getServerConfig();
+            if (serverConfig?.standalone && serverConfig.admin_email_hint && !email) {
+                email = serverConfig.admin_email_hint;
+            }
+        } catch {
+            // Optional hint endpoint
+        }
+    });
 
     async function handleSubmit(e: Event) {
         e.preventDefault();
@@ -72,6 +87,20 @@
                 <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-2">Authentication Gateway</p>
                 <h2 class="text-3xl font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">Welcome Back</h2>
             </div>
+
+            {#if serverConfig?.standalone}
+                <div class="mb-6 p-4 rounded-lg bg-[var(--surface-container-low)] border border-[var(--outline-variant)]/40 text-xs text-[var(--on-surface-variant)] space-y-1">
+                    <p class="font-semibold text-[var(--primary)] uppercase tracking-wider">Standalone Mode Active</p>
+                    <p>
+                        Sign in with <code class="font-mono text-[var(--on-surface)]">{serverConfig.admin_email_hint || 'admin@localhost'}</code> and the password set via <code class="font-mono">INITIAL_ADMIN_PASSWORD</code> (or printed at startup).
+                    </p>
+                    {#if serverConfig.detected_providers.length > 0}
+                        <p>
+                            Auto-detected providers: <strong class="text-[var(--on-surface)]">{serverConfig.detected_providers.map((p) => p.name).join(', ')}</strong>
+                        </p>
+                    {/if}
+                </div>
+            {/if}
 
             <form onsubmit={handleSubmit} class="space-y-6">
                 <Input

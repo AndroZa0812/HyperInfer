@@ -1,16 +1,18 @@
 <script lang="ts">
     import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
-    import type { ApiKey, Team, UsageData, User } from '#lib/types';
+    import type { ApiKey, ServerConfig, Team, UsageData, User } from '#lib/types';
     import StatCard from '#lib/components/StatCard.svelte';
     import Card from '#lib/components/Card.svelte';
     import Button from '#lib/components/Button.svelte';
+    import Badge from '#lib/components/Badge.svelte';
 
     let loading = $state(true);
     let usage = $state<UsageData | null>(null);
     let keys = $state<ApiKey[]>([]);
     let teams = $state<Team[]>([]);
     let users = $state<User[]>([]);
+    let serverConfig = $state<ServerConfig | null>(null);
 
     let isAdmin = $derived($auth.user?.role === 'admin');
     let activeKeys = $derived(keys.filter((k) => k.is_active).length);
@@ -29,12 +31,14 @@
             api.getKeys(teamScope).catch(() => []),
             isAdmin ? api.getTeams().catch(() => []) : Promise.resolve([]),
             isAdmin ? api.getUsers().catch(() => []) : Promise.resolve([]),
-        ]).then(([u, k, t, us]) => {
+            api.getServerConfig().catch(() => null),
+        ]).then(([u, k, t, us, cfg]) => {
             if (cancelled) return;
             usage = u;
             keys = k;
             teams = t;
             users = us;
+            serverConfig = cfg;
             loading = false;
         });
 
@@ -147,6 +151,46 @@
                     </div>
                 </Card>
             </div>
+        {/if}
+
+        {#if serverConfig}
+            <Card>
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center gap-2">
+                            <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">
+                                Gateway Runtime
+                            </p>
+                            <Badge
+                                variant={serverConfig.standalone ? 'warning' : 'success'}
+                                label={serverConfig.standalone ? 'Standalone Mode' : 'Standard Mode'}
+                            />
+                        </div>
+                        <div class="flex flex-wrap items-center gap-2 text-xs text-[var(--on-surface-variant)]">
+                            <span>Auto-detected providers:</span>
+                            {#if serverConfig.detected_providers.length > 0}
+                                {#each serverConfig.detected_providers as provider}
+                                    <Badge variant="info" label={provider.name} />
+                                {/each}
+                            {:else}
+                                <span class="text-[var(--on-surface)]">None from env (configure deployments in Routing)</span>
+                            {/if}
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <Button href="/dashboard/playground" variant="secondary" size="sm">
+                            <span class="material-symbols-outlined" style="font-size: 18px">terminal</span>
+                            Open Playground
+                        </Button>
+                        {#if isAdmin}
+                            <Button href="/dashboard/mcp" variant="secondary" size="sm">
+                                <span class="material-symbols-outlined" style="font-size: 18px">hub</span>
+                                MCP Gateway
+                            </Button>
+                        {/if}
+                    </div>
+                </div>
+            </Card>
         {/if}
 
         <Card>
