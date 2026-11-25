@@ -23,6 +23,9 @@
     let newAuthHeader = $state('');
     let newEnabled = $state(true);
     let upstreamError = $state('');
+    let pendingRemoveName = $state<string | null>(null);
+    let showRemoveConfirm = $state(false);
+    let removeError = $state('');
 
     // Per-team policy state
     let selectedTeamId = $state('');
@@ -130,13 +133,25 @@
         }
     }
 
-    async function removeUpstream(name: string) {
+    function requestRemoveUpstream(name: string) {
+        pendingRemoveName = name;
+        removeError = '';
+        showRemoveConfirm = true;
+    }
+
+    async function confirmRemoveUpstream() {
+        if (!pendingRemoveName) return;
+        const target = pendingRemoveName;
+        removeError = '';
         try {
-            await api.removeMcpUpstream(name);
-            upstreams = upstreams.filter((u) => u.name !== name);
+            await api.removeMcpUpstream(target);
+            upstreams = upstreams.filter((u) => u.name !== target);
+            showRemoveConfirm = false;
+            pendingRemoveName = null;
             await refreshTools();
         } catch (e) {
             console.error('Failed to remove upstream', e);
+            removeError = 'Failed to remove upstream server';
         }
     }
 
@@ -220,7 +235,7 @@
                                         <Badge variant={server.enabled ? 'success' : 'neutral'} label={server.enabled ? 'Enabled' : 'Disabled'} />
                                     </td>
                                     <td class="px-5 py-3.5 text-right">
-                                        <Button variant="ghost" size="sm" onclick={() => removeUpstream(server.name)}>
+                                        <Button variant="ghost" size="sm" onclick={() => requestRemoveUpstream(server.name)}>
                                             Remove
                                         </Button>
                                     </td>
@@ -401,4 +416,22 @@
             <Button type="submit">Add Server</Button>
         </div>
     </form>
+</Modal>
+
+<Modal bind:open={showRemoveConfirm}>
+    <div class="p-6 space-y-5">
+        <div>
+            <h2 class="text-xl font-semibold text-[var(--on-surface)]">Remove Upstream Server</h2>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">
+                Are you sure you want to disconnect <strong class="font-mono text-[var(--on-surface)]">{pendingRemoveName}</strong> from the MCP gateway?
+            </p>
+        </div>
+        {#if removeError}
+            <p class="text-sm text-[var(--error)]">{removeError}</p>
+        {/if}
+        <div class="flex gap-3 justify-end">
+            <Button variant="ghost" onclick={() => { showRemoveConfirm = false; pendingRemoveName = null; }}>Cancel</Button>
+            <Button variant="danger" onclick={confirmRemoveUpstream}>Remove</Button>
+        </div>
+    </div>
 </Modal>

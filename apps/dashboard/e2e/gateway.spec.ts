@@ -39,8 +39,12 @@ test.describe('Gateway Views (MCP, Playground, Runtime Config)', () => {
 		await expect(page.getByLabel('Deny Patterns (one regex per line)')).toHaveValue('github__delete_.*');
 		await expect(page.getByLabel(/Catalog \/ Code Mode/)).toBeChecked();
 
-		// Remove upstream server
+		// Remove upstream server via confirmation modal
 		await page.locator('tbody tr', { hasText: upstreamName }).getByRole('button', { name: 'Remove' }).click();
+		const confirmDialog = page.getByRole('dialog');
+		await expect(confirmDialog.getByRole('heading', { name: 'Remove Upstream Server' })).toBeVisible();
+		await confirmDialog.getByRole('button', { name: 'Remove', exact: true }).click();
+		await expect(confirmDialog).toBeHidden();
 		await expect(page.locator('tbody tr', { hasText: upstreamName })).toHaveCount(0);
 	});
 

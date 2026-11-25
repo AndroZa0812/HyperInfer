@@ -101,7 +101,10 @@ pub async fn register_upstream(
     }
 
     let url = req.url.trim().to_string();
-    if crate::proxy::validate_base_url(&url, false).is_err() {
+    let allow_localhost = std::env::var("ALLOW_LOCALHOST_MCP")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    if crate::proxy::validate_base_url(&url, allow_localhost).is_err() {
         return (
             StatusCode::BAD_REQUEST,
             "Upstream URL must be a valid public http:// or https:// endpoint (private, loopback, and metadata addresses are blocked)",
