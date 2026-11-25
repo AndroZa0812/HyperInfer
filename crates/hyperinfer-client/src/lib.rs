@@ -24,7 +24,7 @@ pub use telemetry_otlp::{
 use futures::{Stream, StreamExt};
 use hyperinfer_core::{
     rate_limiting::RateLimiter, ChatChunk, ChatRequest, ChatResponse, Config, HyperInferError,
-    Provider,
+    PluginAction, PluginContext, PluginPipeline, Provider,
 };
 use hyperinfer_providers::{
     anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAiProvider, LlmProvider,
@@ -199,6 +199,7 @@ pub struct HyperInferClient {
     cache: ExactMatchCache,
     mirror: MirrorHandle,
     provider_registry: Arc<ProviderRegistry>,
+    plugins: PluginPipeline,
 }
 
 impl HyperInferClient {
@@ -236,6 +237,7 @@ impl HyperInferClient {
             cache,
             mirror,
             provider_registry,
+            plugins: PluginPipeline::new(),
         })
     }
 
@@ -266,6 +268,7 @@ impl HyperInferClient {
             cache,
             mirror,
             provider_registry,
+            plugins: PluginPipeline::new(),
         })
     }
 
@@ -288,6 +291,17 @@ impl HyperInferClient {
 
     pub async fn inject_provider_registry(&mut self, external_registry: Arc<ProviderRegistry>) {
         let _old = std::mem::replace(&mut self.provider_registry, external_registry);
+    }
+
+    /// Add a gateway plugin to this client's pipeline (builder-style).
+    pub fn with_plugin(mut self, plugin: Arc<dyn hyperinfer_core::GatewayPlugin>) -> Self {
+        self.plugins.add(plugin);
+        self
+    }
+
+    /// Add a gateway plugin to this client's pipeline (mutating).
+    pub fn add_plugin(&mut self, plugin: Arc<dyn hyperinfer_core::GatewayPlugin>) {
+        self.plugins.add(plugin);
     }
 
     /// Load deployments into the router engine for deployment-based routing
@@ -401,6 +415,36 @@ impl HyperInferClient {
                 ));
             }
 
+            // 1.5 Run plugin pre-request hooks
+            let mut plugin_ctx = PluginContext {
+                request_id: uuid::Uuid::new_v4().to_string(),
+                model: request.model.clone(),
+                ..Default::default()
+            };
+            let mut request = request;
+            match self
+                .plugins
+                .run_pre_request(&mut plugin_ctx, &mut request)
+                .await
+            {
+                PluginAction::ShortCircuit {
+                    status_code,
+                    message,
+                } => {
+                    return Err(HyperInferError::ApiError {
+                        status: status_code,
+                        message,
+                    });
+                }
+                PluginAction::Respond(mut resp) => {
+                    self.plugins
+                        .run_post_response(&mut plugin_ctx, &mut resp)
+                        .await;
+                    return Ok(resp);
+                }
+                PluginAction::Continue => {}
+            }
+
             // 2. Try deployment-based routing first (if deployments are loaded)
             let deployment_result = self.router_engine.select_deployment(&request).await;
             let (model, config_snapshot, response) = if let Ok(routing_result) = deployment_result {
@@ -444,6 +488,9 @@ impl HyperInferClient {
                     }
                     Err(e) => {
                         self.router_engine.record_failure(&deployment.id).await;
+                        self.plugins
+                            .run_on_error(&mut plugin_ctx, &e.to_string())
+                            .await;
                         return Err(e);
                     }
                 }
@@ -499,8 +546,15 @@ impl HyperInferClient {
 
                 let mut resolved_request = request.clone();
                 resolved_request.model = model.clone();
-                let response = llm_provider.chat(&resolved_request, &api_key).await?;
-                (model, config_snapshot, response)
+                match llm_provider.chat(&resolved_request, &api_key).await {
+                    Ok(resp) => (model, config_snapshot, resp),
+                    Err(e) => {
+                        self.plugins
+                            .run_on_error(&mut plugin_ctx, &e.to_string())
+                            .await;
+                        return Err(e);
+                    }
+                }
             };
 
             // 4. Record OTel usage and response attributes on the span.
@@ -584,7 +638,13 @@ impl HyperInferClient {
                 request,
             );
 
-            // 6. Return response
+            // 6. Run plugin post-response hooks
+            let mut response = response;
+            self.plugins
+                .run_post_response(&mut plugin_ctx, &mut response)
+                .await;
+
+            // 7. Return response
             Ok(response)
         }
         .instrument(span)
@@ -845,5 +905,58 @@ mod tests {
         )
         .expect("custom anthropic");
         assert_eq!(custom_anthropic.name(), "anthropic");
+    }
+
+    #[tokio::test]
+    async fn test_plugin_short_circuit() {
+        use hyperinfer_core::{GatewayPlugin, PluginAction, PluginContext};
+        use std::sync::Arc;
+
+        #[derive(Clone)]
+        struct ShortCircuitPlugin;
+
+        #[async_trait::async_trait]
+        impl GatewayPlugin for ShortCircuitPlugin {
+            fn name(&self) -> &str {
+                "short_circuit"
+            }
+            async fn pre_request(
+                &self,
+                _ctx: &mut PluginContext,
+                _req: &mut ChatRequest,
+            ) -> PluginAction {
+                PluginAction::ShortCircuit {
+                    status_code: 400,
+                    message: "Blocked by plugin".to_string(),
+                }
+            }
+        }
+
+        let client = HyperInferClient::new_local(Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        })
+        .await
+        .unwrap();
+
+        let client = client.with_plugin(Arc::new(ShortCircuitPlugin));
+
+        let request = ChatRequest {
+            model: "gpt-4".to_string(),
+            messages: vec![hyperinfer_core::ChatMessage::user("Hello")],
+            ..Default::default()
+        };
+
+        let result = client.chat("test-key", request).await;
+        match result {
+            Err(HyperInferError::ApiError { status, message }) => {
+                assert_eq!(status, 400);
+                assert_eq!(message, "Blocked by plugin");
+            }
+            _ => panic!("Expected ApiError with status 400"),
+        }
     }
 }

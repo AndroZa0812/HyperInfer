@@ -6,14 +6,18 @@
 #![allow(clippy::double_must_use)]
 
 pub mod error;
+pub mod plugin;
 pub mod rate_limiting;
+pub mod redaction;
 pub mod redis;
 pub mod telemetry_consumer;
 pub mod traits;
 pub mod types;
 
 pub use error::{ConfigError, DbError, HyperInferError};
+pub use plugin::{GatewayPlugin, PluginAction, PluginContext, PluginPipeline};
 pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY_PREFIX};
+pub use redaction::{RedactionConfig, RedactionPlugin};
 pub use redis::PolicyUpdate;
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{

@@ -185,6 +185,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
     };
 
+    let enable_pii_redaction = std::env::var("ENABLE_PII_REDACTION")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
+    let mut plugins = hyperinfer_core::PluginPipeline::new();
+    if enable_pii_redaction {
+        plugins.add(Arc::new(hyperinfer_core::RedactionPlugin::with_defaults()));
+    }
+
     let state: ProdState = AppState {
         config,
         db: db.clone(),
@@ -193,6 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         jwt_secret: jwt_secret_arc.clone(),
         proxy_router: Some(proxy_router),
         rate_limiter,
+        plugins,
     };
 
     let mcp_state = McpState::new(jwt_secret);

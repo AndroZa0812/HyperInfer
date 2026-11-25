@@ -100,7 +100,7 @@ pub async fn chat_completions_handler<
 >(
     State(state): State<AppState<D, C>>,
     headers: axum::http::HeaderMap,
-    Json(request): Json<hyperinfer_core::ChatRequest>,
+    Json(mut request): Json<hyperinfer_core::ChatRequest>,
 ) -> Result<Response, ProxyError> {
     let start = std::time::Instant::now();
 
@@ -120,6 +120,39 @@ pub async fn chat_completions_handler<
             })
         }
     };
+
+    // 1b. Run GatewayPlugin pre-request pipeline
+    let mut plugin_ctx = hyperinfer_core::PluginContext {
+        request_id: uuid::Uuid::new_v4().to_string(),
+        team_id: Some(auth.team_id.clone()),
+        api_key_id: Some(auth.api_key_id.clone()),
+        model: request.model.clone(),
+        is_fallback: false,
+        metadata: std::collections::HashMap::new(),
+    };
+    match state
+        .plugins
+        .run_pre_request(&mut plugin_ctx, &mut request)
+        .await
+    {
+        hyperinfer_core::PluginAction::Continue => {}
+        hyperinfer_core::PluginAction::ShortCircuit {
+            status_code,
+            message,
+        } => {
+            return Err(ProxyError {
+                error: message,
+                code: status_code,
+            });
+        }
+        hyperinfer_core::PluginAction::Respond(mut resp) => {
+            state
+                .plugins
+                .run_post_response(&mut plugin_ctx, &mut resp)
+                .await;
+            return Ok(Json(resp).into_response());
+        }
+    }
 
     // 2. Enforce team RPM / TPM quotas
     let estimated_tokens: u64 = (request
@@ -299,7 +332,7 @@ pub async fn chat_completions_handler<
     }
 
     // 6. Non-streaming path via ProviderRegistry
-    let response = match proxy::forward_chat(
+    let mut response = match proxy::forward_chat(
         proxy_router.providers(),
         &request,
         &selected.base_url,
@@ -311,12 +344,24 @@ pub async fn chat_completions_handler<
         Ok(resp) => resp,
         Err(code) => {
             proxy_router.record_failure(&deployment_id).await;
+            state
+                .plugins
+                .run_on_error(
+                    &mut plugin_ctx,
+                    &format!("Upstream request failed ({code})"),
+                )
+                .await;
             return Err(ProxyError {
                 error: "Upstream request failed".to_string(),
                 code,
             });
         }
     };
+
+    state
+        .plugins
+        .run_post_response(&mut plugin_ctx, &mut response)
+        .await;
 
     let elapsed_ms = start.elapsed().as_millis() as i64;
     let total_tokens = (response.usage.input_tokens + response.usage.output_tokens) as u64;
