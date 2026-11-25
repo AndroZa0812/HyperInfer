@@ -101,10 +101,10 @@ pub async fn register_upstream(
     }
 
     let url = req.url.trim().to_string();
-    if !(url.starts_with("http://") || url.starts_with("https://")) {
+    if crate::proxy::validate_base_url(&url, false).is_err() {
         return (
             StatusCode::BAD_REQUEST,
-            "Upstream URL must start with http:// or https://",
+            "Upstream URL must be a valid public http:// or https:// endpoint (private, loopback, and metadata addresses are blocked)",
         )
             .into_response();
     }
@@ -313,5 +313,31 @@ mod tests {
         assert!(policy.catalog_mode);
         assert_eq!(policy.allow_patterns, vec!["^github__.*"]);
         assert_eq!(policy.deny_patterns, vec!["github__delete_.*"]);
+    }
+
+    #[tokio::test]
+    async fn test_register_upstream_blocks_ssrf_urls() {
+        let (server, token) = test_app();
+
+        for blocked_url in [
+            "http://127.0.0.1:8080/mcp",
+            "http://localhost:8080/mcp",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://10.0.0.1/mcp",
+            "http://[::1]:8080/mcp",
+            "file:///etc/passwd",
+        ] {
+            let resp = server
+                .post("/v1/admin/mcp/upstreams")
+                .add_header("Authorization", format!("Bearer {token}"))
+                .json(&serde_json::json!({
+                    "name": "blocked_srv",
+                    "transport": "streamable_http",
+                    "url": blocked_url,
+                    "enabled": true
+                }))
+                .await;
+            resp.assert_status(StatusCode::BAD_REQUEST);
+        }
     }
 }

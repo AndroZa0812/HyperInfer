@@ -161,7 +161,7 @@ impl ProxyAuth {
     }
 }
 
-fn validate_base_url(url: &str, allow_localhost: bool) -> Result<(), u16> {
+pub(crate) fn validate_base_url(url: &str, allow_localhost: bool) -> Result<(), u16> {
     let parsed = url::Url::parse(url).map_err(|_| 400u16)?;
 
     // Scheme check first: reject non-HTTP(S) regardless of host

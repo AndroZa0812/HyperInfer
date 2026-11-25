@@ -114,6 +114,7 @@ impl McpGateway {
     pub fn new() -> Self {
         let http = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .dns_resolver(Arc::new(crate::safe_resolver::SafeResolver))
             .connect_timeout(std::time::Duration::from_secs(5))
             .timeout(std::time::Duration::from_secs(30))
             .build()
