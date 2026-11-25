@@ -210,6 +210,10 @@ pub async fn chat_completions_handler<
             code: 503,
         })?;
 
+    // Apply deployment mutators (model override, max_tokens cap, temperature override).
+    let mut request = request;
+    selected.mutators.apply_to_request(&mut request);
+
     let deployment_id = selected.deployment.id.clone();
 
     // 5. Streaming path (`stream: true`) via ProviderRegistry + SSE

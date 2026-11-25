@@ -2,6 +2,7 @@
 
 pub mod deployments;
 pub mod keys;
+pub mod multi_sdk;
 pub mod routing;
 pub mod teams;
 pub mod users;
@@ -203,6 +204,12 @@ where
         .route(
             "/v1/chat/completions",
             post(routing::chat_completions_handler),
+        )
+        .route("/v1/messages", post(multi_sdk::anthropic_messages_handler))
+        .route("/v1/responses", post(multi_sdk::openai_responses_handler))
+        .route(
+            "/v1beta/models/{model_action}",
+            post(multi_sdk::gemini_generate_content_handler),
         )
         .with_state(state.clone());
 
