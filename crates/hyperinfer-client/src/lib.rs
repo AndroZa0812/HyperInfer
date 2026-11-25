@@ -557,6 +557,12 @@ impl HyperInferClient {
                 }
             };
 
+            // 3.5 Run plugin post-response hooks before telemetry and caching
+            let mut response = response;
+            self.plugins
+                .run_post_response(&mut plugin_ctx, &mut response)
+                .await;
+
             // 4. Record OTel usage and response attributes on the span.
             let elapsed = start.elapsed().as_millis() as u64;
             let input_tokens = response.usage.input_tokens;
@@ -638,13 +644,7 @@ impl HyperInferClient {
                 request,
             );
 
-            // 6. Run plugin post-response hooks
-            let mut response = response;
-            self.plugins
-                .run_post_response(&mut plugin_ctx, &mut response)
-                .await;
-
-            // 7. Return response
+            // 6. Return response
             Ok(response)
         }
         .instrument(span)

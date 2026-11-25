@@ -94,22 +94,31 @@ impl RedactionPlugin {
         result
     }
 
-    fn redact_request(&self, req: &mut ChatRequest) {
-        for msg in &mut req.messages {
-            msg.content = self.redact_str(&msg.content);
-            if let Some(parts) = &mut msg.content_parts {
-                for part in parts {
-                    if let ContentPart::Text { text } = part {
-                        *text = self.redact_str(text);
-                    }
+    fn redact_message(&self, msg: &mut crate::types::ChatMessage) {
+        msg.content = self.redact_str(&msg.content);
+        if let Some(parts) = &mut msg.content_parts {
+            for part in parts {
+                if let ContentPart::Text { text } = part {
+                    *text = self.redact_str(text);
                 }
             }
+        }
+        if let Some(calls) = &mut msg.tool_calls {
+            for call in calls {
+                call.arguments = self.redact_str(&call.arguments);
+            }
+        }
+    }
+
+    fn redact_request(&self, req: &mut ChatRequest) {
+        for msg in &mut req.messages {
+            self.redact_message(msg);
         }
     }
 
     fn redact_response(&self, resp: &mut ChatResponse) {
         for choice in &mut resp.choices {
-            choice.message.content = self.redact_str(&choice.message.content);
+            self.redact_message(&mut choice.message);
         }
     }
 }
