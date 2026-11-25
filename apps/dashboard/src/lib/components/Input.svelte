@@ -15,6 +15,8 @@
 		onblur?: (e: FocusEvent) => void;
 	}
 
+	const generatedId = $props.id();
+
 	let {
 		label,
 		type = 'text',
@@ -22,7 +24,7 @@
 		placeholder,
 		disabled = false,
 		required = false,
-		id,
+		id = generatedId,
 		name,
 		autocomplete,
 		error,

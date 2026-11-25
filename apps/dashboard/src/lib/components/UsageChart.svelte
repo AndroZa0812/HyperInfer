@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import * as echarts from 'echarts';
-	import { theme } from '$lib/stores/theme';
+	import type * as EChartsModule from 'echarts';
+	import { theme } from '#lib/stores/theme';
 
 	interface DataPoint {
 		date: string;
@@ -19,7 +19,8 @@
 	let { data = [], type = 'line', class: className = '' }: Props = $props();
 
 	let chartEl: HTMLElement;
-	let chart = $state<echarts.ECharts | null>(null);
+	let echartsLib = $state<typeof EChartsModule | null>(null);
+	let chart = $state<EChartsModule.ECharts | null>(null);
 
 	function resolveColor(varName: string, fallback: string): string {
 		try {
@@ -35,7 +36,7 @@
 	$effect(() => {
 		const _currentTheme = $theme;
 		void _currentTheme;
-		if (!chart || !data.length) return;
+		if (!chart || !echartsLib || !data.length) return;
 		const primary = resolveColor('--primary', '#4648d4');
 		const primaryContainer = resolveColor('--primary-container', '#6063ee');
 		const surfaceLowest = resolveColor('--surface-container-lowest', '#ffffff');
@@ -44,7 +45,7 @@
 		const onSurface = resolveColor('--on-surface', '#131b2e');
 		const onSurfaceVariant = resolveColor('--on-surface-variant', '#464554');
 
-		const options: echarts.EChartsOption = {
+		const options: EChartsModule.EChartsOption = {
 			tooltip: {
 				trigger: 'axis',
 				backgroundColor: surfaceLowest,
@@ -72,7 +73,7 @@
 					smooth: true,
 					lineStyle: { width: 2.5, color: primary },
 					areaStyle: {
-						color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+						color: new echartsLib.graphic.LinearGradient(0, 0, 0, 1, [
 							{ offset: 0, color: 'rgba(70, 72, 212, 0.15)' },
 							{ offset: 1, color: 'rgba(70, 72, 212, 0.01)' }
 						])
@@ -81,7 +82,7 @@
 				} : {}),
 				...(type === 'bar' ? {
 					itemStyle: {
-						color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+						color: new echartsLib.graphic.LinearGradient(0, 0, 0, 1, [
 							{ offset: 0, color: primary },
 							{ offset: 1, color: primaryContainer }
 						]),
@@ -100,10 +101,21 @@
 	});
 
 	onMount(() => {
-		chart = echarts.init(chartEl);
-		const observer = new ResizeObserver(() => chart?.resize());
-		observer.observe(chartEl);
-		return () => observer.disconnect();
+		let cancelled = false;
+		let observer: ResizeObserver | null = null;
+
+		import('echarts').then((mod) => {
+			if (cancelled || !chartEl) return;
+			echartsLib = mod;
+			chart = mod.init(chartEl);
+			observer = new ResizeObserver(() => chart?.resize());
+			observer.observe(chartEl);
+		});
+
+		return () => {
+			cancelled = true;
+			observer?.disconnect();
+		};
 	});
 
 	onDestroy(() => {

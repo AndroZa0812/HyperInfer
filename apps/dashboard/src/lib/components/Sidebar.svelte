@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import { auth } from '$lib/stores/auth';
-	import { theme } from '$lib/stores/theme';
+	import { auth } from '#lib/stores/auth';
+	import { theme } from '#lib/stores/theme';
 	import type { Snippet } from 'svelte';
 
 	interface Props {

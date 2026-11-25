@@ -1,10 +1,10 @@
 <script lang="ts">
-    import { api } from '$lib/api';
-    import { auth } from '$lib/stores/auth';
-    import type { ApiKey, Team, UsageData, User } from '$lib/types';
-    import StatCard from '$lib/components/StatCard.svelte';
-    import Card from '$lib/components/Card.svelte';
-    import Button from '$lib/components/Button.svelte';
+    import { api } from '#lib/api';
+    import { auth } from '#lib/stores/auth';
+    import type { ApiKey, Team, UsageData, User } from '#lib/types';
+    import StatCard from '#lib/components/StatCard.svelte';
+    import Card from '#lib/components/Card.svelte';
+    import Button from '#lib/components/Button.svelte';
 
     let loading = $state(true);
     let usage = $state<UsageData | null>(null);

@@ -1,11 +1,11 @@
 <script lang="ts">
     import { page } from '$app/state';
-    import { api } from '$lib/api';
-    import type { ApiKey } from '$lib/types';
+    import { api } from '#lib/api';
+    import type { ApiKey } from '#lib/types';
     import { onMount } from 'svelte';
-    import StatCard from '$lib/components/StatCard.svelte';
-    import Badge from '$lib/components/Badge.svelte';
-    import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
+    import StatCard from '#lib/components/StatCard.svelte';
+    import Badge from '#lib/components/Badge.svelte';
+    import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 
     let keyData = $state<ApiKey | null>(null);
     let loading = $state(true);

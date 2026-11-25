@@ -15,6 +15,7 @@ const DEFAULT_TELEMETRY_STREAM: &str = "hyperinfer:telemetry";
 const DEFAULT_CONSUMER_GROUP: &str = "telemetry-consumer";
 const XAUTOCLAIM_IDLE_MS: &str = "600000";
 const XREADGROUP_BLOCK_MS: u32 = 5000;
+const XREADGROUP_RESPONSE_TIMEOUT_BUFFER_MS: u64 = 5000;
 const XREADGROUP_COUNT: u32 = 10;
 const XAUTOCLAIM_COUNT: u32 = 100;
 const MAX_BACKOFF_SECS: u64 = 60;
@@ -49,6 +50,15 @@ impl TelemetryConsumer {
     pub fn with_consumer_group(mut self, group: &str) -> Self {
         self.consumer_group = group.to_string();
         self
+    }
+
+    /// Build a Redis connection config whose response timeout exceeds `XREADGROUP BLOCK`,
+    /// preventing spurious client-side timeouts when the telemetry stream is idle.
+    fn redis_connection_config() -> redis::AsyncConnectionConfig {
+        let timeout = std::time::Duration::from_millis(
+            u64::from(XREADGROUP_BLOCK_MS) + XREADGROUP_RESPONSE_TIMEOUT_BUFFER_MS,
+        );
+        redis::AsyncConnectionConfig::new().set_response_timeout(Some(timeout))
     }
 
     async fn ensure_consumer_group(
@@ -412,7 +422,10 @@ impl TelemetryConsumer {
                     return;
                 }
 
-                let conn_result = client.get_multiplexed_async_connection().await;
+                let conn_config = Self::redis_connection_config();
+                let conn_result = client
+                    .get_multiplexed_async_connection_with_config(&conn_config)
+                    .await;
                 if let Err(e) = &conn_result {
                     error!(
                         "Failed to connect to Redis: {}. Reconnecting in {}s",
@@ -487,7 +500,15 @@ impl TelemetryConsumer {
                                         "Telemetry consumer error: {}. Reconnecting in {}s",
                                         e, backoff
                                     );
-                                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                    tokio::select! {
+                                        _ = cancellation_token.cancelled() => {
+                                            info!("Telemetry consumer shutting down");
+                                            return;
+                                        }
+                                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff)) => {
+                                            backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                        }
+                                    }
                                     break;
                                 }
                             }
@@ -511,7 +532,7 @@ impl TelemetryConsumer {
         consumer_name: &str,
     ) -> Result<Vec<StreamEntry>, redis::RedisError> {
         #[allow(clippy::type_complexity)]
-        let results: Vec<(String, Vec<StreamEntry>)> = redis::cmd("XREADGROUP")
+        let results: Option<Vec<(String, Vec<StreamEntry>)>> = redis::cmd("XREADGROUP")
             .arg("GROUP")
             .arg(consumer_group)
             .arg(consumer_name)
@@ -526,6 +547,7 @@ impl TelemetryConsumer {
             .await?;
 
         Ok(results
+            .unwrap_or_default()
             .into_iter()
             .flat_map(|(_stream, entries)| entries)
             .collect())
@@ -555,7 +577,11 @@ impl TelemetryConsumer {
                     return;
                 }
 
-                let mut conn = match client.get_multiplexed_async_connection().await {
+                let conn_config = Self::redis_connection_config();
+                let mut conn = match client
+                    .get_multiplexed_async_connection_with_config(&conn_config)
+                    .await
+                {
                     Ok(c) => c,
                     Err(e) => {
                         error!(
@@ -607,7 +633,15 @@ impl TelemetryConsumer {
                                         "Telemetry consumer error: {}. Reconnecting in {}s",
                                         e, backoff
                                     );
-                                    backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                    tokio::select! {
+                                        _ = cancellation_token.cancelled() => {
+                                            info!("Telemetry consumer shutting down");
+                                            return;
+                                        }
+                                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(backoff)) => {
+                                            backoff = (backoff * 2).min(MAX_BACKOFF_SECS);
+                                        }
+                                    }
                                     break;
                                 }
                             }
