@@ -5,6 +5,8 @@ pub mod db;
 pub mod frontend;
 pub mod mcp;
 pub mod mcp_gateway;
+pub mod mutators;
+pub mod protocols;
 pub mod proxy;
 pub mod routes;
 pub mod safe_resolver;

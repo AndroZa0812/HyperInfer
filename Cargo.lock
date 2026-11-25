@@ -1617,6 +1617,7 @@ dependencies = [
 name = "hypercode"
 version = "0.2.1"
 dependencies = [
+ "async-stream",
  "async-trait",
  "axum",
  "chrono",
@@ -1630,6 +1631,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-util",
  "tracing",
  "uuid",
 ]
@@ -1666,6 +1668,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1678,6 +1681,7 @@ dependencies = [
  "hex",
  "mockall",
  "redis",
+ "regex",
  "reqwest 0.13.4",
  "serde",
  "serde_json",

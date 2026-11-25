@@ -74,20 +74,22 @@ impl Tool for BashTool {
 
         let exec_res = if parsed.bypass_sandbox {
             HostRunner
-                .run(
+                .run_cancellable(
                     &actual_command,
                     &ctx.workspace_root,
                     timeout,
                     &ctx.sandbox_policy,
+                    ctx.cancel_token.clone(),
                 )
                 .await
         } else {
             ctx.command_runner
-                .run(
+                .run_cancellable(
                     &actual_command,
                     &ctx.workspace_root,
                     timeout,
                     &ctx.sandbox_policy,
+                    ctx.cancel_token.clone(),
                 )
                 .await
         };

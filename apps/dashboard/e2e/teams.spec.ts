@@ -46,6 +46,45 @@ test.describe('Teams', () => {
 		await expect(page.getByText('$250.00').first()).toBeVisible();
 		await expect(page.getByText('$$250.00')).toHaveCount(0);
 
+		// Edit team name & budget (HYP-58)
+		const editedName = `${teamName}-Edited`;
+		await page.getByRole('button', { name: /Edit Team/ }).click();
+		const editDialog = page.getByRole('dialog');
+		await expect(editDialog.getByRole('heading', { name: 'Edit Team' })).toBeVisible();
+		await editDialog.getByLabel('Team Name').fill(editedName);
+		await editDialog.getByLabel('Budget (cents)').fill('50000');
+		await editDialog.getByRole('button', { name: 'Save Team' }).click();
+		await expect(editDialog).toBeHidden();
+		await expect(page.getByRole('heading', { name: editedName })).toBeVisible();
+		await expect(page.getByText('$500.00').first()).toBeVisible();
+
+		// Configure Rate-Limit Quotas (HYP-56)
+		await page.getByRole('button', { name: 'Configure Quotas' }).click();
+		const quotaDialog = page.getByRole('dialog');
+		await expect(quotaDialog.getByRole('heading', { name: 'Configure Rate-Limit Quotas' })).toBeVisible();
+		await quotaDialog.getByLabel('RPM Limit').fill('120');
+		await quotaDialog.getByLabel('TPM Limit').fill('250000');
+		await quotaDialog.getByRole('button', { name: 'Save Quotas' }).click();
+		await expect(quotaDialog).toBeHidden();
+		await expect(page.getByText('120', { exact: true })).toBeVisible();
+		await expect(page.getByText('250,000', { exact: true })).toBeVisible();
+
+		// Add & delete Model Alias (HYP-56)
+		await page.getByRole('button', { name: /Add Alias/ }).click();
+		const aliasDialog = page.getByRole('dialog');
+		await expect(aliasDialog.getByRole('heading', { name: 'Add Model Alias' })).toBeVisible();
+		await aliasDialog.getByLabel('Alias').fill('fast-chat');
+		await aliasDialog.getByLabel('Target Model').fill('gpt-4o-mini');
+		await aliasDialog.getByLabel('Provider').selectOption('openai');
+		await aliasDialog.getByRole('button', { name: 'Create Alias' }).click();
+		await expect(aliasDialog).toBeHidden();
+
+		const aliasRow = page.locator('tbody tr', { hasText: 'fast-chat' });
+		await expect(aliasRow).toBeVisible();
+		await expect(aliasRow).toContainText('gpt-4o-mini');
+		await aliasRow.getByRole('button', { name: 'Delete' }).click();
+		await expect(page.locator('tbody tr', { hasText: 'fast-chat' })).toHaveCount(0);
+
 		const teamUrl = page.url();
 
 		// Verify team Usage sub-route loads without runtime crash
@@ -56,14 +95,23 @@ test.describe('Teams', () => {
 
 		// Verify team Budget sub-route loads without runtime crash
 		await page.goto(`${teamUrl}/budget`);
-		await expect(page.getByRole('heading', { name: `Budget - ${teamName}` })).toBeVisible();
-		await expect(page.getByText('$250.00')).toBeVisible();
-		await expect(page.getByText('$$250.00')).toHaveCount(0);
+		await expect(page.getByRole('heading', { name: `Budget - ${editedName}` })).toBeVisible();
+		await expect(page.getByText('$500.00')).toBeVisible();
+		await expect(page.getByText('$$500.00')).toHaveCount(0);
 
 		// Navigate to team-scoped API keys page
 		await page.goto(`${teamUrl}/keys`);
 		await expect(page.getByRole('heading', { name: 'API Keys' })).toBeVisible();
 		await expect(page.getByText('No API keys yet')).toBeVisible();
+
+		// Delete team and verify redirect + removal (HYP-58)
+		await page.goto(teamUrl);
+		await page.getByRole('button', { name: /Delete Team/ }).click();
+		const deleteDialog = page.getByRole('dialog');
+		await expect(deleteDialog.getByRole('heading', { name: 'Delete Team' })).toBeVisible();
+		await deleteDialog.getByRole('button', { name: 'Delete', exact: true }).click();
+		await expect(page).toHaveURL(/\/dashboard\/teams$/);
+		await expect(page.locator('tbody tr', { hasText: editedName })).toHaveCount(0);
 
 		expect(pageErrors).toEqual([]);
 	});

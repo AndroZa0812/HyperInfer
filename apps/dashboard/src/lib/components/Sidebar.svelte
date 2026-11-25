@@ -11,7 +11,9 @@
 	let { children }: Props = $props();
 
 	const navItems = [
+		{ path: '/dashboard', label: 'Overview', icon: 'dashboard' },
 		{ path: '/dashboard/teams', label: 'Teams', icon: 'group', admin: true },
+		{ path: '/dashboard/users', label: 'Users', icon: 'manage_accounts', admin: true },
 		{ path: '/dashboard/keys', label: 'Keys', icon: 'vpn_key' },
 		{ path: '/dashboard/routing', label: 'Routing', icon: 'route', admin: true },
 		{ path: '/dashboard/settings', label: 'Settings', icon: 'settings' },
@@ -23,6 +25,9 @@
 
 	function isActive(path: string): boolean {
 		const currentPath = page.url.pathname;
+		if (path === '/dashboard') {
+			return currentPath === '/dashboard' || currentPath === '/dashboard/';
+		}
 		if (path === '/dashboard/teams') {
 			return currentPath === path || currentPath.startsWith('/dashboard/teams/');
 		}

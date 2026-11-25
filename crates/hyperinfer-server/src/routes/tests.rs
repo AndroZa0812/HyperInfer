@@ -90,6 +90,7 @@ fn create_test_state() -> AppState<MockDatabase, MockConfigStore> {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     }
 }
 
@@ -144,6 +145,7 @@ async fn test_get_team_not_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_team(
@@ -190,6 +192,7 @@ async fn test_get_team_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_team(
@@ -235,6 +238,7 @@ async fn test_create_team() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -281,6 +285,7 @@ async fn test_get_user_not_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_user(
@@ -316,6 +321,7 @@ async fn test_get_api_key_not_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_api_key(
@@ -351,6 +357,7 @@ async fn test_get_model_alias_not_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_model_alias(
@@ -386,6 +393,7 @@ async fn test_get_quota_not_found() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_quota(
@@ -421,6 +429,7 @@ async fn test_get_team_database_error() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let response = get_team(
@@ -651,6 +660,7 @@ async fn test_create_user_success() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -668,6 +678,7 @@ async fn test_create_user_success() {
             team_id: "team-id".to_string(),
             email: "new@example.com".to_string(),
             role: "member".to_string(),
+            password: None,
         }),
     )
     .await;
@@ -719,6 +730,7 @@ async fn test_create_api_key_success() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -843,6 +855,7 @@ async fn test_create_model_alias_success() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -901,6 +914,7 @@ async fn test_create_quota_success() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -949,6 +963,7 @@ async fn test_create_team_unique_violation() {
         jwt_secret: Arc::new("test-jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     let admin = RequireAdmin(AuthClaims {
@@ -1033,6 +1048,7 @@ fn test_build_router_instantiates() {
         jwt_secret: Arc::new("jwt-secret".to_string()),
         proxy_router: None,
         rate_limiter: None,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
     let mcp_state = crate::mcp::McpState::new("jwt-secret".to_string());
     let cors = build_cors_layer_from_string(Some("http://localhost:3000")).unwrap();

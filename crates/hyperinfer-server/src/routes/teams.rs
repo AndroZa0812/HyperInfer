@@ -20,6 +20,18 @@ pub struct CreateTeamRequest {
 }
 
 #[derive(Deserialize, ToSchema)]
+pub struct UpdateTeamRequest {
+    pub name: String,
+    pub budget_cents: i64,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct UpsertQuotaRequest {
+    pub rpm_limit: i32,
+    pub tpm_limit: i32,
+}
+
+#[derive(Deserialize, ToSchema)]
 pub struct CreateModelAliasRequest {
     pub team_id: String,
     pub alias: String,
@@ -272,6 +284,130 @@ pub async fn get_usage_summary<D: Database, C: ConfigStore>(
                 "Failed to get usage summary",
             )
                 .into_response(),
+        },
+    }
+}
+
+pub async fn update_team<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Path(team_id): Path<String>,
+    Json(req): Json<UpdateTeamRequest>,
+) -> impl IntoResponse {
+    let name = req.name.trim();
+    if name.is_empty() {
+        return (StatusCode::BAD_REQUEST, "Team name is required").into_response();
+    }
+    if req.budget_cents < 0 {
+        return (StatusCode::BAD_REQUEST, "Budget must be non-negative").into_response();
+    }
+
+    match state.db.update_team(&team_id, name, req.budget_cents).await {
+        Ok(team) => Json(team).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            DbError::UniqueViolation(msg) => (StatusCode::CONFLICT, msg).into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update team").into_response(),
+        },
+    }
+}
+
+pub async fn delete_team<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    RequireAdmin(claims): RequireAdmin,
+    Path(team_id): Path<String>,
+) -> impl IntoResponse {
+    let is_own_team = match (
+        uuid::Uuid::parse_str(&claims.team_id),
+        uuid::Uuid::parse_str(&team_id),
+    ) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => claims.team_id == team_id,
+    };
+    if is_own_team {
+        return (StatusCode::BAD_REQUEST, "Cannot delete your own team").into_response();
+    }
+
+    match state.db.delete_team(&team_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Team not found").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete team").into_response(),
+        },
+    }
+}
+
+pub async fn list_model_aliases<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    Extension(claims): Extension<AuthClaims>,
+    Query(params): Query<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let team_id = if claims.role == "admin" {
+        params
+            .get("team_id")
+            .cloned()
+            .unwrap_or_else(|| claims.team_id.clone())
+    } else {
+        claims.team_id.clone()
+    };
+
+    match state.db.list_model_aliases(&team_id).await {
+        Ok(aliases) => Json(aliases).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list model aliases",
+            )
+                .into_response(),
+        },
+    }
+}
+
+pub async fn delete_model_alias<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Path(alias_id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.delete_model_alias(&alias_id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            DbError::NotFound => (StatusCode::NOT_FOUND, "Model alias not found").into_response(),
+            _ => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to delete model alias",
+            )
+                .into_response(),
+        },
+    }
+}
+
+pub async fn upsert_quota<D: Database, C: ConfigStore>(
+    State(state): State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    Path(team_id): Path<String>,
+    Json(req): Json<UpsertQuotaRequest>,
+) -> impl IntoResponse {
+    if req.rpm_limit <= 0 || req.tpm_limit <= 0 {
+        return (
+            StatusCode::BAD_REQUEST,
+            "RPM and TPM limits must be positive",
+        )
+            .into_response();
+    }
+
+    match state
+        .db
+        .upsert_quota(&team_id, req.rpm_limit, req.tpm_limit)
+        .await
+    {
+        Ok(quota) => Json(quota).into_response(),
+        Err(e) => match e {
+            DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
+            _ => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save quota").into_response(),
         },
     }
 }
