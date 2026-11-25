@@ -154,7 +154,27 @@ pub fn to_chat_request(model: &str, req: GeminiGenerateRequest) -> ChatRequest {
         let text = extract_text_from_parts(&content.parts);
         let tool_calls = extract_tool_calls_from_parts(&content.parts);
 
-        if let Some(calls) = tool_calls {
+        let tool_results: Vec<_> = content
+            .parts
+            .iter()
+            .filter_map(|part| part.function_response.as_ref())
+            .collect();
+
+        if !tool_results.is_empty() {
+            for result in tool_results {
+                let name = result
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let output = result
+                    .get("response")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null)
+                    .to_string();
+                messages.push(ChatMessage::tool_result("", name, output));
+            }
+        } else if let Some(calls) = tool_calls {
             messages.push(ChatMessage::assistant_with_tools(text, calls));
         } else {
             match role {
@@ -240,6 +260,18 @@ pub fn chunk_to_sse_json(chunk: &ChatChunk) -> String {
     let mut parts = Vec::new();
     if !chunk.delta.is_empty() {
         parts.push(serde_json::json!({ "text": chunk.delta }));
+    }
+    if let Some(calls) = &chunk.tool_calls {
+        for call in calls {
+            let args: serde_json::Value =
+                serde_json::from_str(&call.arguments).unwrap_or_else(|_| serde_json::json!({}));
+            parts.push(serde_json::json!({
+                "functionCall": {
+                    "name": call.name,
+                    "args": args
+                }
+            }));
+        }
     }
 
     let finish_reason = chunk.finish_reason.as_deref().map(|r| match r {

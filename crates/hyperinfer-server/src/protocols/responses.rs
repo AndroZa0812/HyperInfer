@@ -89,14 +89,57 @@ pub fn to_chat_request(req: ResponsesRequest) -> ChatRequest {
         messages.push(ChatMessage::user(s.to_string()));
     } else if let Some(arr) = req.input.as_array() {
         for item in arr {
-            let role_str = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
-            let role = role_from_string(role_str);
-            let text = extract_text_from_input_item(item);
-            match role {
-                MessageRole::User => messages.push(ChatMessage::user(text)),
-                MessageRole::Assistant => messages.push(ChatMessage::assistant(text)),
-                MessageRole::System => messages.push(ChatMessage::system(text)),
-                MessageRole::Tool => messages.push(ChatMessage::tool_result("", "", text)),
+            match item.get("type").and_then(|v| v.as_str()) {
+                Some("function_call_output") => {
+                    let call_id = item
+                        .get("call_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let output = match item.get("output") {
+                        Some(serde_json::Value::String(s)) => s.clone(),
+                        Some(other) => other.to_string(),
+                        None => String::new(),
+                    };
+                    messages.push(ChatMessage::tool_result(call_id, "", output));
+                }
+                Some("function_call") => {
+                    let call_id = item
+                        .get("call_id")
+                        .or_else(|| item.get("id"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = item
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let arguments = match item.get("arguments") {
+                        Some(serde_json::Value::String(s)) => s.clone(),
+                        Some(other) => other.to_string(),
+                        None => "{}".to_string(),
+                    };
+                    messages.push(ChatMessage::assistant_with_tools(
+                        "",
+                        vec![hyperinfer_core::ToolCall {
+                            id: call_id,
+                            name,
+                            arguments,
+                        }],
+                    ));
+                }
+                _ => {
+                    let role_str = item.get("role").and_then(|v| v.as_str()).unwrap_or("user");
+                    let role = role_from_string(role_str);
+                    let text = extract_text_from_input_item(item);
+                    match role {
+                        MessageRole::User => messages.push(ChatMessage::user(text)),
+                        MessageRole::Assistant => messages.push(ChatMessage::assistant(text)),
+                        MessageRole::System => messages.push(ChatMessage::system(text)),
+                        MessageRole::Tool => messages.push(ChatMessage::tool_result("", "", text)),
+                    }
+                }
             }
         }
     }
@@ -188,6 +231,21 @@ pub fn chunk_to_sse_events(chunk: &ChatChunk, is_first: bool) -> Vec<(String, St
             "delta": chunk.delta
         });
         events.push(("response.output_text.delta".to_string(), delta.to_string()));
+    }
+
+    if let Some(calls) = &chunk.tool_calls {
+        for call in calls {
+            let item = serde_json::json!({
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "call_id": call.id,
+                    "name": call.name,
+                    "arguments": call.arguments
+                }
+            });
+            events.push(("response.output_item.added".to_string(), item.to_string()));
+        }
     }
 
     if chunk.finish_reason.is_some() {

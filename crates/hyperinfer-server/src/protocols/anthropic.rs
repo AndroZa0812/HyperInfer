@@ -271,8 +271,39 @@ pub fn chunk_to_sse_events(chunk: &ChatChunk, is_first: bool) -> Vec<(String, St
         events.push(("content_block_delta".to_string(), delta.to_string()));
     }
 
+    if let Some(calls) = &chunk.tool_calls {
+        for (idx, call) in calls.iter().enumerate() {
+            let block_idx = idx + 1;
+            let input: serde_json::Value =
+                serde_json::from_str(&call.arguments).unwrap_or_else(|_| serde_json::json!({}));
+            let tool_start = serde_json::json!({
+                "type": "content_block_start",
+                "index": block_idx,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": call.id,
+                    "name": call.name,
+                    "input": input
+                }
+            });
+            events.push(("content_block_start".to_string(), tool_start.to_string()));
+            let tool_stop = serde_json::json!({
+                "type": "content_block_stop",
+                "index": block_idx
+            });
+            events.push(("content_block_stop".to_string(), tool_stop.to_string()));
+        }
+    }
+
     // Final events
     if chunk.finish_reason.is_some() {
+        // Close the text block before ending the message.
+        let block_stop = serde_json::json!({
+            "type": "content_block_stop",
+            "index": 0
+        });
+        events.push(("content_block_stop".to_string(), block_stop.to_string()));
+
         // message_delta with usage
         let usage = chunk
             .usage
@@ -407,8 +438,9 @@ mod tests {
         };
 
         let final_events = chunk_to_sse_events(&final_chunk, false);
-        assert_eq!(final_events.len(), 2); // message_delta, message_stop
-        assert_eq!(final_events[0].0, "message_delta");
-        assert_eq!(final_events[1].0, "message_stop");
+        assert_eq!(final_events.len(), 3); // content_block_stop, message_delta, message_stop
+        assert_eq!(final_events[0].0, "content_block_stop");
+        assert_eq!(final_events[1].0, "message_delta");
+        assert_eq!(final_events[2].0, "message_stop");
     }
 }
