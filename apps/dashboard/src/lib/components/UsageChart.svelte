@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import * as echarts from 'echarts';
+	import { theme } from '$lib/stores/theme';
 
 	interface DataPoint {
 		date: string;
@@ -18,67 +19,84 @@
 	let { data = [], type = 'line', class: className = '' }: Props = $props();
 
 	let chartEl: HTMLElement;
-	let chart: echarts.ECharts;
+	let chart = $state<echarts.ECharts | null>(null);
 
-	const primaryColor = 'var(--primary)';
-	const primaryContainer = 'var(--primary-container)';
+	function resolveColor(varName: string, fallback: string): string {
+		try {
+			const computed = getComputedStyle(document.documentElement);
+			const value = computed.getPropertyValue(varName).trim();
+			if (value) return value;
+		} catch {
+			// ignore
+		}
+		return fallback;
+	}
 
 	$effect(() => {
-		if (chart && data.length) {
-			const options: echarts.EChartsOption = {
-				tooltip: {
-					trigger: 'axis',
-					backgroundColor: 'var(--surface-container-lowest)',
-					borderColor: 'var(--ghost-border)',
-					textStyle: { color: 'var(--on-surface)', fontFamily: 'Inter' }
-				},
-				xAxis: type !== 'donut' ? {
-					type: 'category',
-					data: data.map((d: DataPoint) => d.date),
-					axisLine: { lineStyle: { color: 'var(--outline-variant)' } },
-					axisLabel: { color: 'var(--on-surface-variant)', fontFamily: 'Inter', fontSize: 11 },
-				} : undefined,
-				yAxis: type !== 'donut' ? {
-					type: 'value',
-					axisLine: { show: false },
-					splitLine: { lineStyle: { color: 'var(--ghost-border)' } },
-					axisLabel: { color: 'var(--on-surface-variant)', fontFamily: 'Inter', fontSize: 11 },
-				} : undefined,
-				series: [{
-					type: type === 'donut' ? 'pie' : type,
-					data: type === 'donut'
-						? data.map((d: DataPoint) => ({ name: d.date, value: d.cost }))
-						: data.map((d: DataPoint) => type === 'line' ? d.tokens : d.cost),
-					...(type === 'line' ? {
-						smooth: true,
-						lineStyle: { width: 2.5, color: primaryColor },
-						areaStyle: {
-							color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-								{ offset: 0, color: 'rgba(70, 72, 212, 0.15)' },
-								{ offset: 1, color: 'rgba(70, 72, 212, 0.01)' }
-							])
-						},
-						itemStyle: { color: primaryColor },
-					} : {}),
-					...(type === 'bar' ? {
-						itemStyle: {
-							color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-								{ offset: 0, color: primaryColor },
-								{ offset: 1, color: primaryContainer }
-							]),
-							borderRadius: [4, 4, 0, 0]
-						},
-					} : {}),
-					...(type === 'donut' ? {
-						radius: ['50%', '75%'],
-						itemStyle: { borderRadius: 6, borderColor: 'var(--surface-container-lowest)', borderWidth: 2 },
-						label: { show: false },
-					} : {}),
-				}],
-				grid: type !== 'donut' ? { left: 48, right: 16, top: 16, bottom: 32 } : undefined,
-			};
-			chart.setOption(options);
-		}
+		const _currentTheme = $theme;
+		void _currentTheme;
+		if (!chart || !data.length) return;
+		const primary = resolveColor('--primary', '#4648d4');
+		const primaryContainer = resolveColor('--primary-container', '#6063ee');
+		const surfaceLowest = resolveColor('--surface-container-lowest', '#ffffff');
+		const ghostBorder = resolveColor('--ghost-border', '#131b2e');
+		const outlineVariant = resolveColor('--outline-variant', '#464554');
+		const onSurface = resolveColor('--on-surface', '#131b2e');
+		const onSurfaceVariant = resolveColor('--on-surface-variant', '#464554');
+
+		const options: echarts.EChartsOption = {
+			tooltip: {
+				trigger: 'axis',
+				backgroundColor: surfaceLowest,
+				borderColor: ghostBorder,
+				textStyle: { color: onSurface, fontFamily: 'Inter' }
+			},
+			xAxis: type !== 'donut' ? {
+				type: 'category',
+				data: data.map((d: DataPoint) => d.date),
+				axisLine: { lineStyle: { color: outlineVariant } },
+				axisLabel: { color: onSurfaceVariant, fontFamily: 'Inter', fontSize: 11 },
+			} : undefined,
+			yAxis: type !== 'donut' ? {
+				type: 'value',
+				axisLine: { show: false },
+				splitLine: { lineStyle: { color: ghostBorder } },
+				axisLabel: { color: onSurfaceVariant, fontFamily: 'Inter', fontSize: 11 },
+			} : undefined,
+			series: [{
+				type: type === 'donut' ? 'pie' : type,
+				data: type === 'donut'
+					? data.map((d: DataPoint) => ({ name: d.date, value: d.cost }))
+					: data.map((d: DataPoint) => type === 'line' ? d.tokens : d.cost),
+				...(type === 'line' ? {
+					smooth: true,
+					lineStyle: { width: 2.5, color: primary },
+					areaStyle: {
+						color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+							{ offset: 0, color: 'rgba(70, 72, 212, 0.15)' },
+							{ offset: 1, color: 'rgba(70, 72, 212, 0.01)' }
+						])
+					},
+					itemStyle: { color: primary },
+				} : {}),
+				...(type === 'bar' ? {
+					itemStyle: {
+						color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+							{ offset: 0, color: primary },
+							{ offset: 1, color: primaryContainer }
+						]),
+						borderRadius: [4, 4, 0, 0]
+					},
+				} : {}),
+				...(type === 'donut' ? {
+					radius: ['50%', '75%'],
+					itemStyle: { borderRadius: 6, borderColor: surfaceLowest, borderWidth: 2 },
+					label: { show: false },
+				} : {}),
+			}],
+			grid: type !== 'donut' ? { left: 48, right: 16, top: 16, bottom: 32 } : undefined,
+		};
+		chart.setOption(options);
 	});
 
 	onMount(() => {

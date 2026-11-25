@@ -14,11 +14,15 @@ export interface Team {
 
 export interface ApiKey {
     id: string;
-    name: string;
-    prefix: string;
+    name: string | null;
+    prefix?: string;
     is_active: boolean;
     created_at: string;
-    last_used_at?: string;
+    last_used_at?: string | null;
+}
+
+export interface CreateApiKeyResponse extends ApiKey {
+    key: string;
 }
 
 export interface UsageData {

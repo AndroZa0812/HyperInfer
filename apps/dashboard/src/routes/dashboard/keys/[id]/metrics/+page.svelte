@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { ApiKey } from '$lib/types';
     import { onMount } from 'svelte';
@@ -10,7 +10,7 @@
     let keyData = $state<ApiKey | null>(null);
     let loading = $state(true);
 
-    let keyId = $derived($page.params.id);
+    let keyId = $derived(page.params.id);
 
     onMount(async () => {
         if (!keyId) { loading = false; return; }
@@ -32,11 +32,11 @@
     <div class="space-y-8">
         <Breadcrumbs items={[
             { label: 'Keys', href: '/dashboard/keys' },
-            { label: keyData.name }
+            { label: keyData.name || 'Unnamed Key' }
         ]} />
 
         <div class="flex items-center gap-3">
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">{keyData.name}</h1>
+            <h1 class="text-3xl font-bold text-[var(--on-surface)]">{keyData.name || 'Unnamed Key'}</h1>
             <Badge variant={keyData.is_active ? 'success' : 'error'} label={keyData.is_active ? 'Active' : 'Revoked'} />
         </div>
 

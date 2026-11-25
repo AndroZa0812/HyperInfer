@@ -385,6 +385,11 @@ impl Agent {
         estimate_messages_tokens(&self.history)
     }
 
+    /// Get a snapshot of session-wide output filter statistics.
+    pub fn filter_stats(&self) -> crate::output_filter::SessionFilterSnapshot {
+        self.tool_ctx.filter_stats.snapshot()
+    }
+
     /// Append a message directly to the agent's conversation history.
     pub fn push_message(&mut self, message: ChatMessage) {
         self.history.push(message);

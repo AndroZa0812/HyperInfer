@@ -1,35 +1,33 @@
 <script lang="ts">
-    import { page } from '$app/stores';
+    import { page } from '$app/state';
     import { api } from '$lib/api';
     import type { Team, UsageData } from '$lib/types';
     import Card from '$lib/components/Card.svelte';
     import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
+    import StatCard from '$lib/components/StatCard.svelte';
 
     let team = $state<Team | null>(null);
-    let usageData = $state<UsageData[]>([]);
+    let usage = $state<UsageData | null>(null);
     let loading = $state(true);
 
-    let teamId = $derived($page.params.id);
-
-    let usedCents = $derived(usageData.reduce((sum, d) => sum + d.cost, 0));
-    let usedPercent = $derived(team && team.budget_cents > 0 ? Math.min(usedCents / team.budget_cents, 1) : 0);
+    let teamId = $derived(page.params.id);
 
     $effect(() => {
         if (!teamId) return;
         let cancelled = false;
         loading = true;
-        Promise.all([api.getTeam(teamId), api.getUsage(teamId, '30d').catch(() => [])])
+        Promise.all([api.getTeam(teamId), api.getUsage(teamId).catch(() => null)])
             .then(([t, u]) => {
                 if (cancelled) return;
                 team = t;
-                usageData = u;
+                usage = u;
                 loading = false;
             })
             .catch((e) => {
                 if (cancelled) return;
                 console.error('Failed to load team budget', e);
                 team = null;
-                usageData = [];
+                usage = null;
                 loading = false;
             });
         return () => { cancelled = true; };
@@ -52,23 +50,21 @@
 
         <Card>
             <div class="space-y-6">
-                <h2 class="text-lg font-semibold text-[var(--on-surface)]">Budget Progress</h2>
-
+                <h2 class="text-lg font-semibold text-[var(--on-surface)]">Monthly Budget</h2>
                 <div>
-                    <div class="flex items-end justify-between mb-3">
-                        <span class="text-3xl font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">
-                            {'$'}{(usedCents / 100).toFixed(2)}
-                        </span>
-                        <span class="text-sm text-[var(--on-surface-variant)]">
-                            of {'$'}{(team.budget_cents / 100).toFixed(2)} used ({(usedPercent * 100).toFixed(1)}%)
-                        </span>
-                    </div>
-                    <div class="h-4 bg-[var(--surface-container)] rounded-full overflow-hidden">
-                        <div class="h-full rounded-full transition-all duration-500" style="width: {usedPercent * 100}%; background: linear-gradient(90deg, var(--primary), var(--primary-container))"></div>
-                    </div>
+                    <span class="text-3xl font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">
+                        {'$'}{(team.budget_cents / 100).toFixed(2)}
+                    </span>
+                    <span class="text-sm text-[var(--on-surface-variant)] ml-2">per month</span>
                 </div>
             </div>
         </Card>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard icon="speed" label="Total Requests" value={usage ? usage.total_requests.toLocaleString() : '0'} />
+            <StatCard icon="security" label="Total Tokens" value={usage ? (usage.total_input_tokens + usage.total_output_tokens).toLocaleString() : '0'} />
+            <StatCard icon="timer" label="Average Latency" value={usage ? `${Math.round(usage.avg_response_time_ms)}ms` : '0ms'} />
+        </div>
     </div>
 {:else}
     <p class="text-[var(--on-surface-variant)]">Team not found</p>

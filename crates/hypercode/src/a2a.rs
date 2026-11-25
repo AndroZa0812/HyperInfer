@@ -636,6 +636,9 @@ impl A2aServer {
 
             let mut rec = record_for_task.lock().await;
             rec.pending_approval = None;
+            if rec.task.status.state.is_terminal() {
+                return;
+            }
             match outcome {
                 Ok(res) => {
                     rec.push_artifact(
@@ -745,8 +748,13 @@ impl A2aServer {
                         let mut rec = rec_arc.lock().await;
                         if !rec.task.status.state.is_terminal() {
                             rec.cancel_token.cancel();
+                            // Allow cooperative cancellation to kill running subprocesses cleanly
+                            // before falling back to a forced task abort.
                             if let Some(handle) = rec.abort_handle.take() {
-                                handle.abort();
+                                tokio::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                                    handle.abort();
+                                });
                             }
                             rec.pending_approval = None;
                             rec.set_status(

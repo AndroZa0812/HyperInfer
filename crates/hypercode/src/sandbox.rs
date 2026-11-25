@@ -188,6 +188,9 @@ async fn run_command_with_timeout_and_cancel(
 ) -> Result<std::process::Output, String> {
     #[cfg(unix)]
     cmd.process_group(0);
+    // Ensure child processes are terminated when the wait future is dropped on
+    // timeout or cancellation (especially on non-Unix platforms).
+    cmd.kill_on_drop(true);
 
     let child = cmd
         .spawn()

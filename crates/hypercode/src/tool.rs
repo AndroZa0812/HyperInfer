@@ -1,5 +1,6 @@
 //! Core Tool trait, execution context, and registry for HyperCode.
 
+use crate::output_filter::{OutputFilterConfig, SessionFilterStats};
 use crate::sandbox::{CommandRunner, HostRunner, SandboxPolicy};
 use async_trait::async_trait;
 use hyperinfer_core::{ToolCall, ToolDefinition};
@@ -23,6 +24,10 @@ pub struct ToolContext {
     pub command_runner: Arc<dyn CommandRunner>,
     /// Token to cancel the current turn (propagated to tool execution).
     pub cancel_token: CancellationToken,
+    /// Output filtering configuration for bash tool results.
+    pub output_filter_config: OutputFilterConfig,
+    /// Session-wide filter statistics.
+    pub filter_stats: Arc<SessionFilterStats>,
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -32,6 +37,7 @@ impl std::fmt::Debug for ToolContext {
             .field("command_timeout", &self.command_timeout)
             .field("sandbox_policy", &self.sandbox_policy)
             .field("command_runner", &self.command_runner.name())
+            .field("output_filter_config", &self.output_filter_config)
             .finish()
     }
 }
@@ -47,6 +53,8 @@ impl ToolContext {
             sandbox_policy,
             command_runner: Arc::new(HostRunner),
             cancel_token: CancellationToken::new(),
+            output_filter_config: OutputFilterConfig::default(),
+            filter_stats: Arc::new(SessionFilterStats::default()),
         }
     }
 
@@ -67,6 +75,11 @@ impl ToolContext {
 
     pub fn with_command_runner<R: CommandRunner + 'static>(mut self, runner: R) -> Self {
         self.command_runner = Arc::new(runner);
+        self
+    }
+
+    pub fn with_output_filter_config(mut self, config: OutputFilterConfig) -> Self {
+        self.output_filter_config = config;
         self
     }
 

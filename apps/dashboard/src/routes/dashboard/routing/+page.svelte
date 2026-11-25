@@ -2,6 +2,11 @@
     import { api } from '$lib/api';
     import type { Deployment, CreateDeploymentRequest } from '$lib/types';
     import { onMount } from 'svelte';
+    import Card from '$lib/components/Card.svelte';
+    import Modal from '$lib/components/Modal.svelte';
+    import Button from '$lib/components/Button.svelte';
+    import Badge from '$lib/components/Badge.svelte';
+    import Input from '$lib/components/Input.svelte';
 
     let deployments = $state<Deployment[]>([]);
     let loading = $state(true);
@@ -9,6 +14,9 @@
     let editingId = $state<string | null>(null);
     let modelFilter = $state('gpt-4');
     let createError = $state('');
+    let pendingDeleteId = $state<string | null>(null);
+    let showDeleteConfirm = $state(false);
+    let deleteError = $state('');
 
     let formData = $state<CreateDeploymentRequest>({
         name: '',
@@ -64,6 +72,7 @@
             const deployment = await api.updateDeployment(editingId, formData);
             deployments = deployments.map(d => d.id === editingId ? deployment : d);
             editingId = null;
+            showCreate = false;
             resetForm();
         } catch (e) {
             console.error('Failed to update deployment', e);
@@ -71,13 +80,29 @@
         }
     }
 
-    async function deleteDeployment(id: string) {
-        if (!confirm('Are you sure you want to delete this deployment?')) return;
+    function confirmDelete(id: string) {
+        pendingDeleteId = id;
+        deleteError = '';
+        showDeleteConfirm = true;
+    }
+
+    function cancelDelete() {
+        pendingDeleteId = null;
+        deleteError = '';
+        showDeleteConfirm = false;
+    }
+
+    async function deleteDeployment() {
+        if (!pendingDeleteId) return;
+        deleteError = '';
         try {
-            await api.deleteDeployment(id);
-            deployments = deployments.filter(d => d.id !== id);
+            await api.deleteDeployment(pendingDeleteId);
+            deployments = deployments.filter(d => d.id !== pendingDeleteId);
+            pendingDeleteId = null;
+            showDeleteConfirm = false;
         } catch (e) {
             console.error('Failed to delete deployment', e);
+            deleteError = 'Failed to delete deployment. Please try again.';
         }
     }
 
@@ -123,117 +148,140 @@
 
 <div class="space-y-6">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold">Routing Deployments</h1>
+        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Routing Deployments</h1>
         <div class="flex gap-2">
             <input
                 type="text"
                 placeholder="Filter by model..."
-                class="px-3 py-2 border rounded-lg"
+                class="px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
                 bind:value={modelFilter}
                 onkeydown={(e) => e.key === 'Enter' && loadDeployments()}
             />
-            <button
-                class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg"
+            <Button
                 onclick={() => { showCreate = true; editingId = null; resetForm(); }}
             >
                 Add Deployment
-            </button>
+            </Button>
         </div>
     </div>
 
     {#if loading}
-        <div class="text-center py-8">Loading...</div>
+        <div class="text-center py-8 text-[var(--on-surface-variant)]">Loading...</div>
     {:else if deployments.length === 0}
-        <div class="text-center py-8 text-gray-500">No deployments found for model "{modelFilter}"</div>
+        <div class="text-center py-8 text-[var(--on-surface-variant)]">No deployments found for model "{modelFilter}"</div>
     {:else}
-        <div class="bg-[var(--bg-primary)] rounded-lg border overflow-hidden">
-            <table class="w-full">
-                <thead>
-                    <tr class="border-b bg-[var(--bg-secondary)]">
-                        <th class="text-left p-3">Name</th>
-                        <th class="text-left p-3">Provider</th>
-                        <th class="text-left p-3">Model</th>
-                        <th class="text-left p-3">Base URL</th>
-                        <th class="text-left p-3">Weight</th>
-                        <th class="text-left p-3">Status</th>
-                        <th class="text-left p-3">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {#each deployments as deployment}
-                        <tr class="border-b hover:bg-[var(--bg-secondary)]">
-                            <td class="p-3">{deployment.name}</td>
-                            <td class="p-3">{deployment.provider}</td>
-                            <td class="p-3">{deployment.model}</td>
-                            <td class="p-3 text-sm truncate max-w-[200px]">{deployment.base_url}</td>
-                            <td class="p-3">{deployment.weight}</td>
-                            <td class="p-3">
-                                <span class="px-2 py-1 rounded text-xs {deployment.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
-                                    {deployment.is_active ? 'Active' : 'Inactive'}
-                                </span>
-                            </td>
-                            <td class="p-3">
-                                <button class="text-[var(--accent)] mr-2" onclick={() => startEdit(deployment)}>Edit</button>
-                                <button class="text-red-500" onclick={() => deleteDeployment(deployment.id)}>Delete</button>
-                            </td>
+        <Card variant="outlined" padding="none">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="bg-[var(--surface-container-low)]">
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Name</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Provider</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Model</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Base URL</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Weight</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</th>
+                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Actions</th>
                         </tr>
-                    {/each}
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody>
+                        {#each deployments as deployment}
+                            <tr class="border-t border-[var(--ghost-border)] hover:bg-[var(--surface-container-low)]/50 transition-colors">
+                                <td class="p-3 text-sm text-[var(--on-surface)]">{deployment.name}</td>
+                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.provider}</td>
+                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.model}</td>
+                                <td class="p-3 text-sm text-[var(--on-surface-variant)] truncate max-w-[200px]">{deployment.base_url}</td>
+                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.weight}</td>
+                                <td class="p-3">
+                                    <Badge variant={deployment.is_active ? 'success' : 'error'} label={deployment.is_active ? 'Active' : 'Inactive'} />
+                                </td>
+                                <td class="p-3">
+                                    <div class="flex gap-2">
+                                        <Button variant="secondary" size="sm" onclick={() => startEdit(deployment)}>Edit</Button>
+                                        <Button variant="ghost" size="sm" class="text-[var(--error)]" onclick={() => confirmDelete(deployment.id)}>Delete</Button>
+                                    </div>
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+        </Card>
     {/if}
 
-    {#if showCreate}
-        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-[var(--bg-primary)] rounded-lg p-6 w-full max-w-md">
-                <h2 class="text-xl font-bold mb-4">{editingId ? 'Edit Deployment' : 'Create Deployment'}</h2>
-                {#if createError}
-                    <div class="text-red-500 text-sm mb-2">{createError}</div>
-                {/if}
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm mb-1">Name</label>
-                        <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.name} />
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">Provider</label>
-                        <select class="w-full px-3 py-2 border rounded-lg" bind:value={formData.provider}>
-                            <option value="openai">OpenAI</option>
-                            <option value="anthropic">Anthropic</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">Model</label>
-                        <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.model} />
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">Base URL</label>
-                        <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.base_url} />
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">API Key Ref</label>
-                        <input class="w-full px-3 py-2 border rounded-lg" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">Weight</label>
-                        <input type="number" class="w-full px-3 py-2 border rounded-lg" bind:value={formData.weight} min="0" />
-                    </div>
-                    <div>
-                        <label class="block text-sm mb-1">Priority</label>
-                        <input type="number" class="w-full px-3 py-2 border rounded-lg" bind:value={formData.priority} min="0" />
-                    </div>
-                    <div class="flex items-center gap-2">
-                        <input type="checkbox" id="is_active" bind:checked={formData.is_active} />
-                        <label for="is_active">Active</label>
-                    </div>
+    <Modal bind:open={showCreate}>
+        <div class="p-6">
+            <h2 class="text-xl font-bold text-[var(--on-surface)] mb-4">{editingId ? 'Edit Deployment' : 'Create Deployment'}</h2>
+            {#if createError}
+                <div class="text-[var(--error)] text-sm mb-4">{createError}</div>
+            {/if}
+            <div class="space-y-4">
+                <Input id="dep-name" label="Name" bind:value={formData.name} />
+                <div>
+                    <label for="dep-provider" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Provider</label>
+                    <select
+                        id="dep-provider"
+                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
+                        bind:value={formData.provider}
+                    >
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic</option>
+                    </select>
                 </div>
-                <div class="flex justify-end gap-2 mt-6">
-                    <button class="px-4 py-2 border rounded-lg" onclick={cancelEdit}>Cancel</button>
-                    <button class="px-4 py-2 bg-[var(--accent)] text-white rounded-lg" onclick={editingId ? updateDeployment : createDeployment}>
-                        {editingId ? 'Update' : 'Create'}
-                    </button>
+                <Input id="dep-model" label="Model" bind:value={formData.model} />
+                <Input id="dep-base-url" label="Base URL" bind:value={formData.base_url} />
+                <Input id="dep-api-key-ref" label="API Key Ref" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />
+                <div>
+                    <label for="dep-weight" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Weight</label>
+                    <input
+                        id="dep-weight"
+                        type="number"
+                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
+                        bind:value={formData.weight}
+                        min="0"
+                    />
+                </div>
+                <div>
+                    <label for="dep-priority" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Priority</label>
+                    <input
+                        id="dep-priority"
+                        type="number"
+                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
+                        bind:value={formData.priority}
+                        min="0"
+                    />
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="dep-is-active" bind:checked={formData.is_active} class="rounded border-[var(--outline-variant)]" />
+                    <label for="dep-is-active" class="text-sm text-[var(--on-surface)]">Active</label>
                 </div>
             </div>
+            <div class="flex justify-end gap-2 mt-6">
+                <Button variant="ghost" onclick={cancelEdit}>Cancel</Button>
+                <Button onclick={editingId ? updateDeployment : createDeployment}>
+                    {editingId ? 'Update' : 'Create'}
+                </Button>
+            </div>
         </div>
-    {/if}
+    </Modal>
+
+    <Modal bind:open={showDeleteConfirm} onclose={cancelDelete}>
+        <div class="p-6">
+            <h2 class="text-xl font-bold text-[var(--on-surface)] mb-2">Delete Deployment</h2>
+            <p class="text-sm text-[var(--on-surface-variant)] mb-4">Are you sure you want to delete this deployment? This action cannot be undone.</p>
+            {#if deleteError}
+                <div class="text-[var(--error)] text-sm mb-4">{deleteError}</div>
+            {/if}
+            <div class="flex justify-end gap-2">
+                <Button variant="ghost" onclick={cancelDelete}>Cancel</Button>
+                <button
+                    type="button"
+                    class="inline-flex items-center justify-center font-medium rounded-lg px-5 py-2.5 text-sm bg-[var(--error)] text-[var(--on-error)] hover:opacity-90 transition-all cursor-pointer"
+                    onclick={deleteDeployment}
+                >
+                    Delete
+                </button>
+            </div>
+        </div>
+    </Modal>
 </div>
