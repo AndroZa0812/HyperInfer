@@ -316,3 +316,116 @@ async fn test_mcp_catalog_mode_search_and_call() {
         .json();
     assert_eq!(call_denied["error"]["code"], -32603);
 }
+
+#[tokio::test]
+async fn test_mcp_double_underscore_name_disabled_and_sse_error() {
+    let (prod_url, _) = spawn_mock_upstream(
+        "my_org__prod",
+        vec![
+            json!({"name": "ping", "description": "Ping prod", "inputSchema": {"type": "object"}}),
+        ],
+    )
+    .await;
+    let (disabled_url, _) = spawn_mock_upstream(
+        "disabled_srv",
+        vec![json!({"name": "noop", "description": "Noop", "inputSchema": {"type": "object"}})],
+    )
+    .await;
+
+    let state = McpState::new("test-secret");
+    state
+        .gateway
+        .register_upstream(UpstreamMcpServer {
+            name: "my_org__prod".to_string(),
+            transport: UpstreamTransport::StreamableHttp { url: prod_url },
+            headers: HashMap::new(),
+            enabled: true,
+        })
+        .await;
+    state
+        .gateway
+        .register_upstream(UpstreamMcpServer {
+            name: "disabled_srv".to_string(),
+            transport: UpstreamTransport::StreamableHttp { url: disabled_url },
+            headers: HashMap::new(),
+            enabled: false,
+        })
+        .await;
+    state
+        .gateway
+        .register_upstream(UpstreamMcpServer {
+            name: "sse_srv".to_string(),
+            transport: UpstreamTransport::Sse {
+                url: "http://127.0.0.1:1/sse".to_string(),
+            },
+            headers: HashMap::new(),
+            enabled: true,
+        })
+        .await;
+
+    let server = build_mcp_server(state);
+    let token = create_jwt_with_team("agent-4", "team-edge", "test-secret");
+
+    // tools/list includes my_org__prod__ping, excludes disabled_srv and sse_srv
+    let list_res: Value = server
+        .post("/mcp")
+        .add_header("Authorization", format!("Bearer {token}"))
+        .json(&json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}))
+        .await
+        .json();
+    let names: Vec<&str> = list_res["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["my_org__prod__ping"]);
+
+    // Calling my_org__prod__ping resolves longest prefix cleanly
+    let call_ok: Value = server
+        .post("/mcp")
+        .add_header("Authorization", format!("Bearer {token}"))
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": { "name": "my_org__prod__ping", "arguments": {} }
+        }))
+        .await
+        .json();
+    assert_eq!(call_ok["result"]["content"][0]["text"], "my_org__prod:ping");
+
+    // Calling disabled_srv__noop returns an error
+    let call_disabled: Value = server
+        .post("/mcp")
+        .add_header("Authorization", format!("Bearer {token}"))
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": { "name": "disabled_srv__noop", "arguments": {} }
+        }))
+        .await
+        .json();
+    assert!(call_disabled["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("disabled"));
+
+    // Calling sse_srv__anything returns explicit unsupported SSE error
+    let call_sse: Value = server
+        .post("/mcp")
+        .add_header("Authorization", format!("Bearer {token}"))
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": { "name": "sse_srv__anything", "arguments": {} }
+        }))
+        .await
+        .json();
+    assert!(call_sse["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("SSE upstream transport"));
+}
