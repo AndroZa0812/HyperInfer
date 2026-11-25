@@ -140,18 +140,9 @@ async fn run_standalone(
     info!("Dashboard URL:     http://{}", actual_addr);
     info!("Admin email:       {}", boot.admin_email);
     info!("Virtual API key:   {} (id)", key_id(&boot.api_key));
-    let show_secrets = actual_addr.ip().is_loopback()
-        && std::env::var("HYPERINFER_SHOW_STANDALONE_SECRETS")
-            .map(|v| v == "1" || v == "true")
-            .unwrap_or(false);
-    if show_secrets {
-        eprintln!("  [local-dev] Admin password:  {}", boot.admin_password);
-        eprintln!("  [local-dev] Virtual API key: {}", boot.api_key);
-    } else {
-        info!(
-            "Tip: set HYPERINFER_STANDALONE_KEY / INITIAL_ADMIN_PASSWORD, or HYPERINFER_SHOW_STANDALONE_SECRETS=1 on localhost to print generated credentials"
-        );
-    }
+    info!(
+        "Tip: set INITIAL_ADMIN_PASSWORD and HYPERINFER_STANDALONE_KEY to use explicit local credentials"
+    );
     if !boot.detected_providers.is_empty() {
         let names: Vec<String> = boot
             .detected_providers

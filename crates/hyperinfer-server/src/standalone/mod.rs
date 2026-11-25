@@ -62,8 +62,10 @@ pub async fn bootstrap_standalone(
 
     let admin_email =
         std::env::var("INITIAL_ADMIN_EMAIL").unwrap_or_else(|_| "admin@localhost".to_string());
-    let admin_password =
-        std::env::var("INITIAL_ADMIN_PASSWORD").unwrap_or_else(|_| "hyperinfer-local".to_string());
+    let admin_password = std::env::var("INITIAL_ADMIN_PASSWORD")
+        .ok()
+        .filter(|p| !p.is_empty())
+        .unwrap_or_else(|| format!("hi-pass-{}", uuid::Uuid::new_v4().simple()));
     let password_hash = crate::db::hash_password(&admin_password)?;
     let user = db
         .create_user(&team.id, &admin_email, "admin", Some(password_hash))
