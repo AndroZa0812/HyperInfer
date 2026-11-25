@@ -503,6 +503,11 @@ async fn test_idor_cross_tenant_get_endpoints_forbidden() {
             is_active: true,
             created_at: now,
             expires_at: None,
+            budget_cents: None,
+            spent_cents: 0,
+            allowed_models: None,
+            rpm_limit: None,
+            tpm_limit: None,
         }))
     });
     let mut state = create_test_state();
@@ -604,6 +609,11 @@ async fn test_resolve_api_key_found() {
         is_active: true,
         created_at: now,
         expires_at: None,
+        budget_cents: None,
+        spent_cents: 0,
+        allowed_models: None,
+        rpm_limit: None,
+        tpm_limit: None,
     };
     let api_key_clone = api_key.clone();
 
@@ -704,6 +714,11 @@ async fn test_create_api_key_success() {
         is_active: true,
         created_at: now,
         expires_at: None,
+        budget_cents: None,
+        spent_cents: 0,
+        allowed_models: None,
+        rpm_limit: None,
+        tpm_limit: None,
     };
     db.expect_create_api_key()
         .with(
@@ -783,6 +798,11 @@ async fn test_create_api_key_defaults_key_and_user_id() {
                 is_active: true,
                 created_at: now,
                 expires_at: None,
+                budget_cents: None,
+                spent_cents: 0,
+                allowed_models: None,
+                rpm_limit: None,
+                tpm_limit: None,
             })
         });
 

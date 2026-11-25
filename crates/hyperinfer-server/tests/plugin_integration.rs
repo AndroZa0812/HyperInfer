@@ -62,6 +62,11 @@ impl Database for StubDb {
                 is_active: true,
                 created_at: Utc::now(),
                 expires_at: None,
+                budget_cents: None,
+                spent_cents: 0,
+                allowed_models: None,
+                rpm_limit: None,
+                tpm_limit: None,
             }))
         } else {
             Ok(None)

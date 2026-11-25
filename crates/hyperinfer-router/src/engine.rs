@@ -142,6 +142,15 @@ impl RouterEngine {
             return Err(RoutingError::NoDeployments(resolved_model.clone()));
         }
 
+        // Filter out quota-exhausted deployments
+        let eligible = self.filter_quota_exhausted(&candidates_vec, state).await;
+
+        if eligible.is_empty() {
+            return Err(RoutingError::AllDeploymentsCooledDown(
+                resolved_model.clone(),
+            ));
+        }
+
         let strategy_name = {
             let groups = self.routing_groups.read().await;
             if let Some(name) = groups.get(&resolved_model) {
@@ -158,7 +167,7 @@ impl RouterEngine {
         })?;
 
         let selected = strategy
-            .select(&resolved_model, &candidates_vec, state, ctx)
+            .select(&resolved_model, &eligible, state, ctx)
             .await?;
 
         Ok(RoutingResult {
@@ -166,6 +175,48 @@ impl RouterEngine {
             attempt: 1,
             fallback_chain: vec![resolved_model],
         })
+    }
+
+    /// Filter out deployments that have exceeded their RPM or TPM limits.
+    async fn filter_quota_exhausted(
+        &self,
+        candidates: &[Arc<Deployment>],
+        state: &dyn RoutingState,
+    ) -> Vec<Arc<Deployment>> {
+        let ids: Vec<&str> = candidates.iter().map(|d| d.id.as_str()).collect();
+        let metrics = match state.get_all_metrics(&ids).await {
+            Ok(m) => m,
+            Err(_) => return candidates.to_vec(),
+        };
+
+        candidates
+            .iter()
+            .filter(|d| {
+                let m = metrics.get(&d.id);
+                let rpm_exceeded = match (d.rpm_limit, m) {
+                    (Some(limit), Some(metrics)) => metrics.rpm_used >= limit,
+                    _ => false,
+                };
+                let tpm_exceeded = match (d.tpm_limit, m) {
+                    (Some(limit), Some(metrics)) => metrics.tpm_used >= limit,
+                    _ => false,
+                };
+                let cooled = m
+                    .and_then(|m| if m.cooled_down { Some(true) } else { None })
+                    .unwrap_or(false);
+                !rpm_exceeded && !tpm_exceeded && !cooled
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Record that a deployment has hit its quota (e.g., 429 response).
+    /// Triggers cooldown so subsequent requests fail over.
+    pub async fn record_quota_exhausted(&self, deployment_id: &str, state: &dyn RoutingState) {
+        // Record multiple failures to trigger cooldown
+        for _ in 0..3 {
+            let _ = state.record_request_failure(deployment_id).await;
+        }
     }
 
     pub async fn route_with_fallback<T: Send + 'static>(
@@ -496,6 +547,97 @@ mod tests {
         let engine = RouterEngine::new(GlobalLimits::default());
         let state = MockState::new();
         engine.record_success("d1", 100.0, 500, &state).await;
+    }
+
+    #[tokio::test]
+    async fn test_quota_exhausted_failover() {
+        use crate::strategy::DeploymentMetrics;
+
+        let engine = RouterEngine::new(GlobalLimits::default());
+        engine
+            .register_strategy(WeightedShuffle::new().boxed())
+            .await;
+
+        // Two deployments for the same model
+        let d1 = make_deployment("gpt-4", "d1");
+        let d2 = make_deployment("gpt-4", "d2");
+        engine.add_deployment(d1).await;
+        engine.add_deployment(d2).await;
+
+        // Simulate d1 being at RPM capacity
+        let state = MockState::new().with_metrics(
+            "d1",
+            DeploymentMetrics {
+                rpm_used: 100,
+                ..Default::default()
+            },
+        );
+
+        // d1 has rpm_limit of 100, so it should be filtered out
+        // We need to set the rpm_limit on the deployment
+        let mut d1_limited = make_deployment("gpt-4", "d1");
+        d1_limited.rpm_limit = Some(100);
+        engine.remove_deployment("d1").await;
+        engine.add_deployment(d1_limited).await;
+
+        let ctx = RoutingContext::default();
+        let result = engine
+            .select_deployment("gpt-4", &state, &ctx)
+            .await
+            .unwrap();
+
+        // Should select d2 since d1 is at capacity
+        assert_eq!(result.deployment.id, "d2");
+    }
+
+    #[tokio::test]
+    async fn test_cooled_down_deployment_failover() {
+        let engine = RouterEngine::new(GlobalLimits::default());
+        engine
+            .register_strategy(WeightedShuffle::new().boxed())
+            .await;
+
+        let d1 = make_deployment("gpt-4", "d1");
+        let d2 = make_deployment("gpt-4", "d2");
+        engine.add_deployment(d1).await;
+        engine.add_deployment(d2).await;
+
+        // Simulate d1 being cooled down (as would happen after quota exhaustion)
+        let state = MockState::new().with_cooldown("d1");
+
+        let ctx = RoutingContext::default();
+        let result = engine
+            .select_deployment("gpt-4", &state, &ctx)
+            .await
+            .unwrap();
+
+        // Should select d2 since d1 is cooled down
+        assert_eq!(result.deployment.id, "d2");
+    }
+
+    #[tokio::test]
+    async fn test_all_cooled_down_returns_error() {
+        let engine = RouterEngine::new(GlobalLimits::default());
+        engine
+            .register_strategy(WeightedShuffle::new().boxed())
+            .await;
+
+        let d1 = make_deployment("gpt-4", "d1");
+        let d2 = make_deployment("gpt-4", "d2");
+        engine.add_deployment(d1).await;
+        engine.add_deployment(d2).await;
+
+        // Both deployments cooled down
+        let state = MockState::new().with_cooldown("d1").with_cooldown("d2");
+
+        let ctx = RoutingContext::default();
+        let result = engine.select_deployment("gpt-4", &state, &ctx).await;
+
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            RoutingError::AllDeploymentsCooledDown(_)
+        ));
     }
 
     #[tokio::test]

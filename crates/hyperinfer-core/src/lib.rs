@@ -5,6 +5,7 @@
 
 #![allow(clippy::double_must_use)]
 
+pub mod cost;
 pub mod error;
 pub mod plugin;
 pub mod rate_limiting;
@@ -14,6 +15,7 @@ pub mod telemetry_consumer;
 pub mod traits;
 pub mod types;
 
+pub use cost::{CostCalculator, TokenCostWeights, WeightedUsage};
 pub use error::{ConfigError, DbError, HyperInferError};
 pub use plugin::{GatewayPlugin, PluginAction, PluginContext, PluginPipeline};
 pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY_PREFIX};

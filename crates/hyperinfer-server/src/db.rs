@@ -133,7 +133,7 @@ impl Database for SqlxDb {
     async fn get_api_key(&self, id: &str) -> Result<Option<ApiKey>, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: Option<ApiKeyRow> = sqlx::query_as(
-            "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE id = $1"
+            "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit FROM api_keys WHERE id = $1"
         )
         .bind(uuid)
         .fetch_optional(&self.pool)
@@ -144,7 +144,7 @@ impl Database for SqlxDb {
 
     async fn get_api_key_by_hash(&self, key_hash: &str) -> Result<Option<ApiKey>, DbError> {
         let result: Option<ApiKeyRow> = sqlx::query_as(
-            "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE key_hash = $1 AND is_active = true"
+            "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit FROM api_keys WHERE key_hash = $1 AND is_active = true"
         )
         .bind(key_hash)
         .fetch_optional(&self.pool)
@@ -163,7 +163,7 @@ impl Database for SqlxDb {
         let user_uuid = uuid::Uuid::parse_str(user_id).map_err(|_| DbError::InvalidUuid)?;
         let team_uuid = uuid::Uuid::parse_str(team_id).map_err(|_| DbError::InvalidUuid)?;
         let result: ApiKeyRow = sqlx::query_as(
-            "INSERT INTO api_keys (key_hash, user_id, team_id, name) VALUES ($1, $2, $3, $4) RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
+            "INSERT INTO api_keys (key_hash, user_id, team_id, name) VALUES ($1, $2, $3, $4) RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit"
         )
         .bind(key_hash)
         .bind(user_uuid)
@@ -185,7 +185,7 @@ impl Database for SqlxDb {
     async fn deactivate_api_key(&self, id: &str) -> Result<ApiKey, DbError> {
         let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
         let result: ApiKeyRow = sqlx::query_as(
-            "UPDATE api_keys SET is_active = false WHERE id = $1 RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at"
+            "UPDATE api_keys SET is_active = false WHERE id = $1 RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit"
         )
         .bind(uuid)
         .fetch_one(&self.pool)
@@ -538,14 +538,14 @@ impl Database for SqlxDb {
             Some(tid) => {
                 let uuid = uuid::Uuid::parse_str(tid).map_err(|_| DbError::InvalidUuid)?;
                 sqlx::query_as(
-                    "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys WHERE team_id = $1 ORDER BY created_at DESC",
+                    "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit FROM api_keys WHERE team_id = $1 ORDER BY created_at DESC",
                 )
                 .bind(uuid)
                 .fetch_all(&self.pool)
                 .await?
             }
             None => sqlx::query_as(
-                "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at FROM api_keys ORDER BY created_at DESC",
+                "SELECT id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit FROM api_keys ORDER BY created_at DESC",
             )
             .fetch_all(&self.pool)
             .await?,
@@ -576,6 +576,16 @@ impl Database for SqlxDb {
             total_output_tokens: row.2,
             avg_response_time_ms: row.3,
         })
+    }
+
+    async fn record_api_key_spend(&self, api_key_id: &str, cents: i64) -> Result<(), DbError> {
+        let uuid = uuid::Uuid::parse_str(api_key_id).map_err(|_| DbError::InvalidUuid)?;
+        sqlx::query("UPDATE api_keys SET spent_cents = spent_cents + $1 WHERE id = $2")
+            .bind(cents)
+            .bind(uuid)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     async fn update_team(&self, id: &str, name: &str, budget_cents: i64) -> Result<Team, DbError> {
@@ -755,6 +765,11 @@ struct ApiKeyRow {
     is_active: bool,
     created_at: DateTime<Utc>,
     expires_at: Option<DateTime<Utc>>,
+    budget_cents: Option<i64>,
+    spent_cents: i64,
+    allowed_models: Option<Vec<String>>,
+    rpm_limit: Option<i32>,
+    tpm_limit: Option<i32>,
 }
 
 impl From<ApiKeyRow> for ApiKey {
@@ -768,6 +783,11 @@ impl From<ApiKeyRow> for ApiKey {
             is_active: row.is_active,
             created_at: row.created_at,
             expires_at: row.expires_at,
+            budget_cents: row.budget_cents,
+            spent_cents: row.spent_cents,
+            allowed_models: row.allowed_models,
+            rpm_limit: row.rpm_limit,
+            tpm_limit: row.tpm_limit,
         }
     }
 }

@@ -62,6 +62,11 @@ async fn setup_test_db() -> (SqlxDb, ContainerAsync<Postgres>) {
         .await
         .expect("Failed to run migration 007");
 
+    sqlx::raw_sql(include_str!("../migrations/008_virtual_key_budgets.sql"))
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 008");
+
     (SqlxDb::new(pool), postgres)
 }
 
@@ -144,6 +149,21 @@ async fn test_database_create_and_get_api_key() {
         .expect("API key not found");
     assert_eq!(fetched.id, api_key.id);
     assert_eq!(fetched.key_hash, "hashed_key_123");
+    assert_eq!(fetched.spent_cents, 0);
+
+    // Verify migration 008 + atomic record_api_key_spend persistence
+    db.record_api_key_spend(&api_key.id, 42)
+        .await
+        .expect("Failed to record API key spend");
+    db.record_api_key_spend(&api_key.id, 8)
+        .await
+        .expect("Failed to record second API key spend");
+    let after_spend = db
+        .get_api_key(&api_key.id)
+        .await
+        .expect("Failed to fetch API key after spend")
+        .expect("API key not found");
+    assert_eq!(after_spend.spent_cents, 50);
 }
 
 #[tokio::test]
