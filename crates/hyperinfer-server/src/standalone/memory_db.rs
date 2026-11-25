@@ -139,6 +139,11 @@ impl Database for InMemoryDb {
             is_active: true,
             created_at: Utc::now(),
             expires_at: None,
+            budget_cents: None,
+            spent_cents: 0,
+            allowed_models: None,
+            rpm_limit: None,
+            tpm_limit: None,
         };
         store.api_keys.push(key.clone());
         Ok(key)

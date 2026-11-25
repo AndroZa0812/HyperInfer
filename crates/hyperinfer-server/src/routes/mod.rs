@@ -2,6 +2,7 @@
 
 pub mod deployments;
 pub mod keys;
+pub mod multi_sdk;
 pub mod routing;
 pub mod teams;
 pub mod users;
@@ -22,7 +23,9 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::auth::{auth_middleware, LoginRequest, LoginResponse, MeResponse};
 use crate::frontend::spa_handler;
-use crate::mcp::{jwt_auth_middleware, mcp_message_handler, mcp_sse_handler, McpState};
+use crate::mcp::{
+    jwt_auth_middleware, mcp_http_handler, mcp_message_handler, mcp_sse_handler, McpState,
+};
 use crate::state::{admin_auth_middleware, AppState};
 
 pub async fn healthz_handler<D: Database, C: ConfigStore>(
@@ -114,6 +117,7 @@ where
     let mcp_router = Router::new()
         .route("/mcp/sse", get(mcp_sse_handler))
         .route("/mcp/message", post(mcp_message_handler))
+        .route("/mcp", post(mcp_http_handler))
         .layer(middleware::from_fn_with_state(
             mcp_state.clone(),
             jwt_auth_middleware,
@@ -130,10 +134,22 @@ where
 
     // Dashboard-facing v1 routes protected by JWT auth (role checks via RequireAdmin extractor)
     let v1_jwt_router = Router::new()
-        .route("/v1/teams/{id}", get(teams::get_team))
+        .route(
+            "/v1/teams/{id}",
+            get(teams::get_team)
+                .put(teams::update_team)
+                .delete(teams::delete_team),
+        )
         .route("/v1/teams", get(teams::list_teams).post(teams::create_team))
-        .route("/v1/users/{id}", get(users::get_user))
-        .route("/v1/users", post(users::create_user))
+        .route(
+            "/v1/users/{id}",
+            get(users::get_user).delete(users::delete_user),
+        )
+        .route(
+            "/v1/users/{id}/role",
+            axum::routing::put(users::update_user_role),
+        )
+        .route("/v1/users", get(users::list_users).post(users::create_user))
         .route("/v1/api_keys/{id}", get(keys::get_api_key))
         .route("/v1/api_keys/{id}/revoke", post(keys::revoke_api_key))
         .route(
@@ -141,9 +157,18 @@ where
             get(keys::list_api_keys).post(keys::create_api_key),
         )
         .route("/v1/usage/summary", get(teams::get_usage_summary))
-        .route("/v1/model_aliases/{id}", get(teams::get_model_alias))
-        .route("/v1/model_aliases", post(teams::create_model_alias))
-        .route("/v1/quotas/{team_id}", get(teams::get_quota))
+        .route(
+            "/v1/model_aliases/{id}",
+            get(teams::get_model_alias).delete(teams::delete_model_alias),
+        )
+        .route(
+            "/v1/model_aliases",
+            get(teams::list_model_aliases).post(teams::create_model_alias),
+        )
+        .route(
+            "/v1/quotas/{team_id}",
+            get(teams::get_quota).put(teams::upsert_quota),
+        )
         .route("/v1/quotas", post(teams::create_quota))
         .route(
             "/v1/deployments",
@@ -182,6 +207,12 @@ where
         .route(
             "/v1/chat/completions",
             post(routing::chat_completions_handler),
+        )
+        .route("/v1/messages", post(multi_sdk::anthropic_messages_handler))
+        .route("/v1/responses", post(multi_sdk::openai_responses_handler))
+        .route(
+            "/v1beta/models/{model_action}",
+            post(multi_sdk::gemini_generate_content_handler),
         )
         .with_state(state.clone());
 

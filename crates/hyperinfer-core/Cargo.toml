@@ -35,6 +35,7 @@ mockall = { version = "0.14", optional = true }
 uuid = { version = "1.23", features = ["v4"] }
 sha2 = "0.11"
 hex = "0.4"
+regex = "1"
 
 [dev-dependencies]
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }

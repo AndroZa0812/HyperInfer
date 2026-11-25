@@ -126,6 +126,7 @@ pub async fn bootstrap_standalone(
         jwt_secret: Arc::new(jwt_secret.clone()),
         proxy_router: Some(proxy_router),
         rate_limiter,
+        plugins: hyperinfer_core::PluginPipeline::new(),
     };
 
     Ok(StandaloneBootstrap {
