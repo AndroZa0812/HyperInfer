@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
-    import type { ApiKey, CreateApiKeyResponse, UsageData } from '#lib/types';
+    import type { ApiKey, CreateApiKeyOptions, CreateApiKeyResponse, UsageData } from '#lib/types';
     import Button from '#lib/components/Button.svelte';
     import Input from '#lib/components/Input.svelte';
     import Modal from '#lib/components/Modal.svelte';
@@ -65,7 +65,7 @@
     async function createKey() {
         if (!$auth.user?.team_id) return;
         createError = null;
-        const opts: Record<string, unknown> = {};
+        const opts: CreateApiKeyOptions = {};
         const budgetStr = String(newBudgetCents ?? '').trim();
         if (budgetStr !== '') {
             const parsed = Math.round(Number(budgetStr));

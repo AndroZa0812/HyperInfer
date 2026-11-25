@@ -233,7 +233,10 @@
                 <div>
                     <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Gateway Status</p>
                     <div class="mt-1">
-                        <Badge variant="success" label={routingHealth?.status ?? 'healthy'} />
+                        <Badge
+                            variant={routingHealth?.status === 'healthy' ? 'success' : routingHealth ? 'error' : 'neutral'}
+                            label={routingHealth?.status ?? 'unknown'}
+                        />
                     </div>
                 </div>
                 <div>
