@@ -433,6 +433,68 @@ impl LlmProvider for GeminiProvider {
         &self.base_url
     }
 
+    async fn list_models(
+        &self,
+        api_key: &str,
+    ) -> Result<Vec<hyperinfer_core::DiscoveredModel>, HyperInferError> {
+        if self.antigravity_mode {
+            return Ok(Vec::new());
+        }
+        let url = format!("{}/v1beta/models", self.base_url.trim_end_matches('/'));
+        let resp = self
+            .http_client
+            .get(&url)
+            .header("x-goog-api-key", api_key)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let message = resp.text().await.unwrap_or_default();
+            return Err(HyperInferError::ApiError { status, message });
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+
+        let mut models = Vec::new();
+        if let Some(arr) = body.get("models").and_then(|d| d.as_array()) {
+            for item in arr {
+                let supports_generate = item
+                    .get("supportedGenerationMethods")
+                    .and_then(|m| m.as_array())
+                    .map(|methods| {
+                        methods
+                            .iter()
+                            .any(|v| v.as_str() == Some("generateContent"))
+                    })
+                    .unwrap_or(true);
+                if !supports_generate {
+                    continue;
+                }
+                let Some(raw_name) = item.get("name").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let id = raw_name.strip_prefix("models/").unwrap_or(raw_name);
+                let display_name = item
+                    .get("displayName")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                let context_window = item
+                    .get("inputTokenLimit")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize);
+                models.push(hyperinfer_core::DiscoveredModel {
+                    id: id.to_string(),
+                    provider: self.name.clone(),
+                    display_name,
+                    context_window,
+                    pricing: None,
+                });
+            }
+        }
+        Ok(models)
+    }
+
     async fn chat(
         &self,
         request: &ChatRequest,

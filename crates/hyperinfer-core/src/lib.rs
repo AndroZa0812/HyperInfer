@@ -5,6 +5,7 @@
 
 #![allow(clippy::double_must_use)]
 
+pub mod catalog;
 pub mod cost;
 pub mod error;
 pub mod plugin;
@@ -15,6 +16,10 @@ pub mod telemetry_consumer;
 pub mod traits;
 pub mod types;
 
+pub use catalog::{
+    default_cache_path, DiscoveredModel, ModelCatalog, ModelPricing, ModelSpec,
+    DEFAULT_CACHE_TTL_SECS, DEFAULT_CATALOG_URL,
+};
 pub use cost::{CostCalculator, TokenCostWeights, WeightedUsage};
 pub use error::{ConfigError, DbError, HyperInferError};
 pub use plugin::{GatewayPlugin, PluginAction, PluginContext, PluginPipeline};

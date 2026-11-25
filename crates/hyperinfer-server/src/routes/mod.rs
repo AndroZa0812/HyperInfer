@@ -1,5 +1,6 @@
 //! HTTP route modules and Axum router construction.
 
+pub mod catalog;
 pub mod deployments;
 pub mod keys;
 pub mod mcp_admin;
@@ -296,6 +297,30 @@ where
             admin_auth_middleware::<D, C>,
         ));
 
+    // Dynamic model catalog & provider discovery routes (HYP-77)
+    let catalog_state = catalog::CatalogState::new();
+    catalog_state.spawn_background_load();
+
+    let catalog_public_router = Router::new()
+        .route("/v1/models", get(catalog::list_openai_models))
+        .with_state(catalog_state.clone());
+
+    let catalog_admin_router = Router::new()
+        .route("/v1/admin/catalog", get(catalog::get_admin_catalog))
+        .route(
+            "/v1/admin/catalog/refresh",
+            post(catalog::refresh_admin_catalog),
+        )
+        .route(
+            "/v1/admin/catalog/discover",
+            post(catalog::discover_provider_models),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.jwt_secret.clone(),
+            auth_middleware,
+        ))
+        .with_state(catalog_state);
+
     let mut app = Router::new()
         .merge(config_sync_router)
         .merge(v1_jwt_router)
@@ -304,7 +329,9 @@ where
         .merge(auth_public_routes)
         .merge(auth_protected_routes)
         .merge(proxy_router)
-        .merge(routing_config_routes);
+        .merge(routing_config_routes)
+        .merge(catalog_public_router)
+        .merge(catalog_admin_router);
 
     if enable_docs {
         info!("Swagger UI enabled at /docs");

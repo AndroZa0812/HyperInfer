@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use futures::Stream;
-use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse};
+use hyperinfer_core::{ChatChunk, ChatRequest, ChatResponse, DiscoveredModel};
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -46,6 +46,14 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
         };
         self.chat(&request, api_key).await?;
         Ok(())
+    }
+
+    /// Discover live models available for the given API key from the provider's native models endpoint.
+    async fn list_models(
+        &self,
+        _api_key: &str,
+    ) -> Result<Vec<DiscoveredModel>, hyperinfer_core::HyperInferError> {
+        Ok(Vec::new())
     }
 }
 
