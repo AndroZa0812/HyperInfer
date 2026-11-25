@@ -112,10 +112,17 @@ pub struct McpGateway {
 
 impl McpGateway {
     pub fn new() -> Self {
-        let http = reqwest::Client::builder()
+        let allow_localhost = std::env::var("ALLOW_LOCALHOST_MCP")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
+        let mut builder = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(std::time::Duration::from_secs(5))
-            .timeout(std::time::Duration::from_secs(30))
+            .timeout(std::time::Duration::from_secs(30));
+        if !allow_localhost {
+            builder = builder.dns_resolver(Arc::new(crate::safe_resolver::SafeResolver));
+        }
+        let http = builder
             .build()
             .expect("Failed to build MCP gateway HTTP client");
         Self {

@@ -13,6 +13,11 @@ import type {
   Quota,
   RoutingConfig,
   RoutingHealth,
+  ServerConfig,
+  McpUpstream,
+  RegisterMcpUpstreamRequest,
+  McpToolsResponse,
+  McpTeamPolicy,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -154,4 +159,27 @@ export const api = {
       body: JSON.stringify({ strategy }),
     }),
   getRoutingHealth: () => fetchApi<RoutingHealth>("/admin/routing/health"),
+
+  // Server runtime config / standalone detection (HYP-74)
+  getServerConfig: () => fetchApi<ServerConfig>("/auth/config"),
+
+  // MCP Gateway management (HYP-70)
+  getMcpUpstreams: () => fetchApi<McpUpstream[]>("/admin/mcp/upstreams"),
+  registerMcpUpstream: (req: RegisterMcpUpstreamRequest) =>
+    fetchApi<McpUpstream>("/admin/mcp/upstreams", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  removeMcpUpstream: (name: string) =>
+    fetchApi<void>(`/admin/mcp/upstreams/${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
+  getMcpTools: () => fetchApi<McpToolsResponse>("/admin/mcp/tools"),
+  getMcpTeamPolicy: (teamId: string) =>
+    fetchApi<McpTeamPolicy>(`/admin/mcp/policies/${encodeURIComponent(teamId)}`),
+  updateMcpTeamPolicy: (teamId: string, policy: McpTeamPolicy) =>
+    fetchApi<McpTeamPolicy>(`/admin/mcp/policies/${encodeURIComponent(teamId)}`, {
+      method: "PUT",
+      body: JSON.stringify(policy),
+    }),
 };

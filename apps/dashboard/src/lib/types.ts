@@ -128,3 +128,57 @@ export interface CreateDeploymentRequest {
     metadata?: Record<string, unknown>;
     sort_order?: number;
 }
+
+export interface DetectedProviderInfo {
+    name: string;
+    provider: string;
+    models: string[];
+}
+
+export interface ServerConfig {
+    standalone: boolean;
+    mode: 'standalone' | 'standard';
+    admin_email_hint?: string | null;
+    detected_providers: DetectedProviderInfo[];
+    endpoints: {
+        openai_chat: string;
+        openai_responses: string;
+        anthropic_messages: string;
+        gemini_generate: string;
+        mcp_http: string;
+        mcp_sse: string;
+    };
+}
+
+export interface McpUpstream {
+    name: string;
+    transport: 'streamable_http' | 'sse';
+    url: string;
+    enabled: boolean;
+    header_keys: string[];
+}
+
+export interface RegisterMcpUpstreamRequest {
+    name: string;
+    transport: 'streamable_http' | 'sse';
+    url: string;
+    headers?: Record<string, string>;
+    enabled?: boolean;
+}
+
+export interface McpToolDefinition {
+    name: string;
+    description: string;
+    inputSchema: Record<string, unknown>;
+}
+
+export interface McpToolsResponse {
+    tools: McpToolDefinition[];
+    catalog_meta_tools: McpToolDefinition[];
+}
+
+export interface McpTeamPolicy {
+    allow_patterns: string[];
+    deny_patterns: string[];
+    catalog_mode: boolean;
+}

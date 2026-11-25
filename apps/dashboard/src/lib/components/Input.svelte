@@ -2,7 +2,7 @@
 	interface Props {
 		label?: string;
 		type?: string;
-		value?: string;
+		value?: string | number;
 		placeholder?: string;
 		disabled?: boolean;
 		required?: boolean;

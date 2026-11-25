@@ -12,10 +12,12 @@
 
 	const navItems = [
 		{ path: '/dashboard', label: 'Overview', icon: 'dashboard' },
+		{ path: '/dashboard/playground', label: 'Playground', icon: 'terminal' },
 		{ path: '/dashboard/teams', label: 'Teams', icon: 'group', admin: true },
 		{ path: '/dashboard/users', label: 'Users', icon: 'manage_accounts', admin: true },
 		{ path: '/dashboard/keys', label: 'Keys', icon: 'vpn_key' },
 		{ path: '/dashboard/routing', label: 'Routing', icon: 'route', admin: true },
+		{ path: '/dashboard/mcp', label: 'MCP Gateway', icon: 'hub', admin: true },
 		{ path: '/dashboard/settings', label: 'Settings', icon: 'settings' },
 	];
 
