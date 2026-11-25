@@ -200,10 +200,28 @@ impl Database for StubDb {
     }
     async fn list_deployments(
         &self,
-        _model: &str,
+        model: &str,
         _active: Option<bool>,
     ) -> Result<Vec<hyperinfer_core::Deployment>, hyperinfer_core::DbError> {
-        Ok(vec![])
+        Ok(vec![hyperinfer_core::Deployment {
+            id: "dep-1".into(),
+            name: "dep-1".into(),
+            provider: "other".into(),
+            model: model.into(),
+            api_key_ref: "test-key".into(),
+            base_url: "https://api.openai.com".into(),
+            is_active: true,
+            weight: 1,
+            priority: 0,
+            max_tpm: None,
+            max_rpm: None,
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: serde_json::json!({}),
+            sort_order: 0,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }])
     }
     async fn get_deployment(
         &self,
@@ -380,4 +398,161 @@ async fn test_weighted_cost_accounting() {
     assert!(cost_cached < cost_normal, "Cached input should cost less");
     assert!(cost_output > 0, "Output tokens should have a cost");
     assert!(cost_reasoning > 0, "Reasoning tokens should have a cost");
+}
+
+#[derive(Clone)]
+struct StubConfigStore;
+
+#[async_trait::async_trait]
+impl hyperinfer_core::ConfigStore for StubConfigStore {
+    async fn fetch_config(&self) -> Result<hyperinfer_core::Config, hyperinfer_core::ConfigError> {
+        Ok(hyperinfer_core::Config {
+            api_keys: std::collections::HashMap::new(),
+            routing_rules: Vec::new(),
+            quotas: std::collections::HashMap::new(),
+            model_aliases: std::collections::HashMap::new(),
+            default_provider: None,
+        })
+    }
+    async fn publish_config_update(
+        &self,
+        _config: &hyperinfer_core::Config,
+    ) -> Result<(), hyperinfer_core::ConfigError> {
+        Ok(())
+    }
+    async fn publish_policy_update(
+        &self,
+        _update: &hyperinfer_core::PolicyUpdate,
+    ) -> Result<(), hyperinfer_core::ConfigError> {
+        Ok(())
+    }
+    async fn ping(&self) -> Result<(), hyperinfer_core::ConfigError> {
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct MockUsageProvider;
+
+#[async_trait::async_trait]
+impl hyperinfer_providers::LlmProvider for MockUsageProvider {
+    fn name(&self) -> &str {
+        "other"
+    }
+
+    async fn chat(
+        &self,
+        request: &hyperinfer_core::ChatRequest,
+        _api_key: &str,
+    ) -> Result<hyperinfer_core::ChatResponse, hyperinfer_core::HyperInferError> {
+        Ok(hyperinfer_core::ChatResponse {
+            id: "chatcmpl-vk-1".to_string(),
+            model: request.model.clone(),
+            choices: vec![hyperinfer_core::Choice {
+                index: 0,
+                message: hyperinfer_core::ChatMessage::assistant("ok"),
+                finish_reason: Some("stop".to_string()),
+            }],
+            usage: hyperinfer_core::Usage {
+                input_tokens: 100_000,
+                output_tokens: 50_000,
+            },
+        })
+    }
+
+    fn stream(
+        &self,
+        _request: &hyperinfer_core::ChatRequest,
+        _api_key: &str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn futures::Stream<
+                    Item = Result<hyperinfer_core::ChatChunk, hyperinfer_core::HyperInferError>,
+                > + Send
+                + 'static,
+        >,
+    > {
+        Box::pin(futures::stream::empty())
+    }
+}
+
+async fn build_vk_server(db: StubDb) -> axum_test::TestServer {
+    let proxy_router = Arc::new(hyperinfer_server::proxy::ProxyRouter::new_in_memory().await);
+    proxy_router.providers().register(MockUsageProvider);
+    let config = hyperinfer_core::Config {
+        api_keys: std::collections::HashMap::new(),
+        routing_rules: Vec::new(),
+        quotas: std::collections::HashMap::new(),
+        model_aliases: std::collections::HashMap::new(),
+        default_provider: None,
+    };
+    let state = hyperinfer_server::AppState {
+        config: Arc::new(tokio::sync::RwLock::new(config)),
+        db,
+        config_manager: StubConfigStore,
+        admin_token: Arc::new("admin".to_string()),
+        jwt_secret: Arc::new("secret".to_string()),
+        proxy_router: Some(proxy_router),
+        rate_limiter: None,
+    };
+    let app = hyperinfer_server::build_router(
+        state,
+        hyperinfer_server::mcp::McpState::new("secret"),
+        tower_http::cors::CorsLayer::permissive(),
+        false,
+    );
+    axum_test::TestServer::new(app)
+}
+
+#[tokio::test]
+async fn test_http_virtual_key_enforcement_and_spend_charging() {
+    // 1. Expired key -> 401
+    let mut expired = make_key();
+    expired.expires_at = Some(Utc::now() - Duration::hours(1));
+    let server = build_vk_server(StubDb::new(expired)).await;
+    let res = server
+        .post("/v1/chat/completions")
+        .add_header("Authorization", "Bearer sk-test")
+        .json(&serde_json::json!({ "model": "gpt-4o", "messages": [{ "role": "user", "content": "hi" }] }))
+        .await;
+    assert_eq!(res.status_code(), 401);
+
+    // 2. Disallowed model -> 403
+    let mut restricted = make_key();
+    restricted.allowed_models = Some(vec!["gpt-4o-mini".to_string()]);
+    let server = build_vk_server(StubDb::new(restricted)).await;
+    let res = server
+        .post("/v1/chat/completions")
+        .add_header("Authorization", "Bearer sk-test")
+        .json(&serde_json::json!({ "model": "gpt-4o", "messages": [{ "role": "user", "content": "hi" }] }))
+        .await;
+    assert_eq!(res.status_code(), 403);
+
+    // 3. Exhausted budget -> 402
+    let mut over_budget = make_key();
+    over_budget.budget_cents = Some(50);
+    over_budget.spent_cents = 50;
+    let server = build_vk_server(StubDb::new(over_budget)).await;
+    let res = server
+        .post("/v1/chat/completions")
+        .add_header("Authorization", "Bearer sk-test")
+        .json(&serde_json::json!({ "model": "gpt-4o", "messages": [{ "role": "user", "content": "hi" }] }))
+        .await;
+    assert_eq!(res.status_code(), 402);
+
+    // 4. Allowed key -> 200 OK and post-response weighted cost charged
+    let mut valid = make_key();
+    valid.budget_cents = Some(10_000);
+    valid.allowed_models = Some(vec!["gpt-4o".to_string()]);
+    let db = StubDb::new(valid);
+    let spent_ref = db.spent_cents.clone();
+    let server = build_vk_server(db).await;
+    let res = server
+        .post("/v1/chat/completions")
+        .add_header("Authorization", "Bearer sk-test")
+        .json(&serde_json::json!({ "model": "gpt-4o", "messages": [{ "role": "user", "content": "hi" }] }))
+        .await;
+    assert_eq!(res.status_code(), 200);
+    // gpt-4o: 100k input @ 250c/1M (25c) + 50k output @ 1000c/1M (50c) = 75 cents
+    assert_eq!(spent_ref.load(Ordering::SeqCst), 75);
 }
