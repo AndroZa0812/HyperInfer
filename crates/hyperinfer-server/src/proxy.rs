@@ -282,11 +282,19 @@ impl ProxyRouter {
             .clone()
             .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
 
+        // Look up the original core deployment to extract mutators from metadata.
+        let mutators = deployments
+            .iter()
+            .find(|d| d.id == selected.id)
+            .map(|d| crate::mutators::DeploymentMutators::from_metadata(&d.metadata))
+            .unwrap_or_default();
+
         Ok(SelectedDeployment {
             deployment: selected.as_ref().clone(),
             base_url,
             api_key: resolve_api_key_ref(&selected.api_key_ref),
             provider: selected.provider.clone(),
+            mutators,
         })
     }
 
@@ -436,6 +444,7 @@ pub struct SelectedDeployment {
     pub base_url: String,
     pub api_key: String,
     pub provider: Provider,
+    pub mutators: crate::mutators::DeploymentMutators,
 }
 
 pub async fn select_deployment<D: Database>(
@@ -522,6 +531,13 @@ pub async fn select_deployment<D: Database>(
         .clone()
         .unwrap_or_else(|| default_base_url_for_provider(&selected.provider));
 
+    // Look up the original core deployment to extract mutators from metadata.
+    let mutators = deployments
+        .iter()
+        .find(|d| d.id == selected.id)
+        .map(|d| crate::mutators::DeploymentMutators::from_metadata(&d.metadata))
+        .unwrap_or_default();
+
     Ok(SelectedDeployment {
         deployment: RouterDeployment::new(
             selected.model_name.clone(),
@@ -532,6 +548,7 @@ pub async fn select_deployment<D: Database>(
         base_url,
         api_key: resolve_api_key_ref(&selected.api_key_ref),
         provider: selected.provider.clone(),
+        mutators,
     })
 }
 
