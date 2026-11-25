@@ -358,9 +358,14 @@ pub async fn chat_completions_handler<
                     },
                 );
             if cost_cents > 0 {
-                let _ = db
-                    .record_api_key_spend(&api_key_id, cost_cents)
-                    .await;
+                if let Err(e) = db.record_api_key_spend(&api_key_id, cost_cents).await {
+                    tracing::warn!(
+                        api_key_id = %api_key_id,
+                        cost_cents,
+                        error = ?e,
+                        "Failed to record streaming API key spend"
+                    );
+                }
             }
         };
 
@@ -437,7 +442,14 @@ pub async fn chat_completions_handler<
     );
     if cost_cents > 0 {
         let api_key_id = auth.api_key_id.clone();
-        let _ = state.db.record_api_key_spend(&api_key_id, cost_cents).await;
+        if let Err(e) = state.db.record_api_key_spend(&api_key_id, cost_cents).await {
+            tracing::warn!(
+                api_key_id = %api_key_id,
+                cost_cents,
+                error = ?e,
+                "Failed to record API key spend"
+            );
+        }
     }
 
     Ok(Json(response).into_response())

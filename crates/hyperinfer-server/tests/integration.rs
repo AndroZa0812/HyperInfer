@@ -62,6 +62,11 @@ async fn setup_test_db() -> (SqlxDb, ContainerAsync<Postgres>) {
         .await
         .expect("Failed to run migration 007");
 
+    sqlx::raw_sql(include_str!("../migrations/008_virtual_key_budgets.sql"))
+        .execute(&pool)
+        .await
+        .expect("Failed to run migration 008");
+
     (SqlxDb::new(pool), postgres)
 }
 
