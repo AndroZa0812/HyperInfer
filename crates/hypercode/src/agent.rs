@@ -418,6 +418,22 @@ impl Agent {
             return Some("Command explicitly requested `bypass_sandbox: true`".to_string());
         }
 
+        // Protected metadata paths always require approval, even under AutoApprove.
+        if call.name == "write_file" || call.name == "edit_file" {
+            if let Ok(args) = serde_json::from_str::<serde_json::Value>(&call.arguments) {
+                if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
+                    if let Ok(resolved) = self.tool_ctx.resolve_path(path) {
+                        if self.tool_ctx.is_protected_path(&resolved) {
+                            return Some(format!(
+                                "Tool '{}' targets protected metadata path '{}'",
+                                call.name, path
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
         match self.config.approval_mode {
             ApprovalMode::AutoApprove => None,
             ApprovalMode::ApproveAll => Some(format!(

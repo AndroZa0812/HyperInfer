@@ -62,7 +62,7 @@ impl Tool for EditFileTool {
             return ToolOutput::error("Error: `target` cannot be empty in edit_file.");
         }
 
-        let resolved = match ctx.resolve_path(&parsed.path) {
+        let resolved = match ctx.resolve_writable_path(&parsed.path) {
             Ok(p) => p,
             Err(e) => return ToolOutput::error(e),
         };

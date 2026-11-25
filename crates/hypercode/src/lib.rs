@@ -1172,4 +1172,221 @@ mod tests {
             "ChatOnly mode should omit tool definitions from ChatRequest"
         );
     }
+
+    #[tokio::test]
+    async fn test_protected_metadata_paths_block_direct_and_symlink_writes() {
+        let tmp_dir = TempDir::new().unwrap();
+        let tmp = tmp_dir.path();
+
+        // Create protected directories with some content
+        let git_dir = tmp.join(".git");
+        let hooks_dir = git_dir.join("hooks");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+        std::fs::write(git_dir.join("config"), "original git config").unwrap();
+
+        let hc_dir = tmp.join(".hypercode");
+        std::fs::create_dir_all(hc_dir.join("logs")).unwrap();
+        std::fs::write(hc_dir.join("hooks.json"), "original hooks").unwrap();
+        std::fs::write(hc_dir.join("logs/sample.log"), "log content").unwrap();
+
+        let ctx = ToolContext::new(tmp);
+        let registry = ToolRegistry::with_default_coding_tools();
+
+        // write_file to .git/hooks/pre-commit should fail
+        let result = registry
+            .execute(
+                &make_call(
+                    "write_file",
+                    serde_json::json!({ "path": ".git/hooks/pre-commit", "content": "echo hi" }),
+                ),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_error, "write_file to .git/hooks should fail");
+        assert!(
+            !hooks_dir.join("pre-commit").exists(),
+            "file should not be created"
+        );
+
+        // write_file to .hypercode/config.toml should fail
+        let result = registry
+            .execute(
+                &make_call(
+                    "write_file",
+                    serde_json::json!({ "path": ".hypercode/config.toml", "content": "x=1" }),
+                ),
+                &ctx,
+            )
+            .await;
+        assert!(
+            result.is_error,
+            "write_file to .hypercode/config.toml should fail"
+        );
+        assert!(
+            !hc_dir.join("config.toml").exists(),
+            "file should not be created"
+        );
+
+        // edit_file on .git/config should fail
+        let result = registry
+            .execute(
+                &make_call(
+                    "edit_file",
+                    serde_json::json!({
+                        "path": ".git/config",
+                        "target": "original git config",
+                        "replacement": "modified"
+                    }),
+                ),
+                &ctx,
+            )
+            .await;
+        assert!(result.is_error, "edit_file on .git/config should fail");
+        assert_eq!(
+            std::fs::read_to_string(git_dir.join("config")).unwrap(),
+            "original git config"
+        );
+
+        // edit_file on .hypercode/hooks.json should fail
+        let result = registry
+            .execute(
+                &make_call(
+                    "edit_file",
+                    serde_json::json!({
+                        "path": ".hypercode/hooks.json",
+                        "target": "original hooks",
+                        "replacement": "modified"
+                    }),
+                ),
+                &ctx,
+            )
+            .await;
+        assert!(
+            result.is_error,
+            "edit_file on .hypercode/hooks.json should fail"
+        );
+        assert_eq!(
+            std::fs::read_to_string(hc_dir.join("hooks.json")).unwrap(),
+            "original hooks"
+        );
+
+        // read_file on .hypercode/logs/sample.log should still succeed
+        let result = registry
+            .execute(
+                &make_call(
+                    "read_file",
+                    serde_json::json!({ "path": ".hypercode/logs/sample.log" }),
+                ),
+                &ctx,
+            )
+            .await;
+        assert!(
+            !result.is_error,
+            "read_file on .hypercode/logs should succeed"
+        );
+        assert!(result.content.contains("log content"));
+
+        // Symlink attack: create a symlink inside workspace pointing to .git/hooks
+        #[cfg(unix)]
+        {
+            let evil_link = tmp.join("evil_link");
+            std::os::unix::fs::symlink(&hooks_dir, &evil_link).unwrap();
+            let result = registry
+                .execute(
+                    &make_call(
+                        "write_file",
+                        serde_json::json!({ "path": "evil_link/pre-commit", "content": "echo hi" }),
+                    ),
+                    &ctx,
+                )
+                .await;
+            assert!(
+                result.is_error,
+                "write_file via symlink to .git/hooks should fail"
+            );
+            assert!(
+                !hooks_dir.join("pre-commit").exists(),
+                "file should not be created via symlink"
+            );
+        }
+    }
+
+    #[test]
+    fn test_openshell_policy_yaml_marks_git_and_hypercode_read_only() {
+        let policy = SandboxPolicy::restricted_for_workspace("/workspace/proj");
+        let yaml = policy.to_openshell_policy_yaml();
+        assert!(
+            yaml.contains("/workspace/proj/.git"),
+            "YAML should include .git as read-only"
+        );
+        assert!(
+            yaml.contains("/workspace/proj/.hypercode"),
+            "YAML should include .hypercode as read-only"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_agent_escalates_protected_path_even_under_auto_approve() {
+        let tmp = std::env::temp_dir().join("hypercode-agent-protected-test");
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::create_dir_all(tmp.join(".git/hooks")).unwrap();
+
+        let backend = Arc::new(ScriptedBackend::new(vec![
+            ChatMessage::assistant_with_tools(
+                "Writing to protected path",
+                vec![ToolCall {
+                    id: "call_protected".to_string(),
+                    name: "write_file".to_string(),
+                    arguments: serde_json::json!({
+                        "path": ".git/hooks/pre-commit",
+                        "content": "echo hi"
+                    })
+                    .to_string(),
+                }],
+            ),
+            ChatMessage::assistant("Done after rejection."),
+        ]));
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                approval_mode: ApprovalMode::AutoApprove,
+                ..Default::default()
+            },
+            backend,
+            ToolRegistry::with_default_coding_tools(),
+            ToolContext::new(&tmp),
+        );
+        agent.set_approval_handler(RejectAllHandler);
+
+        let collected = Arc::new(Mutex::new(Vec::new()));
+        agent.set_event_sink(CollectingSink {
+            events: collected.clone(),
+        });
+
+        let outcome = agent.run_turn("Write to protected path").await.unwrap();
+        assert!(outcome.final_response.contains("Done after rejection"));
+
+        let events = collected.lock().unwrap();
+        let approval_events: Vec<_> = events
+            .iter()
+            .filter(|e| matches!(e, AgentEvent::ToolApprovalChecked { .. }))
+            .collect();
+        assert!(
+            !approval_events.is_empty(),
+            "Expected ToolApprovalChecked event for protected path"
+        );
+        let approval = &approval_events[0];
+        match approval {
+            AgentEvent::ToolApprovalChecked { approved, .. } => {
+                assert!(!approved, "Protected path should not be auto-approved");
+            }
+            _ => unreachable!(),
+        }
+
+        assert!(
+            !tmp.join(".git/hooks/pre-commit").exists(),
+            "File should not be created after rejection"
+        );
+    }
 }

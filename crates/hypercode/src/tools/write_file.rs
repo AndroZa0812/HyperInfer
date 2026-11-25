@@ -50,7 +50,7 @@ impl Tool for WriteFileTool {
             Err(e) => return ToolOutput::error(format!("Invalid arguments for write_file: {}", e)),
         };
 
-        let resolved = match ctx.resolve_path(&parsed.path) {
+        let resolved = match ctx.resolve_writable_path(&parsed.path) {
             Ok(p) => p,
             Err(e) => return ToolOutput::error(e),
         };
