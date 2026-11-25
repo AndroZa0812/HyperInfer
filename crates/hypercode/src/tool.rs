@@ -30,6 +30,9 @@ pub struct ToolContext {
     pub filter_stats: Arc<SessionFilterStats>,
     /// Metadata directories that are read-only / approval-gated for writes.
     pub protected_paths: Vec<PathBuf>,
+    /// Narrowly scoped override set by `Agent` only for a single explicitly approved
+    /// tool call targeting a protected metadata path. Defaults to `false`.
+    pub allow_protected_writes: bool,
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -60,6 +63,7 @@ impl ToolContext {
             output_filter_config: OutputFilterConfig::default(),
             filter_stats: Arc::new(SessionFilterStats::default()),
             protected_paths,
+            allow_protected_writes: false,
         }
     }
 
@@ -186,10 +190,16 @@ impl ToolContext {
         false
     }
 
-    /// Resolve a path for writing, rejecting protected metadata directories.
+    pub fn with_allow_protected_writes(mut self, allow: bool) -> Self {
+        self.allow_protected_writes = allow;
+        self
+    }
+
+    /// Resolve a path for writing, rejecting protected metadata directories
+    /// unless `allow_protected_writes` was explicitly granted for this call.
     pub fn resolve_writable_path(&self, raw_path: &str) -> Result<PathBuf, String> {
         let resolved = self.resolve_path(raw_path)?;
-        if self.is_protected_path(&resolved) {
+        if !self.allow_protected_writes && self.is_protected_path(&resolved) {
             return Err(format!(
                 "Write denied: path '{}' targets protected metadata directory",
                 raw_path

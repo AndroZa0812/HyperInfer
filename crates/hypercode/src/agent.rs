@@ -404,6 +404,21 @@ impl Agent {
         }
     }
 
+    /// Return the target path if `call` is a mutating file tool targeting a protected metadata path.
+    fn protected_target_path(&self, call: &ToolCall) -> Option<String> {
+        if call.name != "write_file" && call.name != "edit_file" {
+            return None;
+        }
+        let args = serde_json::from_str::<serde_json::Value>(&call.arguments).ok()?;
+        let path = args.get("path")?.as_str()?;
+        let resolved = self.tool_ctx.resolve_path(path).ok()?;
+        if self.tool_ctx.is_protected_path(&resolved) {
+            Some(path.to_string())
+        } else {
+            None
+        }
+    }
+
     /// Determine whether a tool call requires explicit approval under the current `ApprovalMode`
     /// and `CommandRunner` sandbox capabilities.
     fn check_needs_approval(&self, call: &ToolCall) -> Option<String> {
@@ -419,19 +434,11 @@ impl Agent {
         }
 
         // Protected metadata paths always require approval, even under AutoApprove.
-        if call.name == "write_file" || call.name == "edit_file" {
-            if let Ok(args) = serde_json::from_str::<serde_json::Value>(&call.arguments) {
-                if let Some(path) = args.get("path").and_then(|v| v.as_str()) {
-                    if let Ok(resolved) = self.tool_ctx.resolve_path(path) {
-                        if self.tool_ctx.is_protected_path(&resolved) {
-                            return Some(format!(
-                                "Tool '{}' targets protected metadata path '{}'",
-                                call.name, path
-                            ));
-                        }
-                    }
-                }
-            }
+        if let Some(path) = self.protected_target_path(call) {
+            return Some(format!(
+                "Tool '{}' targets protected metadata path '{}'",
+                call.name, path
+            ));
         }
 
         match self.config.approval_mode {
@@ -673,7 +680,13 @@ impl Agent {
                             ))
                         } else {
                             tool_calls_executed += 1;
-                            self.registry.execute(tc, &turn_tool_ctx).await
+                            if self.protected_target_path(tc).is_some() {
+                                let approved_ctx =
+                                    turn_tool_ctx.clone().with_allow_protected_writes(true);
+                                self.registry.execute(tc, &approved_ctx).await
+                            } else {
+                                self.registry.execute(tc, &turn_tool_ctx).await
+                            }
                         }
                     } else {
                         tool_calls_executed += 1;

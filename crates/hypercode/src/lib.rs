@@ -1389,4 +1389,54 @@ mod tests {
             "File should not be created after rejection"
         );
     }
+
+    #[tokio::test]
+    async fn test_agent_approved_protected_path_write_succeeds_when_explicitly_approved() {
+        let tmp_dir = TempDir::new().unwrap();
+        let hooks_dir = tmp_dir.path().join(".git/hooks");
+        std::fs::create_dir_all(&hooks_dir).unwrap();
+
+        let backend = Arc::new(ScriptedBackend::new(vec![
+            ChatMessage::assistant_with_tools(
+                "Writing hook with approval",
+                vec![make_call(
+                    "write_file",
+                    serde_json::json!({
+                        "path": ".git/hooks/pre-commit",
+                        "content": "#!/bin/sh\necho ok\n"
+                    }),
+                )],
+            ),
+            ChatMessage::assistant("Done."),
+        ]));
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                approval_mode: ApprovalMode::AutoApprove,
+                ..Default::default()
+            },
+            backend,
+            ToolRegistry::with_default_coding_tools(),
+            ToolContext::new(tmp_dir.path()),
+        )
+        .with_approval_handler(AutoApproveHandler);
+
+        let collected = Arc::new(Mutex::new(Vec::new()));
+        agent.set_event_sink(CollectingSink {
+            events: collected.clone(),
+        });
+
+        let outcome = agent.run_turn("Add pre-commit hook").await.unwrap();
+        assert_eq!(outcome.final_response, "Done.");
+
+        let events = collected.lock().unwrap();
+        assert!(events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::ToolApprovalChecked { approved: true, .. })));
+        assert_eq!(
+            std::fs::read_to_string(hooks_dir.join("pre-commit")).unwrap(),
+            "#!/bin/sh\necho ok\n"
+        );
+    }
 }
