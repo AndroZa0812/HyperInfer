@@ -169,6 +169,27 @@ pub trait Database: Clone + Send + Sync + 'static {
     ) -> Result<Quota, DbError> {
         self.create_quota(team_id, rpm_limit, tpm_limit).await
     }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_api_key_limits(
+        &self,
+        id: &str,
+        budget_cents: Option<i64>,
+        allowed_models: Option<Vec<String>>,
+        rpm_limit: Option<i32>,
+        tpm_limit: Option<i32>,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<ApiKey, DbError> {
+        let _ = (
+            id,
+            budget_cents,
+            allowed_models,
+            rpm_limit,
+            tpm_limit,
+            expires_at,
+        );
+        Err(DbError::NotFound)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
-    import type { ApiKey, CreateApiKeyResponse, UsageData } from '#lib/types';
+    import type { ApiKey, CreateApiKeyOptions, CreateApiKeyResponse, UsageData } from '#lib/types';
     import Button from '#lib/components/Button.svelte';
     import Input from '#lib/components/Input.svelte';
     import Modal from '#lib/components/Modal.svelte';
@@ -13,7 +13,13 @@
     let loading = $state(true);
     let loadError = $state<string | null>(null);
     let showCreate = $state(false);
+    let createError = $state<string | null>(null);
     let newKeyName = $state('');
+    let newBudgetCents = $state<string | number>('');
+    let newAllowedModels = $state('');
+    let newRpmLimit = $state<string | number>('');
+    let newTpmLimit = $state<string | number>('');
+    let newExpiresAt = $state('');
     let searchQuery = $state('');
     let statusFilter = $state('all');
     let usage = $state<UsageData | null>(null);
@@ -58,17 +64,61 @@
 
     async function createKey() {
         if (!$auth.user?.team_id) return;
+        createError = null;
+        const opts: CreateApiKeyOptions = {};
+        const budgetStr = String(newBudgetCents ?? '').trim();
+        if (budgetStr !== '') {
+            const parsed = Math.round(Number(budgetStr));
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                createError = 'Budget must be a non-negative number of cents.';
+                return;
+            }
+            opts.budget_cents = parsed;
+        }
+        const models = String(newAllowedModels ?? '')
+            .split(',')
+            .map((m) => m.trim())
+            .filter(Boolean);
+        if (models.length > 0) opts.allowed_models = models;
+        const rpmStr = String(newRpmLimit ?? '').trim();
+        if (rpmStr !== '') {
+            const parsed = Math.round(Number(rpmStr));
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                createError = 'RPM limit must be a positive number.';
+                return;
+            }
+            opts.rpm_limit = parsed;
+        }
+        const tpmStr = String(newTpmLimit ?? '').trim();
+        if (tpmStr !== '') {
+            const parsed = Math.round(Number(tpmStr));
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                createError = 'TPM limit must be a positive number.';
+                return;
+            }
+            opts.tpm_limit = parsed;
+        }
+        const expiresStr = String(newExpiresAt ?? '').trim();
+        if (expiresStr !== '') {
+            opts.expires_at = new Date(`${expiresStr}T23:59:59Z`).toISOString();
+        }
         try {
-            const response = await api.createKey($auth.user!.team_id, newKeyName);
+            const response = await api.createKey($auth.user!.team_id, newKeyName, opts);
             const { key: secret, ...keyMetadata } = response;
             keys = [...keys, keyMetadata];
             showCreate = false;
             newKeyName = '';
+            newBudgetCents = '';
+            newAllowedModels = '';
+            newRpmLimit = '';
+            newTpmLimit = '';
+            newExpiresAt = '';
             createdKey = { ...keyMetadata, key: secret };
             showSecret = true;
             copied = false;
         } catch (e) {
             console.error('Failed to create key', e);
+            createError = e instanceof Error ? e.message : 'Failed to create API key';
         }
     }
 
@@ -148,8 +198,8 @@
                         <tr class="bg-[var(--surface-container-low)]">
                             <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Key Name</th>
                             <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Prefix</th>
+                            <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Budget &amp; Scope</th>
                             <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Created At</th>
-                            <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Last Used</th>
                             <th class="px-5 py-3.5 text-left text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</th>
                             <th class="px-5 py-3.5 text-right text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Actions</th>
                         </tr>
@@ -164,8 +214,28 @@
                                     </div>
                                 </td>
                                 <td class="px-5 py-4 text-sm font-mono text-[var(--on-surface-variant)]">{key.prefix ? `${key.prefix}...` : `${key.id.slice(0, 8)}...`}</td>
+                                <td class="px-5 py-4 text-xs text-[var(--on-surface-variant)]">
+                                    <div class="space-y-0.5">
+                                        <div class="font-mono text-[var(--on-surface)]">
+                                            {#if key.budget_cents != null}
+                                                {'$'}{((key.spent_cents ?? 0) / 100).toFixed(2)} / {'$'}{(key.budget_cents / 100).toFixed(2)}
+                                            {:else}
+                                                Unlimited
+                                            {/if}
+                                        </div>
+                                        {#if key.allowed_models && key.allowed_models.length > 0}
+                                            <div class="truncate max-w-[180px]" title={key.allowed_models.join(', ')}>
+                                                Models: {key.allowed_models.join(', ')}
+                                            </div>
+                                        {/if}
+                                        {#if key.rpm_limit || key.tpm_limit}
+                                            <div>
+                                                {key.rpm_limit ? `${key.rpm_limit} RPM` : ''}{key.rpm_limit && key.tpm_limit ? ' · ' : ''}{key.tpm_limit ? `${key.tpm_limit} TPM` : ''}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                </td>
                                 <td class="px-5 py-4 text-sm text-[var(--on-surface-variant)]">{new Date(key.created_at).toLocaleDateString()}</td>
-                                <td class="px-5 py-4 text-sm text-[var(--on-surface-variant)]">{key.last_used_at ? new Date(key.last_used_at).toLocaleDateString() : 'Never'}</td>
                                 <td class="px-5 py-4">
                                     <Badge variant={key.is_active ? 'success' : 'error'} label={key.is_active ? 'Active' : 'Revoked'} />
                                 </td>
@@ -208,8 +278,20 @@
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">Generate a new authentication credential.</p>
         </div>
         <Input label="Key Name" bind:value={newKeyName} placeholder="e.g. Production-Main" required />
+        <div class="grid grid-cols-2 gap-4">
+            <Input label="Budget (cents, optional)" type="number" bind:value={newBudgetCents} placeholder="e.g. 5000" />
+            <Input label="Expires On (optional)" type="date" bind:value={newExpiresAt} />
+        </div>
+        <Input label="Allowed Models (comma-separated, optional)" bind:value={newAllowedModels} placeholder="e.g. gpt-4, gpt-4o-mini" />
+        <div class="grid grid-cols-2 gap-4">
+            <Input label="RPM Limit (optional)" type="number" bind:value={newRpmLimit} placeholder="e.g. 60" />
+            <Input label="TPM Limit (optional)" type="number" bind:value={newTpmLimit} placeholder="e.g. 100000" />
+        </div>
+        {#if createError}
+            <p class="text-sm text-[var(--error)]">{createError}</p>
+        {/if}
         <div class="flex gap-3 justify-end">
-            <Button variant="ghost" onclick={() => showCreate = false}>Cancel</Button>
+            <Button variant="ghost" onclick={() => { showCreate = false; createError = null; }}>Cancel</Button>
             <Button type="submit">Create Key</Button>
         </div>
     </form>

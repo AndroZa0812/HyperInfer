@@ -3,6 +3,7 @@ import type {
   CreateUserRequest,
   Team,
   ApiKey,
+  CreateApiKeyOptions,
   CreateApiKeyResponse,
   UsageData,
   Deployment,
@@ -10,6 +11,8 @@ import type {
   ModelAlias,
   CreateModelAliasRequest,
   Quota,
+  RoutingConfig,
+  RoutingHealth,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -111,10 +114,10 @@ export const api = {
     const params = teamId ? `?team_id=${encodeURIComponent(teamId)}` : '';
     return fetchApi<ApiKey[]>(`/api_keys${params}`);
   },
-  createKey: (teamId: string, name: string) =>
+  createKey: (teamId: string, name: string, opts?: CreateApiKeyOptions) =>
     fetchApi<CreateApiKeyResponse>("/api_keys", {
       method: "POST",
-      body: JSON.stringify({ team_id: teamId, name }),
+      body: JSON.stringify({ team_id: teamId, name, ...opts }),
     }),
 
   getUsage: (teamId?: string) => {
@@ -143,4 +146,12 @@ export const api = {
     }),
   deleteDeployment: (id: string) =>
     fetchApi<void>(`/deployments/${id}`, { method: "DELETE" }),
+
+  getRoutingConfig: () => fetchApi<RoutingConfig>("/admin/routing/config"),
+  updateRoutingConfig: (strategy: string) =>
+    fetchApi<RoutingConfig>("/admin/routing/config", {
+      method: "PUT",
+      body: JSON.stringify({ strategy }),
+    }),
+  getRoutingHealth: () => fetchApi<RoutingHealth>("/admin/routing/health"),
 };
