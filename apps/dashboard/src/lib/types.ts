@@ -69,6 +69,7 @@ export interface Deployment {
     name: string;
     provider: string;
     model: string;
+    api_key_ref?: string | null;
     base_url: string;
     is_active: boolean;
     weight: number;
