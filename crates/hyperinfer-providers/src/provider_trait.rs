@@ -43,6 +43,7 @@ pub trait LlmProvider: dyn_clone::DynClone + Send + Sync {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
         self.chat(&request, api_key).await?;
         Ok(())

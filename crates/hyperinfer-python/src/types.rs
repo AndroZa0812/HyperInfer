@@ -83,6 +83,7 @@ pub fn request_from_py(_py: Python<'_>, obj: Py<PyAny>) -> PyResult<ChatRequest>
         tools: None,
         tool_choice: None,
         response_format: None,
+        prompt_caching: None,
     })
 }
 

@@ -199,6 +199,7 @@ pub fn to_chat_request(model: &str, req: GeminiGenerateRequest) -> ChatRequest {
         tools,
         tool_choice: None,
         response_format: None,
+        prompt_caching: None,
     }
 }
 
@@ -394,6 +395,7 @@ mod tests {
             usage: hyperinfer_core::Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                ..Default::default()
             },
         };
 

@@ -189,6 +189,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         }
     }
 
@@ -204,6 +205,7 @@ mod tests {
             usage: Usage {
                 input_tokens: 5,
                 output_tokens: 10,
+                ..Default::default()
             },
         }
     }

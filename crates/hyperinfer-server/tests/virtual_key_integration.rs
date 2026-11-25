@@ -456,6 +456,7 @@ impl hyperinfer_providers::LlmProvider for MockUsageProvider {
             usage: hyperinfer_core::Usage {
                 input_tokens: 100_000,
                 output_tokens: 50_000,
+                ..Default::default()
             },
         })
     }

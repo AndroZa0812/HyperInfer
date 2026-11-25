@@ -63,6 +63,9 @@ pub struct ChatRequest {
     /// Response format: {"type":"json_object"} or {"type":"json_schema","schema":{...}}.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_format: Option<serde_json::Value>,
+    /// When `true`, emit provider-native prompt prefix caching breakpoints (e.g. Anthropic `cache_control`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_caching: Option<bool>,
 }
 
 /// A single streamed token delta from a provider SSE event.
@@ -259,6 +262,10 @@ pub struct Usage {
     pub input_tokens: u32,
     #[serde(default)]
     pub output_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_read_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cache_creation_tokens: Option<u32>,
 }
 
 /// A usage record for telemetry (stored in Redis Stream and PostgreSQL)
@@ -477,6 +484,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         assert!(request.validate().is_err());
@@ -494,6 +502,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         assert!(request.validate().is_err());
@@ -511,6 +520,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         assert!(request.validate().is_ok());

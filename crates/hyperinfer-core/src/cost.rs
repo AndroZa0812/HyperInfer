@@ -20,7 +20,7 @@ impl From<&Usage> for WeightedUsage {
     fn from(usage: &Usage) -> Self {
         Self {
             input_tokens: usage.input_tokens as u64,
-            cached_input_tokens: 0,
+            cached_input_tokens: usage.cache_read_tokens.unwrap_or(0) as u64,
             output_tokens: usage.output_tokens as u64,
             reasoning_tokens: 0,
         }

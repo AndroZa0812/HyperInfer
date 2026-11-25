@@ -3,8 +3,9 @@
 
 use crate::agent::{AgentError, ChatBackend};
 use crate::tools::list_files::is_ignored_dir;
-use hyperinfer_core::{ChatMessage, ChatRequest, MessageRole};
+use hyperinfer_core::{ChatMessage, ChatRequest, MessageRole, Usage};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// Candidate project rule/instruction files searched in `workspace_root`.
@@ -166,8 +167,94 @@ pub fn estimate_messages_tokens(messages: &[ChatMessage]) -> usize {
         .sum()
 }
 
+/// Model-specific context window and pricing profile.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ModelContextProfile {
+    pub context_window: usize,
+    pub input_cost_per_million: f64,
+    pub output_cost_per_million: f64,
+    pub cache_read_cost_per_million: f64,
+    pub cache_creation_cost_per_million: f64,
+}
+
+/// Return the context window and pricing profile for a given model name.
+pub fn model_context_profile(model: &str) -> ModelContextProfile {
+    let lower = model.to_lowercase();
+    if lower.starts_with("claude-opus") {
+        ModelContextProfile {
+            context_window: 200_000,
+            input_cost_per_million: 15.0,
+            output_cost_per_million: 75.0,
+            cache_read_cost_per_million: 1.50,
+            cache_creation_cost_per_million: 18.75,
+        }
+    } else if lower.starts_with("claude-haiku") {
+        ModelContextProfile {
+            context_window: 200_000,
+            input_cost_per_million: 0.80,
+            output_cost_per_million: 4.00,
+            cache_read_cost_per_million: 0.08,
+            cache_creation_cost_per_million: 1.00,
+        }
+    } else if lower.starts_with("claude") {
+        // Sonnet default
+        ModelContextProfile {
+            context_window: 200_000,
+            input_cost_per_million: 3.00,
+            output_cost_per_million: 15.00,
+            cache_read_cost_per_million: 0.30,
+            cache_creation_cost_per_million: 3.75,
+        }
+    } else if lower.starts_with("gpt-4.1") {
+        ModelContextProfile {
+            context_window: 1_000_000,
+            input_cost_per_million: 2.00,
+            output_cost_per_million: 8.00,
+            cache_read_cost_per_million: 0.50,
+            cache_creation_cost_per_million: 2.00,
+        }
+    } else if lower.starts_with("gpt-4o-mini") {
+        ModelContextProfile {
+            context_window: 128_000,
+            input_cost_per_million: 0.15,
+            output_cost_per_million: 0.60,
+            cache_read_cost_per_million: 0.075,
+            cache_creation_cost_per_million: 0.15,
+        }
+    } else if lower.starts_with("gpt-4o")
+        || lower.starts_with("o1")
+        || lower.starts_with("o3")
+        || lower.starts_with("o4")
+    {
+        ModelContextProfile {
+            context_window: 128_000,
+            input_cost_per_million: 2.50,
+            output_cost_per_million: 10.00,
+            cache_read_cost_per_million: 1.25,
+            cache_creation_cost_per_million: 2.50,
+        }
+    } else if lower.starts_with("gemini") {
+        ModelContextProfile {
+            context_window: 1_000_000,
+            input_cost_per_million: 1.25,
+            output_cost_per_million: 5.00,
+            cache_read_cost_per_million: 0.3125,
+            cache_creation_cost_per_million: 1.25,
+        }
+    } else {
+        // Local models (qwen, llama, etc.)
+        ModelContextProfile {
+            context_window: 32_000,
+            input_cost_per_million: 0.0,
+            output_cost_per_million: 0.0,
+            cache_read_cost_per_million: 0.0,
+            cache_creation_cost_per_million: 0.0,
+        }
+    }
+}
+
 /// Configuration for automatic and manual context compaction.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CompactionConfig {
     /// Trigger automatic compaction when estimated history tokens exceed this threshold.
     pub max_context_tokens: usize,
@@ -175,6 +262,10 @@ pub struct CompactionConfig {
     pub keep_recent_messages: usize,
     /// Maximum character length for older `MessageRole::Tool` outputs during Tier-1 pruning.
     pub max_old_tool_output_chars: usize,
+    /// Fraction of the model's context window to use as the effective compaction threshold.
+    pub compaction_ratio: f64,
+    /// If true, compute the effective max context tokens from the model's context window.
+    pub auto_model_budget: bool,
 }
 
 impl Default for CompactionConfig {
@@ -183,8 +274,165 @@ impl Default for CompactionConfig {
             max_context_tokens: 32_000,
             keep_recent_messages: 6,
             max_old_tool_output_chars: 800,
+            compaction_ratio: 0.75,
+            auto_model_budget: true,
         }
     }
+}
+
+impl CompactionConfig {
+    /// Compute the effective max context tokens based on the model's context window.
+    pub fn effective_max_context_tokens(&self, model: &str) -> usize {
+        if self.auto_model_budget {
+            let profile = model_context_profile(model);
+            ((profile.context_window as f64) * self.compaction_ratio) as usize
+        } else {
+            self.max_context_tokens
+        }
+    }
+}
+
+/// Token usage accounting with calibrated context tracking.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TokenAccounting {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_creation_tokens: u64,
+    /// Total prompt tokens reported by the API on the last step (input + cache_read + cache_creation).
+    pub last_prompt_tokens: Option<usize>,
+    /// History length at the time of the last API response.
+    pub last_history_len: usize,
+}
+
+impl TokenAccounting {
+    /// Record usage from an API response and update calibration state.
+    pub fn record_usage(&mut self, usage: &Usage, history_len: usize) {
+        self.input_tokens += usage.input_tokens as u64;
+        self.output_tokens += usage.output_tokens as u64;
+        let cache_read = usage.cache_read_tokens.unwrap_or(0) as u64;
+        let cache_creation = usage.cache_creation_tokens.unwrap_or(0) as u64;
+        self.cache_read_tokens += cache_read;
+        self.cache_creation_tokens += cache_creation;
+
+        let prompt_tokens =
+            usage.input_tokens as usize + cache_read as usize + cache_creation as usize;
+        if prompt_tokens > 0 {
+            self.last_prompt_tokens = Some(prompt_tokens);
+            self.last_history_len = history_len;
+        }
+    }
+
+    /// Estimate current context tokens using calibration from the last API response.
+    pub fn calibrated_context_tokens(&self, history: &[ChatMessage]) -> usize {
+        if let Some(base) = self.last_prompt_tokens {
+            if history.len() >= self.last_history_len {
+                let new_messages = &history[self.last_history_len..];
+                return base + estimate_messages_tokens(new_messages);
+            }
+        }
+        estimate_messages_tokens(history)
+    }
+
+    /// Compute context utilization as a percentage of the model's context window.
+    pub fn context_utilization_pct(&self, model: &str, history: &[ChatMessage]) -> f64 {
+        let profile = model_context_profile(model);
+        let used = self.calibrated_context_tokens(history) as f64;
+        let window = profile.context_window.max(1) as f64;
+        (used / window) * 100.0
+    }
+
+    /// Estimate total USD cost based on accumulated token usage and model pricing.
+    pub fn estimated_cost_usd(&self, model: &str) -> f64 {
+        let profile = model_context_profile(model);
+        let input_cost = (self.input_tokens as f64 / 1_000_000.0) * profile.input_cost_per_million;
+        let output_cost =
+            (self.output_tokens as f64 / 1_000_000.0) * profile.output_cost_per_million;
+        let cache_read_cost =
+            (self.cache_read_tokens as f64 / 1_000_000.0) * profile.cache_read_cost_per_million;
+        let cache_creation_cost = (self.cache_creation_tokens as f64 / 1_000_000.0)
+            * profile.cache_creation_cost_per_million;
+        input_cost + output_cost + cache_read_cost + cache_creation_cost
+    }
+}
+
+/// Heuristic check for whether a tool result message represents an error or approval denial.
+fn is_failed_tool_result(content: &str) -> bool {
+    let trimmed = content.trim_start();
+    trimmed.starts_with("Error:")
+        || trimmed.starts_with("Access denied:")
+        || trimmed.starts_with("Tool execution denied")
+        || trimmed.starts_with("Approval denied:")
+        || trimmed.starts_with("Invalid arguments")
+        || trimmed.starts_with("Failed to ")
+}
+
+/// Deduplicate superseded `read_file` tool outputs in history.
+///
+/// Walks history to find `read_file` calls and tracks the latest index where each
+/// file was **successfully** read or mutated. Any earlier `read_file` results are
+/// replaced with a superseded marker. Failed or denied later calls do not invalidate
+/// earlier successful reads. Returns the number of messages deduplicated.
+pub fn deduplicate_read_file_outputs(history: &mut [ChatMessage]) -> usize {
+    // Collect successful tool_call_ids (a call only supersedes earlier reads if its
+    // corresponding Tool result exists and did not fail or get denied).
+    let mut succeeded_calls: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for msg in history.iter() {
+        if msg.role == MessageRole::Tool {
+            if let Some(ref call_id) = msg.tool_call_id {
+                if !is_failed_tool_result(&msg.content) {
+                    succeeded_calls.insert(call_id.clone());
+                }
+            }
+        }
+    }
+
+    // First pass: collect tool_call_id -> (assistant_idx, path) for read_file calls
+    // and track the latest assistant index where each path was successfully read or mutated.
+    let mut call_paths: HashMap<String, (usize, String)> = HashMap::new();
+    let mut latest_path_index: HashMap<String, usize> = HashMap::new();
+    for (idx, msg) in history.iter().enumerate() {
+        if msg.role == MessageRole::Assistant {
+            if let Some(ref calls) = msg.tool_calls {
+                for tc in calls {
+                    if matches!(tc.name.as_str(), "read_file" | "edit_file" | "write_file") {
+                        if let Ok(args) = serde_json::from_str::<serde_json::Value>(&tc.arguments) {
+                            if let Some(path) = args.get("path").and_then(|p| p.as_str()) {
+                                if tc.name == "read_file" {
+                                    call_paths.insert(tc.id.clone(), (idx, path.to_string()));
+                                }
+                                if succeeded_calls.contains(&tc.id) {
+                                    latest_path_index.insert(path.to_string(), idx);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Second pass: replace superseded read_file results
+    let mut deduped_count = 0;
+    for msg in history.iter_mut() {
+        if msg.role == MessageRole::Tool {
+            if let Some(ref call_id) = msg.tool_call_id {
+                if let Some((call_idx, path)) = call_paths.get(call_id) {
+                    if let Some(&latest_idx) = latest_path_index.get(path) {
+                        if *call_idx < latest_idx && !msg.content.starts_with("[Superseded:") {
+                            msg.content = format!(
+                                "[Superseded: `{}` was re-read or modified in a later step]",
+                                path
+                            );
+                            deduped_count += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    deduped_count
 }
 
 /// Bytes reserved for `\n... [N chars pruned by context compactor] ...\n`
@@ -306,9 +554,9 @@ pub async fn compact_history_with_llm(
         model: model.to_string(),
         messages: vec![
             ChatMessage::system(
-                "Summarize the following coding session transcript concisely. Include: \
-                 (1) user goals, (2) files inspected or modified, (3) key findings/decisions, \
-                 and (4) remaining work.",
+                "Summarize the following coding session transcript concisely. Preserve: \
+                 (1) user goals & active plan, (2) files modified or inspected, \
+                 (3) key decisions & findings, and (4) unresolved errors & remaining work.",
             ),
             ChatMessage::user(transcript),
         ],
@@ -319,6 +567,7 @@ pub async fn compact_history_with_llm(
         tools: None,
         tool_choice: None,
         response_format: None,
+        prompt_caching: None,
     };
 
     let resp = backend.chat(api_key_id, sum_request).await?;

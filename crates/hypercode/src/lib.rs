@@ -23,9 +23,9 @@ pub use cli::{
     TerminalApprovalHandler, TerminalEventSink,
 };
 pub use context::{
-    compact_history_with_llm, estimate_messages_tokens, estimate_tokens,
-    find_safe_compaction_split, prune_old_tool_outputs, CompactionConfig, WorkspaceContext,
-    INSTRUCTION_FILES,
+    compact_history_with_llm, deduplicate_read_file_outputs, estimate_messages_tokens,
+    estimate_tokens, find_safe_compaction_split, model_context_profile, prune_old_tool_outputs,
+    CompactionConfig, ModelContextProfile, TokenAccounting, WorkspaceContext, INSTRUCTION_FILES,
 };
 pub use output_filter::{
     FilterOutcome, FilterStats, OutputFilter, OutputFilterConfig, SessionFilterSnapshot,
@@ -100,6 +100,7 @@ mod tests {
                 usage: Usage {
                     input_tokens: 10,
                     output_tokens: 5,
+                    ..Default::default()
                 },
             })
         }
@@ -576,6 +577,8 @@ mod tests {
                     max_context_tokens: 100, // small threshold to test compaction
                     keep_recent_messages: 2,
                     max_old_tool_output_chars: 80,
+                    compaction_ratio: 0.75,
+                    auto_model_budget: false,
                 },
                 ..Default::default()
             },
@@ -888,6 +891,7 @@ mod tests {
                 usage: Some(Usage {
                     input_tokens: 10,
                     output_tokens: 5,
+                    ..Default::default()
                 }),
                 tool_calls: None,
             },
@@ -1438,5 +1442,352 @@ mod tests {
             std::fs::read_to_string(hooks_dir.join("pre-commit")).unwrap(),
             "#!/bin/sh\necho ok\n"
         );
+    }
+
+    // --- Model context profile tests ---
+
+    #[test]
+    fn test_model_context_profile_claude_opus() {
+        let p = model_context_profile("claude-opus-4-20250514");
+        assert_eq!(p.context_window, 200_000);
+        assert_eq!(p.input_cost_per_million, 15.0);
+        assert_eq!(p.output_cost_per_million, 75.0);
+        assert_eq!(p.cache_read_cost_per_million, 1.50);
+        assert_eq!(p.cache_creation_cost_per_million, 18.75);
+    }
+
+    #[test]
+    fn test_model_context_profile_claude_haiku() {
+        let p = model_context_profile("claude-haiku-3-5-20241022");
+        assert_eq!(p.context_window, 200_000);
+        assert_eq!(p.input_cost_per_million, 0.80);
+        assert_eq!(p.output_cost_per_million, 4.00);
+    }
+
+    #[test]
+    fn test_model_context_profile_claude_sonnet_default() {
+        let p = model_context_profile("claude-sonnet-4-20250514");
+        assert_eq!(p.context_window, 200_000);
+        assert_eq!(p.input_cost_per_million, 3.00);
+        assert_eq!(p.output_cost_per_million, 15.00);
+    }
+
+    #[test]
+    fn test_model_context_profile_gpt_4o() {
+        let p = model_context_profile("gpt-4o");
+        assert_eq!(p.context_window, 128_000);
+        assert_eq!(p.input_cost_per_million, 2.50);
+        assert_eq!(p.output_cost_per_million, 10.00);
+    }
+
+    #[test]
+    fn test_model_context_profile_gpt_4o_mini() {
+        let p = model_context_profile("gpt-4o-mini");
+        assert_eq!(p.context_window, 128_000);
+        assert_eq!(p.input_cost_per_million, 0.15);
+        assert_eq!(p.output_cost_per_million, 0.60);
+    }
+
+    #[test]
+    fn test_model_context_profile_gemini() {
+        let p = model_context_profile("gemini-2.5-pro");
+        assert_eq!(p.context_window, 1_000_000);
+        assert_eq!(p.input_cost_per_million, 1.25);
+        assert_eq!(p.output_cost_per_million, 5.00);
+    }
+
+    #[test]
+    fn test_model_context_profile_local_model() {
+        let p = model_context_profile("qwen2.5-coder:latest");
+        assert_eq!(p.context_window, 32_000);
+        assert_eq!(p.input_cost_per_million, 0.0);
+        assert_eq!(p.output_cost_per_million, 0.0);
+    }
+
+    // --- CompactionConfig effective_max_context_tokens tests ---
+
+    #[test]
+    fn test_compaction_config_auto_model_budget() {
+        let config = CompactionConfig::default();
+        assert!(config.auto_model_budget);
+        assert_eq!(config.compaction_ratio, 0.75);
+        // Claude Sonnet: 200_000 * 0.75 = 150_000
+        assert_eq!(
+            config.effective_max_context_tokens("claude-sonnet-4-20250514"),
+            150_000
+        );
+        // GPT-4o: 128_000 * 0.75 = 96_000
+        assert_eq!(config.effective_max_context_tokens("gpt-4o"), 96_000);
+    }
+
+    #[test]
+    fn test_compaction_config_explicit_override() {
+        let config = CompactionConfig {
+            max_context_tokens: 50_000,
+            auto_model_budget: false,
+            ..Default::default()
+        };
+        assert_eq!(
+            config.effective_max_context_tokens("claude-sonnet-4-20250514"),
+            50_000
+        );
+        assert_eq!(config.effective_max_context_tokens("gpt-4o"), 50_000);
+    }
+
+    // --- TokenAccounting tests ---
+
+    #[test]
+    fn test_token_accounting_record_usage() {
+        let mut ta = TokenAccounting::default();
+        let usage = Usage {
+            input_tokens: 1000,
+            output_tokens: 200,
+            cache_read_tokens: Some(500),
+            cache_creation_tokens: Some(100),
+        };
+        ta.record_usage(&usage, 5);
+        assert_eq!(ta.input_tokens, 1000);
+        assert_eq!(ta.output_tokens, 200);
+        assert_eq!(ta.cache_read_tokens, 500);
+        assert_eq!(ta.cache_creation_tokens, 100);
+        assert_eq!(ta.last_prompt_tokens, Some(1600));
+        assert_eq!(ta.last_history_len, 5);
+    }
+
+    #[test]
+    fn test_token_accounting_calibrated_context_tokens() {
+        let mut ta = TokenAccounting::default();
+        let usage = Usage {
+            input_tokens: 1000,
+            output_tokens: 200,
+            cache_read_tokens: Some(500),
+            cache_creation_tokens: Some(100),
+        };
+        ta.record_usage(&usage, 5);
+
+        // No new messages: should return base
+        let history: Vec<ChatMessage> = vec![
+            ChatMessage::system("sys"),
+            ChatMessage::user("u1"),
+            ChatMessage::assistant("a1"),
+            ChatMessage::user("u2"),
+            ChatMessage::assistant("a2"),
+        ];
+        let tokens = ta.calibrated_context_tokens(&history);
+        assert_eq!(tokens, 1600);
+
+        // New messages added: should add their estimate
+        let history2: Vec<ChatMessage> = history
+            .into_iter()
+            .chain(std::iter::once(ChatMessage::user("new user message")))
+            .collect();
+        let tokens2 = ta.calibrated_context_tokens(&history2);
+        assert!(tokens2 > 1600);
+    }
+
+    #[test]
+    fn test_token_accounting_context_utilization_pct() {
+        let mut ta = TokenAccounting::default();
+        let usage = Usage {
+            input_tokens: 10000,
+            output_tokens: 1000,
+            cache_read_tokens: None,
+            cache_creation_tokens: None,
+        };
+        ta.record_usage(&usage, 3);
+
+        let history: Vec<ChatMessage> = vec![
+            ChatMessage::system("sys"),
+            ChatMessage::user("u"),
+            ChatMessage::assistant("a"),
+        ];
+        // Claude Sonnet: 200_000 window, 10_000 prompt tokens (input only)
+        let pct = ta.context_utilization_pct("claude-sonnet-4-20250514", &history);
+        assert!((pct - 5.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_token_accounting_estimated_cost_usd() {
+        let mut ta = TokenAccounting::default();
+        let usage = Usage {
+            input_tokens: 1000000,
+            output_tokens: 500000,
+            cache_read_tokens: Some(200000),
+            cache_creation_tokens: Some(100000),
+        };
+        ta.record_usage(&usage, 3);
+
+        // Claude Sonnet: $3.00/M input, $15.00/M output, $0.30/M cache read, $3.75/M cache write
+        let cost = ta.estimated_cost_usd("claude-sonnet-4-20250514");
+        // 1M * 3.00 + 0.5M * 15.00 + 0.2M * 0.30 + 0.1M * 3.75 = 3.00 + 7.50 + 0.06 + 0.375 = 10.935
+        assert!((cost - 10.935).abs() < 0.001);
+    }
+
+    // --- deduplicate_read_file_outputs tests ---
+
+    fn make_read_call(id: &str, path: &str) -> ChatMessage {
+        ChatMessage::assistant_with_tools(
+            "",
+            vec![ToolCall {
+                id: id.to_string(),
+                name: "read_file".to_string(),
+                arguments: serde_json::json!({ "path": path }).to_string(),
+            }],
+        )
+    }
+
+    fn make_edit_call(id: &str, path: &str) -> ChatMessage {
+        ChatMessage::assistant_with_tools(
+            "",
+            vec![ToolCall {
+                id: id.to_string(),
+                name: "edit_file".to_string(),
+                arguments: serde_json::json!({ "path": path }).to_string(),
+            }],
+        )
+    }
+
+    fn make_tool_result(id: &str, content: &str) -> ChatMessage {
+        ChatMessage::tool_result(id.to_string(), "read_file", content.to_string())
+    }
+
+    #[test]
+    fn test_deduplicate_superseded_reread() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "old content"),
+            make_read_call("call2", "foo.txt"),
+            make_tool_result("call2", "new content"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 1);
+        assert!(history[1].content.starts_with("[Superseded:"));
+        assert_eq!(history[3].content, "new content");
+    }
+
+    #[test]
+    fn test_deduplicate_superseded_by_edit() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "original content"),
+            make_edit_call("call2", "foo.txt"),
+            make_tool_result("call2", "edited"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 1);
+        assert!(history[1].content.starts_with("[Superseded:"));
+    }
+
+    #[test]
+    fn test_deduplicate_preserves_latest_read() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "first"),
+            make_read_call("call2", "foo.txt"),
+            make_tool_result("call2", "second"),
+            make_read_call("call3", "foo.txt"),
+            make_tool_result("call3", "third"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 2);
+        assert!(history[1].content.starts_with("[Superseded:"));
+        assert!(history[3].content.starts_with("[Superseded:"));
+        assert_eq!(history[5].content, "third");
+    }
+
+    #[test]
+    fn test_deduplicate_different_files() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "foo content"),
+            make_read_call("call2", "bar.txt"),
+            make_tool_result("call2", "bar content"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 0);
+        assert_eq!(history[1].content, "foo content");
+        assert_eq!(history[3].content, "bar content");
+    }
+
+    #[test]
+    fn test_deduplicate_ignores_failed_or_denied_later_call() {
+        let mut history = vec![
+            make_read_call("call1", "foo.txt"),
+            make_tool_result("call1", "important content"),
+            make_edit_call("call2", "foo.txt"),
+            make_tool_result(
+                "call2",
+                "Tool execution denied by user approval policy (requires approval).",
+            ),
+            make_read_call("call3", "foo.txt"),
+            make_tool_result("call3", "Error: failed to read file"),
+        ];
+        let deduped = deduplicate_read_file_outputs(&mut history);
+        assert_eq!(deduped, 0);
+        assert_eq!(history[1].content, "important content");
+    }
+
+    // --- Agent prompt_caching and token_accounting integration test ---
+
+    #[tokio::test]
+    async fn test_agent_sets_prompt_caching_and_records_usage() {
+        struct CacheUsageBackend {
+            seen_requests: Mutex<Vec<ChatRequest>>,
+        }
+
+        #[async_trait]
+        impl ChatBackend for CacheUsageBackend {
+            async fn chat(
+                &self,
+                _key: &str,
+                request: ChatRequest,
+            ) -> Result<ChatResponse, HyperInferError> {
+                self.seen_requests.lock().unwrap().push(request.clone());
+                Ok(ChatResponse {
+                    id: "cache-resp".to_string(),
+                    model: request.model,
+                    choices: vec![Choice {
+                        index: 0,
+                        message: ChatMessage::assistant("Done"),
+                        finish_reason: Some("stop".to_string()),
+                    }],
+                    usage: Usage {
+                        input_tokens: 10,
+                        output_tokens: 5,
+                        cache_read_tokens: Some(2),
+                        cache_creation_tokens: Some(1),
+                    },
+                })
+            }
+        }
+
+        let backend = Arc::new(CacheUsageBackend {
+            seen_requests: Mutex::new(Vec::new()),
+        });
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "claude-sonnet-4-20250514".to_string(),
+                ..Default::default()
+            },
+            backend.clone(),
+            ToolRegistry::new(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+
+        let outcome = agent.run_turn("Hello").await.unwrap();
+        assert_eq!(outcome.final_response, "Done");
+
+        // Verify prompt_caching was set
+        let requests = backend.seen_requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].prompt_caching, Some(true));
+
+        // Verify token accounting was updated (including cache tokens)
+        let ta = agent.token_accounting();
+        assert_eq!(ta.input_tokens, 10);
+        assert_eq!(ta.output_tokens, 5);
+        assert_eq!(ta.cache_read_tokens, 2);
+        assert_eq!(ta.cache_creation_tokens, 1);
     }
 }
