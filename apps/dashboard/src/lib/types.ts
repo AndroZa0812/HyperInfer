@@ -3,6 +3,38 @@ export interface User {
     email: string;
     role: 'admin' | 'member';
     team_id: string;
+    created_at?: string;
+}
+
+export interface CreateUserRequest {
+    team_id: string;
+    email: string;
+    role: 'admin' | 'member';
+    password?: string;
+}
+
+export interface ModelAlias {
+    id: string;
+    team_id: string;
+    alias: string;
+    target_model: string;
+    provider: string;
+    created_at: string;
+}
+
+export interface CreateModelAliasRequest {
+    team_id: string;
+    alias: string;
+    target_model: string;
+    provider: string;
+}
+
+export interface Quota {
+    id: string;
+    team_id: string;
+    rpm_limit: number;
+    tpm_limit: number;
+    updated_at: string;
 }
 
 export interface Team {

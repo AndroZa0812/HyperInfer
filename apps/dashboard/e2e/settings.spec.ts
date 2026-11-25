@@ -71,7 +71,7 @@ test.describe('Settings', () => {
 			await expect(page).toHaveURL(/\/login$/);
 
 			await loginViaUi(page, ADMIN_EMAIL, newPassword);
-			await expect(page).toHaveURL(/\/dashboard\/teams$/);
+			await expect(page).toHaveURL(/\/dashboard$/);
 		} finally {
 			// Always restore original seeded password so subsequent runs remain clean
 			await page.request.post('/v1/auth/change-password', {
