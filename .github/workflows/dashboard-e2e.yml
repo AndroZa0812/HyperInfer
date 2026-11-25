@@ -60,6 +60,10 @@ jobs:
           bun install --frozen-lockfile
           bunx playwright install --with-deps chromium
 
+      - name: Typecheck dashboard (svelte-check)
+        working-directory: apps/dashboard
+        run: bun run check
+
       - name: Run full-stack Playwright E2E tests
         working-directory: apps/dashboard
         run: bun run test:e2e

@@ -9,6 +9,10 @@
 		"skipLibCheck": true,
 		"sourceMap": true,
 		"strict": true,
-		"moduleResolution": "bundler"
-	}
+		"moduleResolution": "bundler",
+		"paths": {
+			"#lib/*": ["./src/lib/*"]
+		}
+	},
+	"exclude": ["build", "node_modules", "playwright-report", "test-results"]
 }
