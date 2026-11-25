@@ -91,16 +91,18 @@ fn resolve_bind_addr(
     let raw_bind = cli_bind.or_else(|| std::env::var("BIND_ADDR").ok());
 
     match raw_bind {
-        Some(addr) if addr.parse::<std::net::SocketAddr>().is_ok() => {
-            if let Some(p) = cli_port {
-                let mut sock: std::net::SocketAddr = addr.parse().unwrap();
-                sock.set_port(p);
+        Some(addr) => {
+            if let Ok(mut sock) = addr.parse::<std::net::SocketAddr>() {
+                if let Some(p) = cli_port {
+                    sock.set_port(p);
+                }
                 sock.to_string()
+            } else if let Ok(ip) = addr.parse::<std::net::IpAddr>() {
+                std::net::SocketAddr::new(ip, port).to_string()
             } else {
-                addr
+                format!("{addr}:{port}")
             }
         }
-        Some(host) => format!("{host}:{port}"),
         None => format!("{default_host}:{port}"),
     }
 }
@@ -137,8 +139,19 @@ async fn run_standalone(
     info!("Bind address:      {}", actual_addr);
     info!("Dashboard URL:     http://{}", actual_addr);
     info!("Admin email:       {}", boot.admin_email);
-    info!("Admin password:    {}", boot.admin_password);
-    info!("Virtual API key:   {}", boot.api_key);
+    info!("Virtual API key:   {} (id)", key_id(&boot.api_key));
+    let show_secrets = actual_addr.ip().is_loopback()
+        && std::env::var("HYPERINFER_SHOW_STANDALONE_SECRETS")
+            .map(|v| v == "1" || v == "true")
+            .unwrap_or(false);
+    if show_secrets {
+        eprintln!("  [local-dev] Admin password:  {}", boot.admin_password);
+        eprintln!("  [local-dev] Virtual API key: {}", boot.api_key);
+    } else {
+        info!(
+            "Tip: set HYPERINFER_STANDALONE_KEY / INITIAL_ADMIN_PASSWORD, or HYPERINFER_SHOW_STANDALONE_SECRETS=1 on localhost to print generated credentials"
+        );
+    }
     if !boot.detected_providers.is_empty() {
         let names: Vec<String> = boot
             .detected_providers
@@ -342,13 +355,7 @@ async fn run_postgres(
 
     let app = build_router(state, mcp_state, cors, enable_docs);
 
-    let port = cli_port
-        .or_else(|| std::env::var("PORT").ok().and_then(|p| p.parse().ok()))
-        .unwrap_or(3000);
-    let bind_addr = cli_bind
-        .or_else(|| std::env::var("BIND_ADDR").ok())
-        .unwrap_or_else(|| "0.0.0.0".to_string());
-    let full_bind = format!("{}:{}", bind_addr, port);
+    let full_bind = resolve_bind_addr(cli_bind, cli_port, "0.0.0.0");
     let listener = tokio::net::TcpListener::bind(&full_bind).await?;
     info!("Server listening on {}", listener.local_addr()?);
 
