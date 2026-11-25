@@ -182,7 +182,14 @@ impl McpGateway {
         for (server_name, server) in snapshot {
             let url = match &server.transport {
                 UpstreamTransport::StreamableHttp { url } => url.clone(),
-                UpstreamTransport::Sse { url } => url.clone(),
+                UpstreamTransport::Sse { url } => {
+                    warn!(
+                        server = %server_name,
+                        url = %url,
+                        "SSE upstream transport handshake is not yet implemented; skipping upstream"
+                    );
+                    continue;
+                }
             };
 
             let headers = self.resolve_headers(&server.headers);
@@ -257,29 +264,43 @@ impl McpGateway {
         namespaced_name: &str,
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
-        let parts: Vec<&str> = namespaced_name.split("__").collect();
-        if parts.len() < 2 {
-            return Err(format!("Invalid namespaced tool name: {}", namespaced_name));
-        }
-
-        let server_name = parts[0];
-        let tool_name = parts[1..].join("__");
-
-        let server = {
+        let (server, tool_name) = {
             let upstreams = self.upstreams.read().await;
-            upstreams
-                .get(server_name)
-                .cloned()
-                .ok_or_else(|| format!("Upstream server not found: {}", server_name))?
+            // Match the longest registered upstream name prefix `<server>__<tool>`
+            // so server names containing `__` resolve unambiguously.
+            let matched = upstreams
+                .iter()
+                .filter_map(|(name, srv)| {
+                    namespaced_name
+                        .strip_prefix(name)
+                        .and_then(|rest| rest.strip_prefix("__"))
+                        .map(|tool| (name.len(), srv.clone(), tool.to_string()))
+                })
+                .max_by_key(|(len, _, _)| *len);
+
+            match matched {
+                Some((_, srv, tool)) if !tool.is_empty() => (srv, tool),
+                _ => {
+                    return Err(format!(
+                        "Upstream server not found for tool: {}",
+                        namespaced_name
+                    ));
+                }
+            }
         };
 
         if !server.enabled {
-            return Err(format!("Upstream server is disabled: {}", server_name));
+            return Err(format!("Upstream server is disabled: {}", server.name));
         }
 
         let url = match &server.transport {
             UpstreamTransport::StreamableHttp { url } => url.clone(),
-            UpstreamTransport::Sse { url } => url.clone(),
+            UpstreamTransport::Sse { .. } => {
+                return Err(format!(
+                    "SSE upstream transport handshake is not yet supported for server '{}'; use streamable_http",
+                    server.name
+                ));
+            }
         };
 
         let headers = self.resolve_headers(&server.headers);
