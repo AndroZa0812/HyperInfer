@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
+use tokio_util::sync::CancellationToken;
 
 static TEMP_POLICY_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -140,6 +141,21 @@ pub trait CommandRunner: Send + Sync {
         timeout: Duration,
         policy: &SandboxPolicy,
     ) -> Result<CommandExecution, String>;
+
+    /// Execute `command` with an additional cancellation token that can abort the command mid-flight.
+    async fn run_cancellable(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout: Duration,
+        policy: &SandboxPolicy,
+        cancel: CancellationToken,
+    ) -> Result<CommandExecution, String> {
+        tokio::select! {
+            res = self.run(command, cwd, timeout, policy) => res,
+            _ = cancel.cancelled() => Err("Command canceled".to_string()),
+        }
+    }
 }
 
 /// Apply environment sanitization to a `tokio::process::Command`.
@@ -160,25 +176,36 @@ pub(crate) fn apply_env_policy(cmd: &mut Command, policy: &SandboxPolicy) {
     }
 }
 
-/// Spawn `cmd` in its own process group (on Unix) and wait up to `timeout`.
-/// If `timeout` expires, kills the entire process group so grandchild processes do not leak.
-async fn run_command_with_timeout(
+/// Spawn `cmd` in its own process group (on Unix) and wait up to `timeout` or until `cancel` is triggered.
+/// If `timeout` expires or cancellation is requested, kills the entire process group so grandchild
+/// processes do not leak.
+async fn run_command_with_timeout_and_cancel(
     mut cmd: Command,
     timeout: Duration,
     timeout_label: &str,
     spawn_err_prefix: &str,
+    cancel: CancellationToken,
 ) -> Result<std::process::Output, String> {
     #[cfg(unix)]
     cmd.process_group(0);
+    // Ensure child processes are terminated when the wait future is dropped on
+    // timeout or cancellation (especially on non-Unix platforms).
+    cmd.kill_on_drop(true);
 
     let child = cmd
         .spawn()
         .map_err(|e| format!("{}: {}", spawn_err_prefix, e))?;
     let pid = child.id();
 
-    match tokio::time::timeout(timeout, child.wait_with_output()).await {
-        Ok(res) => res.map_err(|e| format!("{}: {}", spawn_err_prefix, e)),
-        Err(_) => {
+    let wait_future = child.wait_with_output();
+    let timeout_future = tokio::time::sleep(timeout);
+    let cancel_future = cancel.cancelled();
+
+    tokio::select! {
+        res = wait_future => {
+            res.map_err(|e| format!("{}: {}", spawn_err_prefix, e))
+        }
+        _ = timeout_future => {
             #[cfg(unix)]
             if let Some(pgid) = pid {
                 let _ = std::process::Command::new("sh")
@@ -187,6 +214,16 @@ async fn run_command_with_timeout(
                     .status();
             }
             Err(timeout_label.to_string())
+        }
+        _ = cancel_future => {
+            #[cfg(unix)]
+            if let Some(pgid) = pid {
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("kill -KILL -{} >/dev/null 2>&1 || true", pgid))
+                    .status();
+            }
+            Err("Command canceled".to_string())
         }
     }
 }
@@ -212,6 +249,18 @@ impl CommandRunner for HostRunner {
         timeout: Duration,
         policy: &SandboxPolicy,
     ) -> Result<CommandExecution, String> {
+        self.run_cancellable(command, cwd, timeout, policy, CancellationToken::new())
+            .await
+    }
+
+    async fn run_cancellable(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout: Duration,
+        policy: &SandboxPolicy,
+        cancel: CancellationToken,
+    ) -> Result<CommandExecution, String> {
         let mut cmd = Command::new("sh");
         cmd.arg("-c")
             .arg(command)
@@ -228,7 +277,9 @@ impl CommandRunner for HostRunner {
             command
         );
         let spawn_prefix = format!("Failed to spawn command `{}`", command);
-        let output = run_command_with_timeout(cmd, timeout, &timeout_msg, &spawn_prefix).await?;
+        let output =
+            run_command_with_timeout_and_cancel(cmd, timeout, &timeout_msg, &spawn_prefix, cancel)
+                .await?;
 
         Ok(CommandExecution {
             exit_code: output.status.code().unwrap_or(-1),
@@ -303,6 +354,18 @@ impl CommandRunner for OpenShellRunner {
         timeout: Duration,
         policy: &SandboxPolicy,
     ) -> Result<CommandExecution, String> {
+        self.run_cancellable(command, cwd, timeout, policy, CancellationToken::new())
+            .await
+    }
+
+    async fn run_cancellable(
+        &self,
+        command: &str,
+        cwd: &Path,
+        timeout: Duration,
+        policy: &SandboxPolicy,
+        cancel: CancellationToken,
+    ) -> Result<CommandExecution, String> {
         validate_sandbox_name(&self.sandbox_name)?;
 
         // Materialize policy YAML using an exclusive `create_new` file if an explicit
@@ -356,7 +419,9 @@ impl CommandRunner for OpenShellRunner {
             "Failed to invoke OpenShell binary '{}' for `{}`",
             self.binary_path, command
         );
-        let run_res = run_command_with_timeout(cmd, timeout, &timeout_msg, &spawn_prefix).await;
+        let run_res =
+            run_command_with_timeout_and_cancel(cmd, timeout, &timeout_msg, &spawn_prefix, cancel)
+                .await;
 
         if cleanup_temp {
             let _ = tokio::fs::remove_file(&policy_path).await;
