@@ -168,6 +168,7 @@ pub fn to_chat_request(req: AnthropicMessagesRequest) -> ChatRequest {
         tools,
         tool_choice: None,
         response_format: None,
+        prompt_caching: None,
     }
 }
 
@@ -392,6 +393,7 @@ mod tests {
             usage: hyperinfer_core::Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                ..Default::default()
             },
         };
 
@@ -433,6 +435,7 @@ mod tests {
             usage: Some(hyperinfer_core::Usage {
                 input_tokens: 10,
                 output_tokens: 5,
+                ..Default::default()
             }),
             tool_calls: None,
         };

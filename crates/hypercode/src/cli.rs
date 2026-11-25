@@ -681,7 +681,10 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                     }
                 },
                 Ok(ReplCommand::Tokens) => {
+                    let ta = agent.token_accounting();
                     let fs = agent.filter_stats();
+                    let ctx_pct = ta.context_utilization_pct(&model, agent.history());
+                    let cost = ta.estimated_cost_usd(&model);
                     println!(
                         "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
                         agent.history().len(),
@@ -689,6 +692,14 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                         model,
                         sandbox_label
                     );
+                    println!(
+                        "Input: {} | Output: {} | Cache read: {} | Cache write: {}",
+                        ta.input_tokens,
+                        ta.output_tokens,
+                        ta.cache_read_tokens,
+                        ta.cache_creation_tokens
+                    );
+                    println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
                     println!(
                         "| Filter savings: ~{} tokens ({} cmds)",
                         fs.total_tokens_saved, fs.commands_filtered

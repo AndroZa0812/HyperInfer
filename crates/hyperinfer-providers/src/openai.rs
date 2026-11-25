@@ -349,6 +349,7 @@ impl LlmProvider for OpenAiProvider {
             usage: Usage {
                 input_tokens: data.usage.prompt_tokens,
                 output_tokens: data.usage.completion_tokens,
+                ..Default::default()
             },
         })
     }
@@ -464,6 +465,7 @@ impl LlmProvider for OpenAiProvider {
                             let usage = event.usage.map(|u| Usage {
                                 input_tokens: u.prompt_tokens,
                                 output_tokens: u.completion_tokens,
+                                ..Default::default()
                             });
 
                             yield ChatChunk {

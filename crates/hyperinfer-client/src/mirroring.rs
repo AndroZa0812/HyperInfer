@@ -221,6 +221,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -246,6 +247,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -273,6 +275,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);
@@ -317,6 +320,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
         };
 
         maybe_mirror(handle, registry, router, config, "key".to_string(), request);

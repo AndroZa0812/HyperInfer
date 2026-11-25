@@ -157,6 +157,7 @@ impl PythonProvider {
                 Some(hyperinfer_core::Usage {
                     input_tokens,
                     output_tokens,
+                    ..Default::default()
                 })
             } else {
                 None

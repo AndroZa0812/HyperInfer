@@ -21,6 +21,8 @@ pub(crate) fn build_anthropic_request_body(
     Vec<serde_json::Value>,
     serde_json::Map<String, serde_json::Value>,
 ) {
+    let prompt_caching = request.prompt_caching == Some(true);
+
     let system_messages: Vec<_> = request
         .messages
         .iter()
@@ -147,6 +149,26 @@ pub(crate) fn build_anthropic_request_body(
         }
     }
 
+    // Prompt caching: attach cache_control to last content block of last non-system message
+    if prompt_caching {
+        if let Some(last_msg) = messages.last_mut() {
+            if let Some(content) = last_msg.get_mut("content") {
+                if content.is_string() {
+                    let text = content.as_str().unwrap().to_string();
+                    *content = serde_json::json!([{
+                        "type": "text",
+                        "text": text,
+                        "cache_control": {"type": "ephemeral"}
+                    }]);
+                } else if let Some(arr) = content.as_array_mut() {
+                    if let Some(last_block) = arr.last_mut() {
+                        last_block["cache_control"] = serde_json::json!({"type": "ephemeral"});
+                    }
+                }
+            }
+        }
+    }
+
     let mut body = serde_json::Map::new();
     body.insert("model".to_string(), serde_json::json!(request.model));
     body.insert("messages".to_string(), serde_json::json!(messages));
@@ -158,29 +180,75 @@ pub(crate) fn build_anthropic_request_body(
     if stream {
         body.insert("stream".to_string(), serde_json::json!(true));
     }
-    if let Some(s) = &system {
-        body.insert("system".to_string(), serde_json::json!(s));
+
+    // Prompt caching: emit cache_control breakpoints on system and last tool
+    if prompt_caching {
+        // System prompt as content block with cache_control
+        if let Some(s) = &system {
+            body.insert(
+                "system".to_string(),
+                serde_json::json!([{
+                    "type": "text",
+                    "text": s,
+                    "cache_control": {"type": "ephemeral"}
+                }]),
+            );
+        }
+
+        // Tools: attach cache_control to last tool definition
+        if let Some(tools) = &request.tools {
+            if !tools.is_empty() {
+                let anthropic_tools: Vec<serde_json::Value> = tools
+                    .iter()
+                    .enumerate()
+                    .map(|(idx, t)| {
+                        let is_last = idx == tools.len() - 1;
+                        if is_last {
+                            serde_json::json!({
+                                "name": t.name,
+                                "description": t.description,
+                                "input_schema": t.parameters,
+                                "cache_control": {"type": "ephemeral"}
+                            })
+                        } else {
+                            serde_json::json!({
+                                "name": t.name,
+                                "description": t.description,
+                                "input_schema": t.parameters,
+                            })
+                        }
+                    })
+                    .collect();
+                body.insert("tools".to_string(), serde_json::json!(anthropic_tools));
+            }
+        }
+    } else {
+        // Original behavior without prompt caching
+        if let Some(s) = &system {
+            body.insert("system".to_string(), serde_json::json!(s));
+        }
+        if let Some(tools) = &request.tools {
+            if !tools.is_empty() {
+                let anthropic_tools: Vec<serde_json::Value> = tools
+                    .iter()
+                    .map(|t| {
+                        serde_json::json!({
+                            "name": t.name,
+                            "description": t.description,
+                            "input_schema": t.parameters,
+                        })
+                    })
+                    .collect();
+                body.insert("tools".to_string(), serde_json::json!(anthropic_tools));
+            }
+        }
     }
+
     if let Some(t) = request.temperature {
         body.insert("temperature".to_string(), serde_json::json!(t));
     }
     if let Some(stop) = &request.stop {
         body.insert("stop_sequences".to_string(), serde_json::json!(stop));
-    }
-    if let Some(tools) = &request.tools {
-        if !tools.is_empty() {
-            let anthropic_tools: Vec<serde_json::Value> = tools
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "name": t.name,
-                        "description": t.description,
-                        "input_schema": t.parameters,
-                    })
-                })
-                .collect();
-            body.insert("tools".to_string(), serde_json::json!(anthropic_tools));
-        }
     }
 
     // Translate OpenAI-style tool_choice to Anthropic format
@@ -339,6 +407,10 @@ impl LlmProvider for AnthropicProvider {
         struct AnthropicUsageDetail {
             input_tokens: u32,
             output_tokens: u32,
+            #[serde(default)]
+            cache_read_input_tokens: Option<u32>,
+            #[serde(default)]
+            cache_creation_input_tokens: Option<u32>,
         }
 
         let data: AnthropicResponse = response.json().await?;
@@ -387,6 +459,8 @@ impl LlmProvider for AnthropicProvider {
             usage: Usage {
                 input_tokens: data.usage.input_tokens,
                 output_tokens: data.usage.output_tokens,
+                cache_read_tokens: data.usage.cache_read_input_tokens,
+                cache_creation_tokens: data.usage.cache_creation_input_tokens,
             },
         })
     }
@@ -429,6 +503,8 @@ impl LlmProvider for AnthropicProvider {
             let mut raw_buf: Vec<u8> = Vec::new();
             let mut stream_id = String::new();
             let mut cached_input_tokens: u32 = 0;
+            let mut stream_cache_read_tokens: Option<u32> = None;
+            let mut stream_cache_creation_tokens: Option<u32> = None;
 
             while let Some(bytes) = byte_stream.next().await {
                 let bytes = bytes?;
@@ -468,6 +544,10 @@ impl LlmProvider for AnthropicProvider {
                     struct AnthropicStreamUsage {
                         input_tokens: Option<u32>,
                         output_tokens: Option<u32>,
+                        #[serde(default)]
+                        cache_read_input_tokens: Option<u32>,
+                        #[serde(default)]
+                        cache_creation_input_tokens: Option<u32>,
                     }
                     #[derive(serde::Deserialize)]
                     struct AnthropicStreamError {
@@ -495,6 +575,8 @@ impl LlmProvider for AnthropicProvider {
                                     stream_id = msg.id;
                                     if let Some(u) = msg.usage {
                                         cached_input_tokens = u.input_tokens.unwrap_or(0);
+                                        stream_cache_read_tokens = u.cache_read_input_tokens;
+                                        stream_cache_creation_tokens = u.cache_creation_input_tokens;
                                     }
                                 }
                             }
@@ -519,6 +601,12 @@ impl LlmProvider for AnthropicProvider {
                                 let usage = event.usage.map(|u| Usage {
                                     input_tokens: cached_input_tokens,
                                     output_tokens: u.output_tokens.unwrap_or(0),
+                                    cache_read_tokens: u
+                                        .cache_read_input_tokens
+                                        .or(stream_cache_read_tokens),
+                                    cache_creation_tokens: u
+                                        .cache_creation_input_tokens
+                                        .or(stream_cache_creation_tokens),
                                 });
                                 yield ChatChunk {
                                     id: stream_id.clone(),
@@ -713,5 +801,88 @@ mod tests {
         assert_eq!(content[0]["source"]["type"], "base64");
         assert_eq!(content[0]["source"]["media_type"], "image/png");
         assert_eq!(content[0]["source"]["data"], "SGVsbG8=");
+    }
+
+    #[test]
+    fn test_anthropic_prompt_caching_enabled() {
+        let req = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![
+                ChatMessage::system("You are a coding assistant."),
+                ChatMessage::user("Read Cargo.toml"),
+            ],
+            tools: Some(vec![
+                ToolDefinition {
+                    name: "read_file".to_string(),
+                    description: "Read a file".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": { "path": { "type": "string" } }
+                    }),
+                },
+                ToolDefinition {
+                    name: "write_file".to_string(),
+                    description: "Write a file".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": { "path": { "type": "string" } }
+                    }),
+                },
+            ]),
+            prompt_caching: Some(true),
+            ..Default::default()
+        };
+
+        let (_system, _messages, body) = build_anthropic_request_body(&req, false);
+
+        // System should be a content block array with cache_control
+        let system = &body["system"];
+        assert!(system.is_array());
+        assert_eq!(system[0]["type"], "text");
+        assert_eq!(system[0]["text"], "You are a coding assistant.");
+        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
+
+        // Last tool should have cache_control
+        assert_eq!(body["tools"][0].get("cache_control"), None);
+        assert_eq!(body["tools"][1]["cache_control"]["type"], "ephemeral");
+
+        // Last message content should have cache_control
+        let last_msg = &body["messages"][0];
+        let content = &last_msg["content"];
+        assert!(content.is_array());
+        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_anthropic_prompt_caching_disabled() {
+        let req = ChatRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![
+                ChatMessage::system("You are a coding assistant."),
+                ChatMessage::user("Read Cargo.toml"),
+            ],
+            tools: Some(vec![ToolDefinition {
+                name: "read_file".to_string(),
+                description: "Read a file".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": { "path": { "type": "string" } }
+                }),
+            }]),
+            prompt_caching: None,
+            ..Default::default()
+        };
+
+        let (_system, _messages, body) = build_anthropic_request_body(&req, false);
+
+        // System should be a plain string
+        assert_eq!(body["system"], "You are a coding assistant.");
+
+        // No cache_control on tools
+        assert_eq!(body["tools"][0].get("cache_control"), None);
+
+        // No cache_control on message content
+        let last_msg = &body["messages"][0];
+        assert_eq!(last_msg["content"], "Read Cargo.toml");
     }
 }

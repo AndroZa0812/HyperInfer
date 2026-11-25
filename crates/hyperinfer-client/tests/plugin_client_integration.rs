@@ -61,6 +61,7 @@ impl LlmProvider for MockClientProvider {
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 10,
+                ..Default::default()
             },
         })
     }

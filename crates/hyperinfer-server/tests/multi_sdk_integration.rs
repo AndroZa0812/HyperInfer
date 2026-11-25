@@ -337,6 +337,7 @@ async fn test_deployment_mutators_applied_on_select() {
         tools: None,
         tool_choice: None,
         response_format: None,
+        prompt_caching: None,
     };
     mutators.apply_to_request(&mut req);
     assert_eq!(req.model, "gpt-4o-mini-2024-07-18");
@@ -372,6 +373,7 @@ impl hyperinfer_providers::LlmProvider for RecordingMockProvider {
             usage: hyperinfer_core::Usage {
                 input_tokens: 12,
                 output_tokens: 6,
+                ..Default::default()
             },
         })
     }
@@ -406,6 +408,7 @@ impl hyperinfer_providers::LlmProvider for RecordingMockProvider {
                 usage: Some(hyperinfer_core::Usage {
                     input_tokens: 8,
                     output_tokens: 4,
+                    ..Default::default()
                 }),
                 tool_calls: None,
             }),

@@ -1,8 +1,8 @@
 //! The HyperCode Agent Loop (ReAct Engine) and Permission/Sandbox Gate.
 
 use crate::context::{
-    compact_history_with_llm, estimate_messages_tokens, prune_old_tool_outputs, CompactionConfig,
-    WorkspaceContext,
+    compact_history_with_llm, deduplicate_read_file_outputs, estimate_messages_tokens,
+    prune_old_tool_outputs, CompactionConfig, TokenAccounting, WorkspaceContext,
 };
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry};
 use async_trait::async_trait;
@@ -246,6 +246,7 @@ pub struct Agent {
     approval_handler: Arc<dyn ApprovalHandler>,
     event_sink: Arc<dyn EventSink>,
     history: Vec<ChatMessage>,
+    token_accounting: TokenAccounting,
 }
 
 impl Agent {
@@ -267,6 +268,7 @@ impl Agent {
             approval_handler: Arc::new(AutoApproveHandler),
             event_sink: Arc::new(NoopEventSink),
             history,
+            token_accounting: TokenAccounting::default(),
         }
     }
 
@@ -311,7 +313,10 @@ impl Agent {
 
     /// Manually compact conversation history (e.g., when the user invokes `/compact`).
     pub async fn compact(&mut self) -> Result<bool, AgentError> {
-        let tokens_before = estimate_messages_tokens(&self.history);
+        let tokens_before = self
+            .token_accounting
+            .calibrated_context_tokens(&self.history);
+        let deduped = deduplicate_read_file_outputs(&mut self.history);
         let pruned = prune_old_tool_outputs(
             &mut self.history,
             self.config.compaction.keep_recent_messages,
@@ -326,8 +331,10 @@ impl Agent {
         )
         .await?;
 
-        if pruned > 0 || summarized {
+        if deduped > 0 || pruned > 0 || summarized {
             let tokens_after = estimate_messages_tokens(&self.history);
+            self.token_accounting.last_prompt_tokens = None;
+            self.token_accounting.last_history_len = 0;
             self.event_sink.on_event(&AgentEvent::ContextCompacted {
                 tokens_before,
                 tokens_after,
@@ -339,22 +346,36 @@ impl Agent {
     }
 
     async fn maybe_auto_compact(&mut self) -> Result<(), AgentError> {
-        let tokens_before = estimate_messages_tokens(&self.history);
-        if tokens_before <= self.config.compaction.max_context_tokens {
+        let tokens_before = self
+            .token_accounting
+            .calibrated_context_tokens(&self.history);
+        let effective_max = self
+            .config
+            .compaction
+            .effective_max_context_tokens(&self.config.model);
+        if tokens_before <= effective_max {
             return Ok(());
         }
 
-        // Tier 1: Prune oversized old tool outputs first
+        // Tier 1: Deduplicate superseded read_file outputs, then prune oversized old tool outputs
+        let deduped = deduplicate_read_file_outputs(&mut self.history);
         let pruned = prune_old_tool_outputs(
             &mut self.history,
             self.config.compaction.keep_recent_messages,
             self.config.compaction.max_old_tool_output_chars,
         );
 
+        if deduped > 0 || pruned > 0 {
+            self.token_accounting.last_prompt_tokens = None;
+            self.token_accounting.last_history_len = 0;
+        }
+
         // Tier 2: If still above threshold, summarize older turns via the LLM
-        let after_tier1 = estimate_messages_tokens(&self.history);
+        let after_tier1 = self
+            .token_accounting
+            .calibrated_context_tokens(&self.history);
         let mut summarized = false;
-        if after_tier1 > self.config.compaction.max_context_tokens {
+        if after_tier1 > effective_max {
             summarized = compact_history_with_llm(
                 &mut self.history,
                 self.config.compaction.keep_recent_messages,
@@ -365,8 +386,10 @@ impl Agent {
             .await?;
         }
 
-        if pruned > 0 || summarized {
+        if deduped > 0 || pruned > 0 || summarized {
             let tokens_after = estimate_messages_tokens(&self.history);
+            self.token_accounting.last_prompt_tokens = None;
+            self.token_accounting.last_history_len = 0;
             self.event_sink.on_event(&AgentEvent::ContextCompacted {
                 tokens_before,
                 tokens_after,
@@ -402,6 +425,13 @@ impl Agent {
             self.history
                 .push(ChatMessage::system(self.config.system_prompt.clone()));
         }
+        self.token_accounting.last_prompt_tokens = None;
+        self.token_accounting.last_history_len = 0;
+    }
+
+    /// Get a reference to the session's token accounting state.
+    pub fn token_accounting(&self) -> &TokenAccounting {
+        &self.token_accounting
     }
 
     /// Return the target path if `call` is a mutating file tool targeting a protected metadata path.
@@ -522,6 +552,7 @@ impl Agent {
                 tools: tool_defs.clone(),
                 tool_choice: None,
                 response_format: None,
+                prompt_caching: Some(true),
             };
 
             // Stream the response, racing against cancellation
@@ -568,6 +599,24 @@ impl Agent {
             let usage = stream_usage.unwrap_or_default();
             total_usage.input_tokens += usage.input_tokens;
             total_usage.output_tokens += usage.output_tokens;
+            if let Some(cr) = usage.cache_read_tokens {
+                total_usage.cache_read_tokens = Some(
+                    total_usage
+                        .cache_read_tokens
+                        .unwrap_or(0)
+                        .saturating_add(cr),
+                );
+            }
+            if let Some(cc) = usage.cache_creation_tokens {
+                total_usage.cache_creation_tokens = Some(
+                    total_usage
+                        .cache_creation_tokens
+                        .unwrap_or(0)
+                        .saturating_add(cc),
+                );
+            }
+            self.token_accounting
+                .record_usage(&usage, self.history.len());
 
             let assistant_msg = if tool_calls.is_empty() {
                 ChatMessage::assistant(full_content.clone())

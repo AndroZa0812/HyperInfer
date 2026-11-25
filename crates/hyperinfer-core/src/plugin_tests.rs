@@ -63,6 +63,7 @@ mod tests {
             tools: None,
             tool_choice: None,
             response_format: None,
+            prompt_caching: None,
             stop: None,
         }
     }

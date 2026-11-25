@@ -397,6 +397,7 @@ pub(crate) fn parse_gemini_response(
         .map(|u| Usage {
             input_tokens: u.promptTokenCount,
             output_tokens: u.candidatesTokenCount,
+            ..Default::default()
         })
         .unwrap_or_default();
 
