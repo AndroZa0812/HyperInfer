@@ -21,6 +21,17 @@ pub struct CreateApiKeyRequest {
     pub user_id: Option<String>,
     pub team_id: String,
     pub name: Option<String>,
+    #[serde(default)]
+    pub budget_cents: Option<i64>,
+    #[serde(default)]
+    pub allowed_models: Option<Vec<String>>,
+    #[serde(default)]
+    pub rpm_limit: Option<i32>,
+    #[serde(default)]
+    pub tpm_limit: Option<i32>,
+    #[serde(default)]
+    #[schema(value_type = Option<String>)]
+    pub expires_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Serialize)]
@@ -108,6 +119,22 @@ pub async fn create_api_key<D: Database, C: ConfigStore>(
     RequireAdmin(claims): RequireAdmin,
     Json(req): Json<CreateApiKeyRequest>,
 ) -> impl IntoResponse {
+    if let Some(b) = req.budget_cents {
+        if b < 0 {
+            return (StatusCode::BAD_REQUEST, "budget_cents must be non-negative").into_response();
+        }
+    }
+    if let Some(rpm) = req.rpm_limit {
+        if rpm <= 0 {
+            return (StatusCode::BAD_REQUEST, "rpm_limit must be positive").into_response();
+        }
+    }
+    if let Some(tpm) = req.tpm_limit {
+        if tpm <= 0 {
+            return (StatusCode::BAD_REQUEST, "tpm_limit must be positive").into_response();
+        }
+    }
+
     let raw_key = req
         .key
         .filter(|k| !k.trim().is_empty())
@@ -117,16 +144,49 @@ pub async fn create_api_key<D: Database, C: ConfigStore>(
         .filter(|u| !u.trim().is_empty())
         .unwrap_or(claims.sub);
     let key_hash = hash_key(&raw_key);
+    let has_limits = req.budget_cents.is_some()
+        || req.allowed_models.is_some()
+        || req.rpm_limit.is_some()
+        || req.tpm_limit.is_some()
+        || req.expires_at.is_some();
+
     match state
         .db
         .create_api_key(&key_hash, &user_id, &req.team_id, req.name)
         .await
     {
-        Ok(api_key) => Json(CreateApiKeyResponse {
-            api_key,
-            key: raw_key,
-        })
-        .into_response(),
+        Ok(api_key) => {
+            let api_key = if has_limits {
+                match state
+                    .db
+                    .update_api_key_limits(
+                        &api_key.id,
+                        req.budget_cents,
+                        req.allowed_models,
+                        req.rpm_limit,
+                        req.tpm_limit,
+                        req.expires_at,
+                    )
+                    .await
+                {
+                    Ok(updated) => updated,
+                    Err(_) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "Failed to apply API key limits",
+                        )
+                            .into_response();
+                    }
+                }
+            } else {
+                api_key
+            };
+            Json(CreateApiKeyResponse {
+                api_key,
+                key: raw_key,
+            })
+            .into_response()
+        }
         Err(e) => match e {
             DbError::InvalidUuid => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
             _ => (

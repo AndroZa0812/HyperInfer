@@ -8,11 +8,13 @@ test.describe('API Keys', () => {
 		await page.goto('/dashboard/keys');
 		await expect(page.getByRole('heading', { name: 'API Keys' })).toBeVisible();
 
-		// Create first key
+		// Create first key with virtual-key budget & allowed models (HYP-68)
 		await page.getByRole('button', { name: /Create New Key/ }).click();
 		const dialog = page.getByRole('dialog');
 		await expect(dialog.getByRole('heading', { name: 'Create API Key' })).toBeVisible();
 		await dialog.getByPlaceholder('e.g. Production-Main').fill(activeKeyName);
+		await dialog.getByLabel('Budget (cents, optional)').fill('5000');
+		await dialog.getByLabel('Allowed Models (comma-separated, optional)').fill('gpt-4, gpt-4o-mini');
 		await dialog.getByRole('button', { name: 'Create Key' }).click();
 
 		// One-time secret modal should display the raw hi-... key
@@ -24,6 +26,8 @@ test.describe('API Keys', () => {
 		const activeRow = page.locator('tbody tr', { hasText: activeKeyName });
 		await expect(activeRow).toBeVisible();
 		await expect(activeRow.getByText('Active', { exact: true })).toBeVisible();
+		await expect(activeRow).toContainText('$50.00');
+		await expect(activeRow).toContainText('gpt-4, gpt-4o-mini');
 		await expect(activeRow).not.toContainText('undefined');
 
 		// Create second key to revoke

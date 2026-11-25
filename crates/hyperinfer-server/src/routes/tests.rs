@@ -764,6 +764,11 @@ async fn test_create_api_key_success() {
             user_id: Some("user-id".to_string()),
             team_id: "team-id".to_string(),
             name: Some("Test Key".to_string()),
+            budget_cents: None,
+            allowed_models: None,
+            rpm_limit: None,
+            tpm_limit: None,
+            expires_at: None,
         }),
     )
     .await;

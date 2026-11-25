@@ -13,6 +13,7 @@ use hyperinfer_core::{ConfigStore, Database, UpdateRoutingConfigRequest};
 use serde::Serialize;
 use std::sync::Arc;
 
+use crate::auth::RequireAdmin;
 use crate::proxy;
 use crate::state::AppState;
 
@@ -79,6 +80,28 @@ pub async fn get_routing_health<D: Database, C: ConfigStore>(
         "status": "healthy",
     }))
     .into_response()
+}
+
+pub async fn admin_get_routing_config<D: Database, C: ConfigStore>(
+    state: State<AppState<D, C>>,
+    _admin: RequireAdmin,
+) -> impl IntoResponse {
+    get_routing_config_handler(state).await
+}
+
+pub async fn admin_update_routing_config<D: Database, C: ConfigStore>(
+    state: State<AppState<D, C>>,
+    _admin: RequireAdmin,
+    req: Json<UpdateRoutingConfigRequest>,
+) -> impl IntoResponse {
+    update_routing_config_handler(state, req).await
+}
+
+pub async fn admin_get_routing_health<D: Database, C: ConfigStore>(
+    state: State<AppState<D, C>>,
+    _admin: RequireAdmin,
+) -> impl IntoResponse {
+    get_routing_health(state).await
 }
 
 #[derive(Serialize)]

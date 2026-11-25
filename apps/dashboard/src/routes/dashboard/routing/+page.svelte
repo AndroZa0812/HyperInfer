@@ -1,6 +1,6 @@
 <script lang="ts">
     import { api } from '#lib/api';
-    import type { Deployment, CreateDeploymentRequest } from '#lib/types';
+    import type { Deployment, CreateDeploymentRequest, RoutingHealth } from '#lib/types';
     import { onMount } from 'svelte';
     import Card from '#lib/components/Card.svelte';
     import Modal from '#lib/components/Modal.svelte';
@@ -18,6 +18,20 @@
     let showDeleteConfirm = $state(false);
     let deleteError = $state('');
 
+    let routingStrategy = $state('weighted-shuffle');
+    let routingHealth = $state<RoutingHealth | null>(null);
+    let savingStrategy = $state(false);
+    let strategyStatus = $state('');
+    let modelNameOverride = $state('');
+
+    const STRATEGIES = [
+        { value: 'weighted-shuffle', label: 'Weighted Shuffle' },
+        { value: 'round-robin', label: 'Round Robin' },
+        { value: 'least-busy', label: 'Least Busy' },
+        { value: 'latency-based', label: 'Latency Based' },
+        { value: 'cost-based', label: 'Cost Based' },
+    ];
+
     let formData = $state<CreateDeploymentRequest>({
         name: '',
         provider: 'openai',
@@ -30,8 +44,40 @@
     });
 
     onMount(async () => {
-        await loadDeployments();
+        await Promise.all([loadDeployments(), loadRoutingStatus()]);
     });
+
+    async function loadRoutingStatus() {
+        const [configRes, healthRes] = await Promise.allSettled([
+            api.getRoutingConfig(),
+            api.getRoutingHealth(),
+        ]);
+        if (configRes.status === 'fulfilled') {
+            routingStrategy = configRes.value.strategy;
+        }
+        if (healthRes.status === 'fulfilled') {
+            routingHealth = healthRes.value;
+            if (configRes.status !== 'fulfilled') {
+                routingStrategy = healthRes.value.strategy;
+            }
+        }
+    }
+
+    async function saveStrategy() {
+        savingStrategy = true;
+        strategyStatus = '';
+        try {
+            const updated = await api.updateRoutingConfig(routingStrategy);
+            routingStrategy = updated.strategy;
+            strategyStatus = 'Strategy saved';
+            await loadRoutingStatus();
+        } catch (e) {
+            console.error('Failed to update routing strategy', e);
+            strategyStatus = 'Failed to save strategy';
+        } finally {
+            savingStrategy = false;
+        }
+    }
 
     async function loadDeployments() {
         loading = true;
@@ -42,6 +88,16 @@
         } finally {
             loading = false;
         }
+    }
+
+    function buildPayload(): CreateDeploymentRequest {
+        const metadata: Record<string, unknown> = { ...(formData.metadata || {}) };
+        if (modelNameOverride.trim()) {
+            metadata.model_name_override = modelNameOverride.trim();
+        } else {
+            delete metadata.model_name_override;
+        }
+        return { ...formData, metadata };
     }
 
     async function createDeployment() {
@@ -55,10 +111,11 @@
             return;
         }
         try {
-            const deployment = await api.createDeployment(formData);
+            const deployment = await api.createDeployment(buildPayload());
             deployments = [...deployments, deployment];
             showCreate = false;
             resetForm();
+            await loadRoutingStatus();
         } catch (e) {
             console.error('Failed to create deployment', e);
             createError = 'Failed to create deployment';
@@ -69,11 +126,12 @@
         if (!editingId) return;
         createError = '';
         try {
-            const deployment = await api.updateDeployment(editingId, formData);
+            const deployment = await api.updateDeployment(editingId, buildPayload());
             deployments = deployments.map(d => d.id === editingId ? deployment : d);
             editingId = null;
             showCreate = false;
             resetForm();
+            await loadRoutingStatus();
         } catch (e) {
             console.error('Failed to update deployment', e);
             createError = 'Failed to update deployment';
@@ -108,6 +166,8 @@
 
     function startEdit(deployment: Deployment) {
         editingId = deployment.id;
+        const meta = deployment.metadata as Record<string, unknown> | undefined;
+        modelNameOverride = typeof meta?.model_name_override === 'string' ? meta.model_name_override : '';
         formData = {
             name: deployment.name,
             provider: deployment.provider,
@@ -121,12 +181,14 @@
             max_rpm: deployment.max_rpm,
             cost_per_1k_input_tokens: deployment.cost_per_1k_input_tokens,
             cost_per_1k_output_tokens: deployment.cost_per_1k_output_tokens,
+            metadata: deployment.metadata,
             sort_order: deployment.sort_order,
         };
         showCreate = true;
     }
 
     function resetForm() {
+        modelNameOverride = '';
         formData = {
             name: '',
             provider: 'openai',
@@ -164,6 +226,45 @@
             </Button>
         </div>
     </div>
+
+    <Card>
+        <div class="flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-6">
+                <div>
+                    <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Gateway Status</p>
+                    <div class="mt-1">
+                        <Badge variant="success" label={routingHealth?.status ?? 'healthy'} />
+                    </div>
+                </div>
+                <div>
+                    <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Active Deployments</p>
+                    <p class="text-xl font-bold text-[var(--on-surface)] mt-0.5">{routingHealth?.active_deployments ?? deployments.filter(d => d.is_active).length}</p>
+                </div>
+            </div>
+            <div class="flex items-end gap-3">
+                <div>
+                    <label for="routing-strategy" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
+                        Routing Strategy
+                    </label>
+                    <select
+                        id="routing-strategy"
+                        bind:value={routingStrategy}
+                        class="px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    >
+                        {#each STRATEGIES as s}
+                            <option value={s.value}>{s.label}</option>
+                        {/each}
+                    </select>
+                </div>
+                <Button size="sm" disabled={savingStrategy} onclick={saveStrategy}>
+                    {savingStrategy ? 'Saving...' : 'Save Strategy'}
+                </Button>
+                {#if strategyStatus}
+                    <span class="text-xs text-[var(--on-surface-variant)]">{strategyStatus}</span>
+                {/if}
+            </div>
+        </div>
+    </Card>
 
     {#if loading}
         <div class="text-center py-8 text-[var(--on-surface-variant)]">Loading...</div>
@@ -229,6 +330,7 @@
                     </select>
                 </div>
                 <Input id="dep-model" label="Model" bind:value={formData.model} />
+                <Input id="dep-model-override" label="Model Name Override (optional)" bind:value={modelNameOverride} placeholder="e.g. gpt-4o-2024-08-06" />
                 <Input id="dep-base-url" label="Base URL" bind:value={formData.base_url} />
                 <Input id="dep-api-key-ref" label="API Key Ref" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />
                 <div>

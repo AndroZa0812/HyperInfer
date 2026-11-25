@@ -709,6 +709,34 @@ impl Database for SqlxDb {
 
         Ok(Quota::from(result))
     }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn update_api_key_limits(
+        &self,
+        id: &str,
+        budget_cents: Option<i64>,
+        allowed_models: Option<Vec<String>>,
+        rpm_limit: Option<i32>,
+        tpm_limit: Option<i32>,
+        expires_at: Option<DateTime<Utc>>,
+    ) -> Result<ApiKey, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let result: Option<ApiKeyRow> = sqlx::query_as(
+            "UPDATE api_keys SET budget_cents = $2, allowed_models = $3, rpm_limit = $4, tpm_limit = $5, expires_at = $6 \
+             WHERE id = $1 \
+             RETURNING id, key_hash, user_id, team_id, name, is_active, created_at, expires_at, budget_cents, spent_cents, allowed_models, rpm_limit, tpm_limit",
+        )
+        .bind(uuid)
+        .bind(budget_cents)
+        .bind(allowed_models)
+        .bind(rpm_limit)
+        .bind(tpm_limit)
+        .bind(expires_at)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        result.map(ApiKey::from).ok_or(DbError::NotFound)
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]

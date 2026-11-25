@@ -160,6 +160,30 @@ impl Database for InMemoryDb {
         Ok(key.clone())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    async fn update_api_key_limits(
+        &self,
+        id: &str,
+        budget_cents: Option<i64>,
+        allowed_models: Option<Vec<String>>,
+        rpm_limit: Option<i32>,
+        tpm_limit: Option<i32>,
+        expires_at: Option<chrono::DateTime<Utc>>,
+    ) -> Result<ApiKey, DbError> {
+        let mut store = self.store.write().unwrap();
+        let key = store
+            .api_keys
+            .iter_mut()
+            .find(|k| k.id == id)
+            .ok_or(DbError::NotFound)?;
+        key.budget_cents = budget_cents;
+        key.allowed_models = allowed_models;
+        key.rpm_limit = rpm_limit;
+        key.tpm_limit = tpm_limit;
+        key.expires_at = expires_at;
+        Ok(key.clone())
+    }
+
     async fn get_model_alias(&self, id: &str) -> Result<Option<ModelAlias>, DbError> {
         let store = self.store.read().unwrap();
         Ok(store.model_aliases.iter().find(|a| a.id == id).cloned())

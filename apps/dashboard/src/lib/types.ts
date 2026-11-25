@@ -51,10 +51,38 @@ export interface ApiKey {
     is_active: boolean;
     created_at: string;
     last_used_at?: string | null;
+    expires_at?: string | null;
+    budget_cents?: number | null;
+    spent_cents?: number;
+    allowed_models?: string[] | null;
+    rpm_limit?: number | null;
+    tpm_limit?: number | null;
+}
+
+export interface CreateApiKeyOptions {
+    budget_cents?: number;
+    allowed_models?: string[];
+    rpm_limit?: number;
+    tpm_limit?: number;
+    expires_at?: string;
 }
 
 export interface CreateApiKeyResponse extends ApiKey {
     key: string;
+}
+
+export interface RoutingConfig {
+    strategy: string;
+    strategy_params?: Record<string, unknown>;
+    fallback_config?: Record<string, unknown>;
+    routing_groups?: Record<string, unknown>;
+    updated_at?: string;
+}
+
+export interface RoutingHealth {
+    active_deployments: number;
+    strategy: string;
+    status: string;
 }
 
 export interface UsageData {

@@ -180,6 +180,14 @@ where
                 .put(deployments::update_deployment)
                 .delete(deployments::delete_deployment),
         )
+        .route(
+            "/v1/admin/routing/config",
+            get(routing::admin_get_routing_config).put(routing::admin_update_routing_config),
+        )
+        .route(
+            "/v1/admin/routing/health",
+            get(routing::admin_get_routing_health),
+        )
         .layer(middleware::from_fn_with_state(
             state.jwt_secret.clone(),
             auth_middleware,

@@ -8,14 +8,22 @@ test.describe('Routing Deployments', () => {
 		await page.goto('/dashboard/routing');
 		await expect(page.getByRole('heading', { name: 'Routing Deployments' })).toBeVisible();
 
+		// Update Routing Strategy and confirm persistence (HYP-57)
+		await page.getByLabel('Routing Strategy').selectOption('least-busy');
+		await page.getByRole('button', { name: 'Save Strategy' }).click();
+		await expect(page.getByText('Strategy saved')).toBeVisible();
+		await page.reload();
+		await expect(page.getByLabel('Routing Strategy')).toHaveValue('least-busy');
+
 		// Open Create Deployment modal
 		await page.getByRole('button', { name: 'Add Deployment' }).click();
 		const modal = page.getByRole('dialog');
 		await expect(modal.getByRole('heading', { name: 'Create Deployment' })).toBeVisible();
 
-		await modal.getByLabel('Name').fill(depName);
+		await modal.getByLabel('Name', { exact: true }).fill(depName);
 		await modal.getByLabel('Provider').selectOption('openai');
-		await modal.getByLabel('Model').fill('gpt-4');
+		await modal.getByLabel('Model', { exact: true }).fill('gpt-4');
+		await modal.getByLabel('Model Name Override (optional)').fill('gpt-4o-2024-08-06');
 		await modal.getByLabel('Base URL').fill('https://api.openai.com/v1');
 		await modal.getByLabel('API Key Ref').fill('env:OPENAI_API_KEY');
 		await modal.getByLabel('Weight').fill('5');
@@ -39,7 +47,7 @@ test.describe('Routing Deployments', () => {
 		// Edit deployment
 		await persistedRow.getByRole('button', { name: 'Edit' }).click();
 		await expect(modal.getByRole('heading', { name: 'Edit Deployment' })).toBeVisible();
-		await modal.getByLabel('Name').fill(updatedName);
+		await modal.getByLabel('Name', { exact: true }).fill(updatedName);
 		await modal.getByLabel('Weight').fill('10');
 		await modal.getByRole('button', { name: 'Update', exact: true }).click();
 		await expect(modal).toBeHidden();
