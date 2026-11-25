@@ -232,13 +232,19 @@ async fn test_memories_temporal_superseding() {
     assert_eq!(expired_items.len(), 1);
     assert_eq!(expired_items[0].id, old_mem.id);
 
-    // Reactivating a superseded memory is rejected with 409 Conflict
+    // Mutating or deleting a superseded memory is rejected with 409 Conflict
     let reactivate = server
         .patch(&format!("/v1/memories/{}", old_mem.id))
         .add_header("Authorization", format!("Bearer {admin_tok}"))
-        .json(&serde_json::json!({ "status": "active" }))
+        .json(&serde_json::json!({ "content": "rewritten history" }))
         .await;
     assert_eq!(reactivate.status_code(), StatusCode::CONFLICT);
+
+    let del_superseded = server
+        .delete(&format!("/v1/memories/{}", old_mem.id))
+        .add_header("Authorization", format!("Bearer {admin_tok}"))
+        .await;
+    assert_eq!(del_superseded.status_code(), StatusCode::CONFLICT);
 
     // Search should only return the active superseding memory
     let search = server
@@ -303,14 +309,25 @@ async fn test_memories_tenant_isolation_and_rbac_approval() {
         .await;
     assert_eq!(del_by_b.status_code(), StatusCode::FORBIDDEN);
 
-    // 2. Member A1 submits a pending_approval team memory
+    // 2. Non-admin explicitly requesting active shared memory -> 403 Forbidden
+    let active_shared_attempt = server
+        .post("/v1/memories")
+        .add_header("Authorization", format!("Bearer {team_a_member1}"))
+        .json(&serde_json::json!({
+            "content": "Trying to bypass approval",
+            "scope": "team",
+            "status": "active"
+        }))
+        .await;
+    assert_eq!(active_shared_attempt.status_code(), StatusCode::FORBIDDEN);
+
+    // Non-admin submitting a team memory without explicit status defaults to pending_approval
     let pending_res = server
         .post("/v1/memories")
         .add_header("Authorization", format!("Bearer {team_a_member1}"))
         .json(&serde_json::json!({
             "content": "All production migrations must be backward compatible",
-            "scope": "team",
-            "status": "pending_approval"
+            "scope": "team"
         }))
         .await;
     assert_eq!(pending_res.status_code(), StatusCode::CREATED);

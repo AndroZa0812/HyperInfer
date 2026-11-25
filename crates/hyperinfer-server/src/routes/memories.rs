@@ -267,11 +267,22 @@ pub async fn create_memory<D: Database, C: ConfigStore>(
             .into_response();
     }
 
-    let status = body.status.unwrap_or_else(|| "active".to_string());
+    let status = match body.status {
+        Some(s) => s,
+        None if body.scope != "user" && !is_admin(&claims) => "pending_approval".to_string(),
+        None => "active".to_string(),
+    };
     if !matches!(status.as_str(), "active" | "pending_approval") {
         return (
             StatusCode::BAD_REQUEST,
             "Initial status must be 'active' or 'pending_approval'",
+        )
+            .into_response();
+    }
+    if body.scope != "user" && status == "active" && !is_admin(&claims) {
+        return (
+            StatusCode::FORBIDDEN,
+            "Only team admins can create active shared memories",
         )
             .into_response();
     }
@@ -367,13 +378,9 @@ pub async fn update_memory<D: Database, C: ConfigStore>(
         return (StatusCode::FORBIDDEN, "Access denied").into_response();
     }
 
-    // Disallow reactivating a superseded memory so temporal history stays immutable
-    if existing.superseded_by.is_some() && body.status.as_deref() == Some("active") {
-        return (
-            StatusCode::CONFLICT,
-            "Cannot reactivate a superseded memory",
-        )
-            .into_response();
+    // Disallow any mutation of a superseded memory so temporal history stays immutable
+    if existing.superseded_by.is_some() {
+        return (StatusCode::CONFLICT, "Cannot modify a superseded memory").into_response();
     }
 
     // Only admins can transition a memory to active from pending_approval or expired
@@ -428,6 +435,10 @@ pub async fn delete_memory<D: Database, C: ConfigStore>(
 
     if !can_mutate_memory(&claims, &existing) {
         return (StatusCode::FORBIDDEN, "Access denied").into_response();
+    }
+
+    if existing.superseded_by.is_some() {
+        return (StatusCode::CONFLICT, "Cannot delete a superseded memory").into_response();
     }
 
     match state.db.expire_memory(&id, &claims.team_id).await {

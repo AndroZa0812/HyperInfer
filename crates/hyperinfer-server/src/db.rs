@@ -737,6 +737,8 @@ impl Database for SqlxDb {
         .await?;
 
         result.map(ApiKey::from).ok_or(DbError::NotFound)
+    }
+
     async fn create_memory(&self, req: CreateMemoryRequest) -> Result<Memory, DbError> {
         let team_uuid = uuid::Uuid::parse_str(&req.team_id).map_err(|_| DbError::InvalidUuid)?;
         let user_uuid = uuid::Uuid::parse_str(&req.user_id).map_err(|_| DbError::InvalidUuid)?;

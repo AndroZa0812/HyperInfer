@@ -188,6 +188,9 @@ pub trait Database: Clone + Send + Sync + 'static {
             tpm_limit,
             expires_at,
         );
+        Err(DbError::NotFound)
+    }
+
     // --- Shared Cross-Repo Memory ---
     async fn create_memory(&self, req: CreateMemoryRequest) -> Result<Memory, DbError> {
         let _ = req;

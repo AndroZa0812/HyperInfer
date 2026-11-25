@@ -248,6 +248,7 @@ where
         .route(
             "/v1/admin/routing/health",
             get(routing::admin_get_routing_health),
+        )
         .route("/v1/memories/search", post(memories::search_memories))
         .route(
             "/v1/memories",
