@@ -2,6 +2,9 @@
 	"name": "hyperinfer-dashboard",
 	"version": "0.2.0",
 	"private": true,
+	"imports": {
+		"#lib/*": "./src/lib/*"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",

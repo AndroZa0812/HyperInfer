@@ -1,14 +1,14 @@
 <script lang="ts">
     import { page } from '$app/state';
-    import { api } from '$lib/api';
-    import type { ApiKey, CreateApiKeyResponse } from '$lib/types';
+    import { api } from '#lib/api';
+    import type { ApiKey, CreateApiKeyResponse } from '#lib/types';
     import { onMount } from 'svelte';
-    import Button from '$lib/components/Button.svelte';
-    import Input from '$lib/components/Input.svelte';
-    import Modal from '$lib/components/Modal.svelte';
-    import Badge from '$lib/components/Badge.svelte';
-    import Card from '$lib/components/Card.svelte';
-    import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
+    import Button from '#lib/components/Button.svelte';
+    import Input from '#lib/components/Input.svelte';
+    import Modal from '#lib/components/Modal.svelte';
+    import Badge from '#lib/components/Badge.svelte';
+    import Card from '#lib/components/Card.svelte';
+    import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 
     let keys = $state<ApiKey[]>([]);
     let loading = $state(true);

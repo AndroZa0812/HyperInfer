@@ -1,9 +1,9 @@
 <script lang="ts">
     import { page } from '$app/state';
-    import { api } from '$lib/api';
-    import type { UsageData } from '$lib/types';
-    import StatCard from '$lib/components/StatCard.svelte';
-    import Card from '$lib/components/Card.svelte';
+    import { api } from '#lib/api';
+    import type { UsageData } from '#lib/types';
+    import StatCard from '#lib/components/StatCard.svelte';
+    import Card from '#lib/components/Card.svelte';
 
     let summary = $state<UsageData | null>(null);
     let loading = $state(true);

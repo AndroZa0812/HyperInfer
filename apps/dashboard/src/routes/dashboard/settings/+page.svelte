@@ -1,12 +1,12 @@
 <script lang="ts">
-    import { auth } from '$lib/stores/auth';
-    import { theme } from '$lib/stores/theme';
-    import { api } from '$lib/api';
-    import Card from '$lib/components/Card.svelte';
-    import Button from '$lib/components/Button.svelte';
-    import Input from '$lib/components/Input.svelte';
-    import Badge from '$lib/components/Badge.svelte';
-    import TabBar from '$lib/components/TabBar.svelte';
+    import { auth } from '#lib/stores/auth';
+    import { theme } from '#lib/stores/theme';
+    import { api } from '#lib/api';
+    import Card from '#lib/components/Card.svelte';
+    import Button from '#lib/components/Button.svelte';
+    import Input from '#lib/components/Input.svelte';
+    import Badge from '#lib/components/Badge.svelte';
+    import TabBar from '#lib/components/TabBar.svelte';
 
     let currentPassword = $state('');
     let newPassword = $state('');

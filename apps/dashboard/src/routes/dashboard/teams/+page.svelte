@@ -1,11 +1,11 @@
 <script lang="ts">
-    import { api } from '$lib/api';
-    import type { Team } from '$lib/types';
+    import { api } from '#lib/api';
+    import type { Team } from '#lib/types';
     import { onMount } from 'svelte';
-    import Button from '$lib/components/Button.svelte';
-    import Input from '$lib/components/Input.svelte';
-    import Modal from '$lib/components/Modal.svelte';
-    import Card from '$lib/components/Card.svelte';
+    import Button from '#lib/components/Button.svelte';
+    import Input from '#lib/components/Input.svelte';
+    import Modal from '#lib/components/Modal.svelte';
+    import Card from '#lib/components/Card.svelte';
 
     let teams = $state<Team[]>([]);
     let loading = $state(true);

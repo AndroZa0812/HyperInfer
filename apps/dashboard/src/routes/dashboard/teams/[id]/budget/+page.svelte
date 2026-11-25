@@ -1,10 +1,10 @@
 <script lang="ts">
     import { page } from '$app/state';
-    import { api } from '$lib/api';
-    import type { Team, UsageData } from '$lib/types';
-    import Card from '$lib/components/Card.svelte';
-    import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
-    import StatCard from '$lib/components/StatCard.svelte';
+    import { api } from '#lib/api';
+    import type { Team, UsageData } from '#lib/types';
+    import Card from '#lib/components/Card.svelte';
+    import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
+    import StatCard from '#lib/components/StatCard.svelte';
 
     let team = $state<Team | null>(null);
     let usage = $state<UsageData | null>(null);

@@ -1,9 +1,9 @@
 <script lang="ts">
     import { goto } from '$app/navigation';
-    import { auth } from '$lib/stores/auth';
-    import { theme } from '$lib/stores/theme';
-    import Button from '$lib/components/Button.svelte';
-    import Input from '$lib/components/Input.svelte';
+    import { auth } from '#lib/stores/auth';
+    import { theme } from '#lib/stores/theme';
+    import Button from '#lib/components/Button.svelte';
+    import Input from '#lib/components/Input.svelte';
 
     let email = $state('');
     let password = $state('');

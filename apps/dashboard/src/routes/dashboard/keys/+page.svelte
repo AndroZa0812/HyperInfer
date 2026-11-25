@@ -1,13 +1,13 @@
 <script lang="ts">
-    import { api } from '$lib/api';
-    import { auth } from '$lib/stores/auth';
-    import type { ApiKey, CreateApiKeyResponse, UsageData } from '$lib/types';
-    import Button from '$lib/components/Button.svelte';
-    import Input from '$lib/components/Input.svelte';
-    import Modal from '$lib/components/Modal.svelte';
-    import Badge from '$lib/components/Badge.svelte';
-    import StatCard from '$lib/components/StatCard.svelte';
-    import Card from '$lib/components/Card.svelte';
+    import { api } from '#lib/api';
+    import { auth } from '#lib/stores/auth';
+    import type { ApiKey, CreateApiKeyResponse, UsageData } from '#lib/types';
+    import Button from '#lib/components/Button.svelte';
+    import Input from '#lib/components/Input.svelte';
+    import Modal from '#lib/components/Modal.svelte';
+    import Badge from '#lib/components/Badge.svelte';
+    import StatCard from '#lib/components/StatCard.svelte';
+    import Card from '#lib/components/Card.svelte';
 
     let keys = $state<ApiKey[]>([]);
     let loading = $state(true);

@@ -9,9 +9,6 @@ export default defineConfig({
 		tailwindcss(),
 		sveltekit({
 			preprocess: vitePreprocess(),
-			alias: {
-				$lib: 'src/lib'
-			},
 			adapter: adapter({
 				pages: 'build',
 				assets: 'build',

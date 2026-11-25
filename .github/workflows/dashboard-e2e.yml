@@ -1,0 +1,76 @@
+name: Dashboard E2E
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/dashboard/**'
+      - 'crates/hyperinfer-server/**'
+      - 'crates/hyperinfer-core/**'
+      - '.github/workflows/dashboard-e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/dashboard/**'
+      - 'crates/hyperinfer-server/**'
+      - 'crates/hyperinfer-core/**'
+      - '.github/workflows/dashboard-e2e.yml'
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-e2e-
+            ${{ runner.os }}-cargo-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('apps/dashboard/bun.lock') }}
+
+      - name: Install dashboard dependencies and Chromium
+        working-directory: apps/dashboard
+        run: |
+          bun install --frozen-lockfile
+          bunx playwright install --with-deps chromium
+
+      - name: Run full-stack Playwright E2E tests
+        working-directory: apps/dashboard
+        run: bun run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-e2e-artifacts
+          path: |
+            apps/dashboard/playwright-report/
+            apps/dashboard/test-results/
+            apps/dashboard/e2e/.e2e-server.log
+          retention-days: 7
