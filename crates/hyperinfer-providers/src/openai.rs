@@ -158,6 +158,74 @@ impl LlmProvider for OpenAiProvider {
         &self.base_url
     }
 
+    async fn list_models(
+        &self,
+        api_key: &str,
+    ) -> Result<Vec<hyperinfer_core::DiscoveredModel>, HyperInferError> {
+        let url = if self.base_url.ends_with("/v1") {
+            format!("{}/models", self.base_url)
+        } else {
+            format!("{}/v1/models", self.base_url)
+        };
+        let resp = self
+            .http_client
+            .get(&url)
+            .bearer_auth(api_key)
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let message = resp.text().await.unwrap_or_default();
+            return Err(HyperInferError::ApiError { status, message });
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+
+        let mut models = Vec::new();
+        if let Some(arr) = body.get("data").and_then(|d| d.as_array()) {
+            for item in arr {
+                let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let display_name = item.get("name").and_then(|v| v.as_str()).map(String::from);
+                let context_window = item
+                    .get("context_length")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v as usize);
+                let pricing = item.get("pricing").and_then(|p| {
+                    let parse_tok = |k: &str| {
+                        p.get(k)
+                            .and_then(|v| {
+                                v.as_f64()
+                                    .or_else(|| v.as_str().and_then(|s| s.parse::<f64>().ok()))
+                            })
+                            .filter(|&v| v >= 0.0)
+                            .map(|v| v * 1_000_000.0)
+                    };
+                    let input = parse_tok("prompt")?;
+                    let output = parse_tok("completion").unwrap_or(0.0);
+                    Some(hyperinfer_core::ModelPricing {
+                        input_per_1m_usd: input,
+                        output_per_1m_usd: output,
+                        cache_read_per_1m_usd: parse_tok("input_cache_read"),
+                        cache_write_per_1m_usd: parse_tok("input_cache_write"),
+                        reasoning_per_1m_usd: parse_tok("internal_reasoning"),
+                    })
+                });
+
+                models.push(hyperinfer_core::DiscoveredModel {
+                    id: id.to_string(),
+                    provider: self.name.clone(),
+                    display_name,
+                    context_window,
+                    pricing,
+                });
+            }
+        }
+        Ok(models)
+    }
+
     async fn chat(
         &self,
         request: &ChatRequest,

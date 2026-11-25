@@ -102,6 +102,45 @@ pub async fn auto_detect_providers(probe_local_ollama: bool) -> Vec<DetectedProv
     let env: HashMap<String, String> = std::env::vars().collect();
     let mut providers = auto_detect_providers_from_env(&env);
 
+    // Enrich env-detected providers with live model lists from each provider's native API
+    // (short 2s timeout so standalone startup stays snappy even when offline).
+    for detected in &mut providers {
+        let env_var = detected.api_key_ref.trim_start_matches('$');
+        let Some(api_key) = env.get(env_var).filter(|k| !k.is_empty()) else {
+            continue;
+        };
+        let live_models: Option<Vec<String>> =
+            tokio::time::timeout(Duration::from_secs(2), async {
+                use hyperinfer_providers::{
+                    anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAiProvider,
+                    LlmProvider,
+                };
+                let res = match detected.provider.as_str() {
+                    "openai" => OpenAiProvider::new().ok()?.list_models(api_key).await.ok(),
+                    "anthropic" => AnthropicProvider::new()
+                        .ok()?
+                        .list_models(api_key)
+                        .await
+                        .ok(),
+                    "gemini" => GeminiProvider::new().ok()?.list_models(api_key).await.ok(),
+                    _ => None,
+                }?;
+                let ids: Vec<String> = res.into_iter().take(20).map(|m| m.id).collect();
+                if ids.is_empty() {
+                    None
+                } else {
+                    Some(ids)
+                }
+            })
+            .await
+            .ok()
+            .flatten();
+
+        if let Some(ids) = live_models {
+            detected.models = ids;
+        }
+    }
+
     if probe_local_ollama {
         let host = env
             .get("OLLAMA_HOST")

@@ -245,6 +245,49 @@ impl LlmProvider for AnthropicProvider {
         &self.base_url
     }
 
+    async fn list_models(
+        &self,
+        api_key: &str,
+    ) -> Result<Vec<hyperinfer_core::DiscoveredModel>, HyperInferError> {
+        let url = format!("{}/v1/models", self.base_url.trim_end_matches('/'));
+        let resp = self
+            .http_client
+            .get(&url)
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            let status = resp.status().as_u16();
+            let message = resp.text().await.unwrap_or_default();
+            return Err(HyperInferError::ApiError { status, message });
+        }
+
+        let body: serde_json::Value = resp.json().await?;
+
+        let mut models = Vec::new();
+        if let Some(arr) = body.get("data").and_then(|d| d.as_array()) {
+            for item in arr {
+                let Some(id) = item.get("id").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let display_name = item
+                    .get("display_name")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
+                models.push(hyperinfer_core::DiscoveredModel {
+                    id: id.to_string(),
+                    provider: "anthropic".to_string(),
+                    display_name,
+                    context_window: None,
+                    pricing: None,
+                });
+            }
+        }
+        Ok(models)
+    }
+
     async fn chat(
         &self,
         request: &ChatRequest,
