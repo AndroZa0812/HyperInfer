@@ -69,7 +69,11 @@
         const budgetStr = String(newBudgetCents ?? '').trim();
         if (budgetStr !== '') {
             const parsed = Math.round(Number(budgetStr));
-            if (Number.isFinite(parsed) && parsed >= 0) opts.budget_cents = parsed;
+            if (!Number.isFinite(parsed) || parsed < 0) {
+                createError = 'Budget must be a non-negative number of cents.';
+                return;
+            }
+            opts.budget_cents = parsed;
         }
         const models = String(newAllowedModels ?? '')
             .split(',')
@@ -79,12 +83,20 @@
         const rpmStr = String(newRpmLimit ?? '').trim();
         if (rpmStr !== '') {
             const parsed = Math.round(Number(rpmStr));
-            if (Number.isFinite(parsed) && parsed > 0) opts.rpm_limit = parsed;
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                createError = 'RPM limit must be a positive number.';
+                return;
+            }
+            opts.rpm_limit = parsed;
         }
         const tpmStr = String(newTpmLimit ?? '').trim();
         if (tpmStr !== '') {
             const parsed = Math.round(Number(tpmStr));
-            if (Number.isFinite(parsed) && parsed > 0) opts.tpm_limit = parsed;
+            if (!Number.isFinite(parsed) || parsed <= 0) {
+                createError = 'TPM limit must be a positive number.';
+                return;
+            }
+            opts.tpm_limit = parsed;
         }
         const expiresStr = String(newExpiresAt ?? '').trim();
         if (expiresStr !== '') {

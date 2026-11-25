@@ -170,8 +170,19 @@ pub async fn create_api_key<D: Database, C: ConfigStore>(
                     .await
                 {
                     Ok(updated) => updated,
-                    Err(_) => {
-                        let _ = state.db.deactivate_api_key(&api_key.id).await;
+                    Err(err) => {
+                        tracing::error!(
+                            api_key_id = %api_key.id,
+                            error = ?err,
+                            "Failed to apply API key limits; revoking newly created key"
+                        );
+                        if let Err(revoke_err) = state.db.deactivate_api_key(&api_key.id).await {
+                            tracing::error!(
+                                api_key_id = %api_key.id,
+                                error = ?revoke_err,
+                                "Failed to revoke orphaned API key after limit update error"
+                            );
+                        }
                         return (
                             StatusCode::INTERNAL_SERVER_ERROR,
                             "Failed to apply API key limits",
