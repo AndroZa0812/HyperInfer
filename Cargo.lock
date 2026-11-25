@@ -1668,6 +1668,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1680,6 +1681,7 @@ dependencies = [
  "hex",
  "mockall",
  "redis",
+ "regex",
  "reqwest 0.13.4",
  "serde",
  "serde_json",
