@@ -431,7 +431,7 @@
         {/if}
         <div class="flex gap-3 justify-end">
             <Button variant="ghost" onclick={() => { showRemoveConfirm = false; pendingRemoveName = null; }}>Cancel</Button>
-            <Button variant="danger" onclick={confirmRemoveUpstream}>Remove</Button>
+            <Button class="bg-[var(--error)] text-white hover:opacity-90" onclick={confirmRemoveUpstream}>Remove</Button>
         </div>
     </div>
 </Modal>
