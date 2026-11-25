@@ -53,6 +53,9 @@ pub struct McpClaims {
     /// `jsonwebtoken` when present.
     #[allow(dead_code)]
     pub exp: u64,
+    /// Optional team identifier for MCP gateway policy enforcement.
+    #[serde(default)]
+    pub team_id: Option<String>,
 }
 
 /// Axum middleware that validates `Authorization: Bearer <jwt>`.
@@ -112,6 +115,33 @@ pub fn create_jwt(sub: &str, secret: &str) -> String {
         EncodingKey::from_secret(secret.as_bytes()).expect("JWT secret should be valid for HS256");
     encode(&Header::default(), &Claims { sub, exp }, &key)
         .expect("JWT encoding should never fail for HS256")
+}
+
+/// Create a signed HS256 JWT with an optional team_id claim.
+pub fn create_jwt_with_team(sub: &str, team_id: &str, secret: &str) -> String {
+    use jsonwebtoken::{encode, EncodingKey, Header};
+
+    #[derive(Serialize)]
+    struct ClaimsWithTeam<'a> {
+        sub: &'a str,
+        exp: u64,
+        team_id: &'a str,
+    }
+
+    let exp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+        + 3600;
+
+    let key =
+        EncodingKey::from_secret(secret.as_bytes()).expect("JWT secret should be valid for HS256");
+    encode(
+        &Header::default(),
+        &ClaimsWithTeam { sub, exp, team_id },
+        &key,
+    )
+    .expect("JWT encoding should never fail for HS256")
 }
 
 // ── Session registry ─────────────────────────────────────────────────────────
@@ -200,6 +230,7 @@ pub struct McpState {
     pub sessions: SessionRegistry,
     pub jwt_secret: Arc<String>,
     pub tools: ToolRegistry,
+    pub gateway: crate::mcp_gateway::McpGateway,
 }
 
 impl McpState {
@@ -208,6 +239,7 @@ impl McpState {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             jwt_secret: Arc::new(jwt_secret.into()),
             tools: Arc::new(RwLock::new(HashMap::new())),
+            gateway: crate::mcp_gateway::McpGateway::new(),
         }
     }
 
@@ -287,15 +319,100 @@ impl JsonRpcResponse {
 ///
 /// Extend this function to add new MCP tool methods.
 pub async fn dispatch_method(state: &McpState, req: &JsonRpcRequest) -> JsonRpcResponse {
+    dispatch_method_for_team(state, req, None).await
+}
+
+/// Collect all allowed tools (local + upstream) filtered by team policy.
+async fn collect_allowed_tools(
+    state: &McpState,
+    policy: &crate::mcp_gateway::McpTeamPolicy,
+) -> Vec<McpToolDefinition> {
+    let local_tools = state.tools.read().await;
+    let mut tool_defs: Vec<McpToolDefinition> =
+        local_tools.values().map(|t| t.definition.clone()).collect();
+    drop(local_tools);
+
+    let upstream_tools = state.gateway.list_upstream_tools().await;
+    tool_defs.extend(upstream_tools);
+
+    tool_defs.retain(|t| policy.is_tool_allowed(&t.name));
+    tool_defs.sort_by(|a, b| a.name.cmp(&b.name));
+    tool_defs
+}
+
+/// Invoke a tool by name, enforcing team policy.
+async fn invoke_tool(
+    state: &McpState,
+    policy: &crate::mcp_gateway::McpTeamPolicy,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> Result<serde_json::Value, (i32, String)> {
+    if !policy.is_tool_allowed(tool_name) {
+        return Err((
+            -32603,
+            format!("Tool '{}' denied by team policy", tool_name),
+        ));
+    }
+
+    // Check local tools first
+    {
+        let tools = state.tools.read().await;
+        if let Some(tool) = tools.get(tool_name) {
+            let handler = tool.handler.clone();
+            drop(tools);
+            match handler(arguments).await {
+                Ok(result) => {
+                    let text = match result {
+                        serde_json::Value::String(s) => s,
+                        other => other.to_string(),
+                    };
+                    return Ok(serde_json::json!({
+                        "content": [{ "type": "text", "text": text }],
+                        "isError": false
+                    }));
+                }
+                Err(err_msg) => {
+                    return Ok(serde_json::json!({
+                        "content": [{ "type": "text", "text": err_msg }],
+                        "isError": true
+                    }));
+                }
+            }
+        }
+    }
+
+    // Try upstream gateway for namespaced tools (`<server>__<tool>`)
+    if tool_name.contains("__") {
+        match state.gateway.call_upstream_tool(tool_name, arguments).await {
+            Ok(result) => Ok(result),
+            Err(e) => Err((-32603, e)),
+        }
+    } else {
+        Err((-32602, format!("Tool not found: {}", tool_name)))
+    }
+}
+
+/// Dispatch a JSON-RPC method with team policy enforcement.
+pub async fn dispatch_method_for_team(
+    state: &McpState,
+    req: &JsonRpcRequest,
+    team_id: Option<&str>,
+) -> JsonRpcResponse {
     let id = req.id.clone().flatten();
+    let policy = match team_id {
+        Some(tid) => state.gateway.get_team_policy(tid).await,
+        None => crate::mcp_gateway::McpTeamPolicy::default(),
+    };
+
     match req.method.as_str() {
         "ping" => JsonRpcResponse::ok(id, serde_json::json!("pong")),
         "tools/list" => {
-            let tools = state.tools.read().await;
-            let mut tool_defs: Vec<McpToolDefinition> =
-                tools.values().map(|t| t.definition.clone()).collect();
-            tool_defs.sort_by(|a, b| a.name.cmp(&b.name));
-            JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_defs }))
+            if policy.catalog_mode {
+                let meta_tools = crate::mcp_gateway::McpGateway::catalog_meta_tools();
+                return JsonRpcResponse::ok(id, serde_json::json!({ "tools": meta_tools }));
+            }
+            let allowed = collect_allowed_tools(state, &policy).await;
+            JsonRpcResponse::ok(id, serde_json::json!({ "tools": allowed }))
         }
         "tools/call" => {
             let params = req.params.as_ref();
@@ -310,39 +427,64 @@ pub async fn dispatch_method(state: &McpState, req: &JsonRpcRequest) -> JsonRpcR
 
             match name {
                 Some(tool_name) => {
-                    let tools = state.tools.read().await;
-                    match tools.get(&tool_name) {
-                        Some(tool) => {
-                            let handler = tool.handler.clone();
-                            drop(tools);
-                            match handler(arguments).await {
-                                Ok(result) => {
-                                    let text = match result {
-                                        serde_json::Value::String(s) => s,
-                                        other => other.to_string(),
-                                    };
-                                    JsonRpcResponse::ok(
-                                        id,
-                                        serde_json::json!({
-                                            "content": [{ "type": "text", "text": text }],
-                                            "isError": false
-                                        }),
-                                    )
+                    // Handle catalog meta-tools
+                    if tool_name == "mcp_search_tools" {
+                        let query = arguments
+                            .get("query")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("");
+                        let allowed = collect_allowed_tools(state, &policy).await;
+                        let matches: Vec<McpToolDefinition> = allowed
+                            .into_iter()
+                            .filter(|t| {
+                                let q = query.to_lowercase();
+                                t.name.to_lowercase().contains(&q)
+                                    || t.description.to_lowercase().contains(&q)
+                            })
+                            .collect();
+                        return JsonRpcResponse::ok(
+                            id,
+                            serde_json::json!({
+                                "content": [{
+                                    "type": "text",
+                                    "text": serde_json::to_string(&matches).unwrap_or_default()
+                                }],
+                                "isError": false
+                            }),
+                        );
+                    }
+
+                    if tool_name == "mcp_call_tool" {
+                        let inner_name = arguments
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
+                        let inner_args = arguments
+                            .get("arguments")
+                            .cloned()
+                            .unwrap_or_else(|| serde_json::json!({}));
+                        match inner_name {
+                            Some(name) => {
+                                match invoke_tool(state, &policy, &name, inner_args).await {
+                                    Ok(result) => return JsonRpcResponse::ok(id, result),
+                                    Err((code, msg)) => {
+                                        return JsonRpcResponse::err(id, code, msg);
+                                    }
                                 }
-                                Err(err_msg) => JsonRpcResponse::ok(
+                            }
+                            None => {
+                                return JsonRpcResponse::err(
                                     id,
-                                    serde_json::json!({
-                                        "content": [{ "type": "text", "text": err_msg }],
-                                        "isError": true
-                                    }),
-                                ),
+                                    -32602,
+                                    "Missing 'name' in mcp_call_tool arguments",
+                                );
                             }
                         }
-                        None => JsonRpcResponse::err(
-                            id,
-                            -32602,
-                            format!("Tool not found: {}", tool_name),
-                        ),
+                    }
+
+                    match invoke_tool(state, &policy, &tool_name, arguments).await {
+                        Ok(result) => JsonRpcResponse::ok(id, result),
+                        Err((code, msg)) => JsonRpcResponse::err(id, code, msg),
                     }
                 }
                 None => JsonRpcResponse::err(id, -32602, "Missing 'name' parameter"),
@@ -534,7 +676,12 @@ pub async fn mcp_message_handler(
     }
     drop(sessions);
 
-    let rpc_response = dispatch_method(&state, &rpc_req).await;
+    let rpc_response = dispatch_method_for_team(
+        &state,
+        &rpc_req,
+        claims.team_id.as_deref().or(Some(&claims.sub)),
+    )
+    .await;
 
     // If it's a notification (rpc_req.id is None), do not respond.
     if rpc_req.id.is_none() {
@@ -575,6 +722,25 @@ pub async fn mcp_message_handler(
             (StatusCode::GONE, "Session stream closed").into_response()
         }
     }
+}
+
+/// `POST /mcp` — direct JSON-RPC endpoint for MCP gateway.
+///
+/// Unlike the SSE-based `/mcp/message` endpoint, this returns the JSON-RPC
+/// response directly in the HTTP response body. Used by MCP clients that
+/// prefer the streamable HTTP transport.
+pub async fn mcp_http_handler(
+    State(state): State<McpState>,
+    Extension(claims): Extension<McpClaims>,
+    Json(req): Json<JsonRpcRequest>,
+) -> impl IntoResponse {
+    let resp = dispatch_method_for_team(
+        &state,
+        &req,
+        claims.team_id.as_deref().or(Some(&claims.sub)),
+    )
+    .await;
+    Json(resp)
 }
 
 // ── Stream helper (used by tests) ─────────────────────────────────────────────
