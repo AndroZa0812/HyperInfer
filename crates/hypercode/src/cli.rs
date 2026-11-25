@@ -1,7 +1,9 @@
 //! Terminal UI, CLI argument parsing, interactive approval prompt, and REPL loop for `hypercode`.
 
 use crate::a2a::A2aServer;
-use crate::agent::{Agent, AgentConfig, AgentEvent, ApprovalHandler, ApprovalMode, EventSink};
+use crate::agent::{
+    Agent, AgentConfig, AgentError, AgentEvent, ApprovalHandler, ApprovalMode, EventSink,
+};
 use crate::context::WorkspaceContext;
 use crate::sandbox::{HostRunner, OpenShellRunner};
 use crate::tool::{ToolContext, ToolRegistry};
@@ -13,6 +15,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
 
 /// Parsed command-line options for the `hypercode` binary.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -88,6 +91,7 @@ impl CliOptions {
                         "smart" => ApprovalMode::SmartSandbox,
                         "mutations" => ApprovalMode::ApproveMutations,
                         "all" => ApprovalMode::ApproveAll,
+                        "chat" => ApprovalMode::ChatOnly,
                         other => {
                             let msg = format!("Unknown --approval mode '{}'", other);
                             return Err(msg);
@@ -156,7 +160,7 @@ OPTIONS:
                                  gemini-2.5-pro, antigravity/gemini-2.5-pro, qwen2.5-coder)
     -p, --prompt <PROMPT>        Run a single-shot task and exit
     -w, --workspace <PATH>       Workspace root directory (default: current directory)
-        --approval <MODE>        Approval mode: smart (default), mutations, all, auto
+        --approval <MODE>        Approval mode: smart (default), mutations, all, auto, chat
         --openshell <NAME>       Run bash commands inside an NVIDIA OpenShell sandbox
         --local-url <URL>        OpenAI-compatible local endpoint (e.g. http://localhost:11434)
         --max-steps <N>          Max ReAct tool-calling iterations per turn (default: 50)
@@ -290,7 +294,29 @@ pub fn format_tool_call_preview(call: &ToolCall) -> String {
 }
 
 /// Terminal `EventSink` that prints live agent progress to stdout.
-pub struct TerminalEventSink;
+#[derive(Clone)]
+pub struct TerminalEventSink {
+    streamed_any: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl TerminalEventSink {
+    pub fn new() -> Self {
+        Self {
+            streamed_any: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        }
+    }
+
+    pub fn take_streamed(&self) -> bool {
+        self.streamed_any
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
+impl Default for TerminalEventSink {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl EventSink for TerminalEventSink {
     fn on_event(&self, event: &AgentEvent) {
@@ -299,12 +325,24 @@ impl EventSink for TerminalEventSink {
             AgentEvent::StepStarted { step } => {
                 println!("\x1b[90m── Step {} ──\x1b[0m", step);
             }
+            AgentEvent::AssistantDelta { text } => {
+                print!("{}", text);
+                let _ = io::stdout().flush();
+                self.streamed_any
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
+            }
             AgentEvent::AssistantResponse {
                 content,
                 tool_calls,
             } => {
-                if !content.trim().is_empty() && !tool_calls.is_empty() {
-                    println!("\x1b[36m●\x1b[0m {}", content);
+                if !tool_calls.is_empty() {
+                    if self.streamed_any.load(std::sync::atomic::Ordering::SeqCst) {
+                        if !content.is_empty() {
+                            println!();
+                        }
+                    } else if !content.trim().is_empty() {
+                        println!("\x1b[36m●\x1b[0m {}", content);
+                    }
                 }
                 for call in tool_calls {
                     println!(
@@ -363,6 +401,9 @@ impl EventSink for TerminalEventSink {
                 total_usage,
                 ..
             } => {
+                if self.streamed_any.load(std::sync::atomic::Ordering::SeqCst) {
+                    println!();
+                }
                 println!(
                     "\x1b[90m[Turn finished: {} step(s), {} in / {} out tokens]\x1b[0m",
                     steps_taken, total_usage.input_tokens, total_usage.output_tokens
@@ -534,6 +575,7 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
         return server.serve_http(&bind_addr).await;
     }
 
+    let event_sink = TerminalEventSink::new();
     let mut agent = Agent::new(
         agent_config,
         client,
@@ -542,7 +584,7 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     )
     .with_discovered_context(&ws_context)
     .with_approval_handler(TerminalApprovalHandler)
-    .with_event_sink(TerminalEventSink);
+    .with_event_sink(event_sink.clone());
 
     // Single-shot mode (`hypercode -p "..."`)
     if let Some(prompt) = opts.prompt {
@@ -550,7 +592,9 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
             .run_turn(prompt)
             .await
             .map_err(|e| format!("Agent error: {}", e))?;
-        println!("\n{}", outcome.final_response);
+        if !event_sink.take_streamed() {
+            println!("\n{}", outcome.final_response);
+        }
         return Ok(());
     }
 
@@ -644,16 +688,34 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
             continue;
         }
 
-        match agent.run_turn(trimmed).await {
+        let cancel = CancellationToken::new();
+        let ctrl_c_handle = tokio::spawn({
+            let cancel_inner = cancel.clone();
+            async move {
+                if tokio::signal::ctrl_c().await.is_ok() {
+                    cancel_inner.cancel();
+                }
+            }
+        });
+
+        let turn_res = agent.run_turn_with_cancel(trimmed, cancel).await;
+        ctrl_c_handle.abort();
+
+        match turn_res {
             Ok(outcome) => {
-                if !outcome.final_response.trim().is_empty() {
+                if !event_sink.take_streamed() && !outcome.final_response.trim().is_empty() {
                     println!(
                         "\n\x1b[1;36mAssistant:\x1b[0m\n{}\n",
                         outcome.final_response
                     );
                 }
             }
+            Err(AgentError::Cancelled) => {
+                event_sink.take_streamed();
+                println!("\n[Turn canceled]\n");
+            }
             Err(e) => {
+                event_sink.take_streamed();
                 eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
             }
         }

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio_util::sync::CancellationToken;
 
 /// Execution context passed to every tool invocation.
 #[derive(Clone)]
@@ -20,6 +21,8 @@ pub struct ToolContext {
     pub sandbox_policy: SandboxPolicy,
     /// Pluggable command execution backend (e.g. `OpenShellRunner` or `HostRunner`).
     pub command_runner: Arc<dyn CommandRunner>,
+    /// Token to cancel the current turn (propagated to tool execution).
+    pub cancel_token: CancellationToken,
 }
 
 impl std::fmt::Debug for ToolContext {
@@ -43,7 +46,13 @@ impl ToolContext {
             command_timeout: Duration::from_secs(30),
             sandbox_policy,
             command_runner: Arc::new(HostRunner),
+            cancel_token: CancellationToken::new(),
         }
+    }
+
+    pub fn with_cancel_token(mut self, token: CancellationToken) -> Self {
+        self.cancel_token = token;
+        self
     }
 
     pub fn with_command_timeout(mut self, timeout: Duration) -> Self {

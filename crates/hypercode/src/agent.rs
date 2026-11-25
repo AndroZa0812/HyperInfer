@@ -6,11 +6,18 @@ use crate::context::{
 };
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry};
 use async_trait::async_trait;
+use futures::future::join_all;
+use futures::stream::once;
+use futures::{Stream, StreamExt};
 use hyperinfer_client::HyperInferClient;
-use hyperinfer_core::{ChatMessage, ChatRequest, ChatResponse, HyperInferError, ToolCall, Usage};
+use hyperinfer_core::{
+    ChatChunk, ChatMessage, ChatRequest, ChatResponse, HyperInferError, ToolCall, Usage,
+};
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 use std::sync::Arc;
 use thiserror::Error;
+use tokio_util::sync::CancellationToken;
 
 /// Errors that can terminate an agent turn.
 #[derive(Debug, Error)]
@@ -23,6 +30,9 @@ pub enum AgentError {
 
     #[error("LLM returned an empty choices list")]
     EmptyResponse,
+
+    #[error("Turn was cancelled")]
+    Cancelled,
 }
 
 /// Controls when the agent must ask the `ApprovalHandler` before executing a tool.
@@ -42,6 +52,8 @@ pub enum ApprovalMode {
     ApproveMutations,
     /// Prompt the `ApprovalHandler` before every tool call.
     ApproveAll,
+    /// Chat-only mode: no tools are sent to the LLM; the agent responds with text only.
+    ChatOnly,
 }
 
 /// Pluggable human-in-the-loop approval gate.
@@ -86,6 +98,10 @@ pub enum AgentEvent {
         content: String,
         tool_calls: Vec<ToolCall>,
     },
+    /// Streaming delta of assistant text (emitted per chunk during streaming).
+    AssistantDelta {
+        text: String,
+    },
     ToolApprovalChecked {
         tool_call: ToolCall,
         reason: String,
@@ -119,17 +135,54 @@ impl EventSink for NoopEventSink {
     fn on_event(&self, _event: &AgentEvent) {}
 }
 
+/// A stream of chat chunks returned by a streaming LLM call.
+pub type ChatStream = Pin<Box<dyn Stream<Item = Result<ChatChunk, HyperInferError>> + Send>>;
+
 /// Abstracts the LLM client so `Agent` works seamlessly with `HyperInferClient`
 /// as well as deterministic mock backends in tests.
 #[async_trait]
 pub trait ChatBackend: Send + Sync {
     async fn chat(&self, key: &str, request: ChatRequest) -> Result<ChatResponse, HyperInferError>;
+
+    /// Stream token chunks for a chat request. Default implementation wraps
+    /// `chat()` in a single-chunk stream for backends that don't support streaming.
+    async fn chat_stream(
+        &self,
+        key: &str,
+        request: ChatRequest,
+    ) -> Result<ChatStream, HyperInferError> {
+        let response = self.chat(key, request).await?;
+        let first_choice = response.choices.first().cloned();
+        let chunk = ChatChunk {
+            id: response.id,
+            model: response.model,
+            delta: first_choice
+                .as_ref()
+                .map(|c| c.message.content.clone())
+                .unwrap_or_default(),
+            finish_reason: first_choice.as_ref().and_then(|c| c.finish_reason.clone()),
+            usage: Some(response.usage),
+            tool_calls: first_choice
+                .as_ref()
+                .and_then(|c| c.message.tool_calls.clone())
+                .filter(|tcs| !tcs.is_empty()),
+        };
+        Ok(Box::pin(once(async move { Ok(chunk) })))
+    }
 }
 
 #[async_trait]
 impl ChatBackend for HyperInferClient {
     async fn chat(&self, key: &str, request: ChatRequest) -> Result<ChatResponse, HyperInferError> {
         HyperInferClient::chat(self, key, request).await
+    }
+
+    async fn chat_stream(
+        &self,
+        key: &str,
+        request: ChatRequest,
+    ) -> Result<ChatStream, HyperInferError> {
+        HyperInferClient::chat_stream(self, key, request).await
     }
 }
 
@@ -386,14 +439,19 @@ impl Agent {
                     ))
                 }
             }
+            ApprovalMode::ChatOnly => {
+                Some("ApprovalMode::ChatOnly disables tool execution".to_string())
+            }
         }
     }
 
     /// Run a complete ReAct turn for `user_prompt`:
     /// Think -> Call Tools -> Observe -> Repeat until final response or `max_steps`.
-    pub async fn run_turn(
+    /// Run a single agent turn with a cancellation token.
+    pub async fn run_turn_with_cancel(
         &mut self,
         user_prompt: impl Into<String>,
+        cancel: CancellationToken,
     ) -> Result<TurnOutcome, AgentError> {
         let prompt = user_prompt.into();
         self.event_sink.on_event(&AgentEvent::TurnStarted {
@@ -401,7 +459,12 @@ impl Agent {
         });
         self.history.push(ChatMessage::user(prompt));
 
-        let tool_defs = {
+        // Build tool context with the cancellation token for this turn
+        let turn_tool_ctx = self.tool_ctx.clone().with_cancel_token(cancel.clone());
+
+        let tool_defs = if self.config.approval_mode == ApprovalMode::ChatOnly {
+            None
+        } else {
             let defs = self.registry.definitions();
             if defs.is_empty() {
                 None
@@ -414,6 +477,10 @@ impl Agent {
         let mut tool_calls_executed = 0usize;
 
         for step in 1..=self.config.max_steps {
+            if cancel.is_cancelled() {
+                return Err(AgentError::Cancelled);
+            }
+
             self.maybe_auto_compact().await?;
             self.event_sink.on_event(&AgentEvent::StepStarted { step });
 
@@ -422,86 +489,206 @@ impl Agent {
                 messages: self.history.clone(),
                 temperature: self.config.temperature,
                 max_tokens: self.config.max_tokens,
-                stream: None,
+                stream: Some(true),
                 stop: None,
                 tools: tool_defs.clone(),
                 tool_choice: None,
                 response_format: None,
             };
 
-            let response = self.backend.chat(&self.config.api_key_id, request).await?;
-            total_usage.input_tokens += response.usage.input_tokens;
-            total_usage.output_tokens += response.usage.output_tokens;
+            // Stream the response, racing against cancellation
+            let stream = tokio::select! {
+                biased;
+                _ = cancel.cancelled() => return Err(AgentError::Cancelled),
+                res = self.backend.chat_stream(&self.config.api_key_id, request) => res?,
+            };
 
-            let choice = response
-                .choices
-                .into_iter()
-                .next()
-                .ok_or(AgentError::EmptyResponse)?;
+            let mut full_content = String::new();
+            let mut tool_calls: Vec<ToolCall> = Vec::new();
+            let mut stream_usage = None;
 
-            let assistant_msg = choice.message;
-            let tool_calls = assistant_msg.tool_calls.clone().unwrap_or_default();
+            let mut stream = stream;
+            loop {
+                tokio::select! {
+                    biased;
+                    _ = cancel.cancelled() => {
+                        return Err(AgentError::Cancelled);
+                    }
+                    chunk_result = stream.next() => {
+                        match chunk_result {
+                            Some(Ok(chunk)) => {
+                                if !chunk.delta.is_empty() {
+                                    full_content.push_str(&chunk.delta);
+                                    self.event_sink.on_event(&AgentEvent::AssistantDelta {
+                                        text: chunk.delta.clone(),
+                                    });
+                                }
+                                if let Some(tcs) = chunk.tool_calls {
+                                    tool_calls.extend(tcs);
+                                }
+                                if chunk.usage.is_some() {
+                                    stream_usage = chunk.usage;
+                                }
+                            }
+                            Some(Err(e)) => return Err(AgentError::Llm(e)),
+                            None => break,
+                        }
+                    }
+                }
+            }
+
+            let usage = stream_usage.unwrap_or_default();
+            total_usage.input_tokens += usage.input_tokens;
+            total_usage.output_tokens += usage.output_tokens;
+
+            let assistant_msg = if tool_calls.is_empty() {
+                ChatMessage::assistant(full_content.clone())
+            } else {
+                ChatMessage::assistant_with_tools(full_content.clone(), tool_calls.clone())
+            };
 
             self.event_sink.on_event(&AgentEvent::AssistantResponse {
-                content: assistant_msg.content.clone(),
+                content: full_content.clone(),
                 tool_calls: tool_calls.clone(),
             });
 
             self.history.push(assistant_msg.clone());
 
-            // Base case: the model did not request any tool calls -> turn is complete!
-            if tool_calls.is_empty() {
+            // Base case: no tool calls or chat-only mode -> turn is complete
+            if tool_calls.is_empty() || self.config.approval_mode == ApprovalMode::ChatOnly {
                 self.event_sink.on_event(&AgentEvent::TurnCompleted {
-                    final_response: assistant_msg.content.clone(),
+                    final_response: full_content.clone(),
                     steps_taken: step,
                     total_usage: total_usage.clone(),
                 });
                 return Ok(TurnOutcome {
-                    final_response: assistant_msg.content,
+                    final_response: full_content,
                     steps_taken: step,
                     tool_calls_executed,
                     total_usage,
                 });
             }
 
-            // Recursive step: execute each requested tool call and append observations.
-            for tc in tool_calls {
-                let output = if let Some(reason) = self.check_needs_approval(&tc) {
-                    let approved = self.approval_handler.approve(&tc, &reason).await;
-                    self.event_sink.on_event(&AgentEvent::ToolApprovalChecked {
-                        tool_call: tc.clone(),
-                        reason: reason.clone(),
-                        approved,
-                    });
-                    if approved {
-                        tool_calls_executed += 1;
-                        self.registry.execute(&tc, &self.tool_ctx).await
-                    } else {
-                        ToolOutput::error(format!(
-                            "Tool execution denied by user approval policy ({}).",
-                            reason
-                        ))
+            // Execute tool calls: batch read-only ones concurrently, run mutating ones sequentially
+            let mut i = 0;
+            while i < tool_calls.len() {
+                if cancel.is_cancelled() {
+                    return Err(AgentError::Cancelled);
+                }
+
+                // Find the start of a contiguous run of read-only, no-approval tool calls
+                let tc = &tool_calls[i];
+                let needs_approval = self.check_needs_approval(tc).is_some();
+                let is_read_only = self
+                    .registry
+                    .get(&tc.name)
+                    .map(|t| !t.requires_approval())
+                    .unwrap_or(false);
+
+                if !needs_approval && is_read_only {
+                    // Find the end of this contiguous run
+                    let mut j = i + 1;
+                    while j < tool_calls.len() {
+                        let tc_j = &tool_calls[j];
+                        let needs_approval_j = self.check_needs_approval(tc_j).is_some();
+                        let is_read_only_j = self
+                            .registry
+                            .get(&tc_j.name)
+                            .map(|t| !t.requires_approval())
+                            .unwrap_or(false);
+                        if needs_approval_j || !is_read_only_j {
+                            break;
+                        }
+                        j += 1;
                     }
+
+                    // Execute the contiguous run concurrently while preserving original order
+                    let batch = &tool_calls[i..j];
+                    let registry = &self.registry;
+                    let futures = batch.iter().map(|tc| {
+                        let ctx = turn_tool_ctx.clone();
+                        async move {
+                            let output = registry.execute(tc, &ctx).await;
+                            (tc.clone(), output)
+                        }
+                    });
+                    let results = tokio::select! {
+                        biased;
+                        _ = cancel.cancelled() => return Err(AgentError::Cancelled),
+                        res = join_all(futures) => res,
+                    };
+
+                    for (tc, output) in results {
+                        tool_calls_executed += 1;
+                        self.event_sink.on_event(&AgentEvent::ToolExecuted {
+                            tool_call: tc.clone(),
+                            output: output.clone(),
+                        });
+                        self.history.push(ChatMessage::tool_result(
+                            tc.id.clone(),
+                            tc.name.clone(),
+                            output.content,
+                        ));
+                    }
+
+                    i = j;
                 } else {
-                    tool_calls_executed += 1;
-                    self.registry.execute(&tc, &self.tool_ctx).await
-                };
+                    // Execute this single tool call sequentially (needs approval or is mutating)
+                    let output = if let Some(reason) = self.check_needs_approval(tc) {
+                        let approved = tokio::select! {
+                            biased;
+                            _ = cancel.cancelled() => return Err(AgentError::Cancelled),
+                            res = self.approval_handler.approve(tc, &reason) => res,
+                        };
+                        self.event_sink.on_event(&AgentEvent::ToolApprovalChecked {
+                            tool_call: tc.clone(),
+                            reason: reason.clone(),
+                            approved,
+                        });
+                        if !approved {
+                            ToolOutput::error(format!(
+                                "Tool execution denied by user approval policy ({}).",
+                                reason
+                            ))
+                        } else {
+                            tool_calls_executed += 1;
+                            self.registry.execute(tc, &turn_tool_ctx).await
+                        }
+                    } else {
+                        tool_calls_executed += 1;
+                        self.registry.execute(tc, &turn_tool_ctx).await
+                    };
 
-                self.event_sink.on_event(&AgentEvent::ToolExecuted {
-                    tool_call: tc.clone(),
-                    output: output.clone(),
-                });
+                    if cancel.is_cancelled() {
+                        return Err(AgentError::Cancelled);
+                    }
 
-                self.history.push(ChatMessage::tool_result(
-                    tc.id.clone(),
-                    tc.name.clone(),
-                    output.content,
-                ));
+                    self.event_sink.on_event(&AgentEvent::ToolExecuted {
+                        tool_call: tc.clone(),
+                        output: output.clone(),
+                    });
+                    self.history.push(ChatMessage::tool_result(
+                        tc.id.clone(),
+                        tc.name.clone(),
+                        output.content,
+                    ));
+
+                    i += 1;
+                }
             }
         }
 
         Err(AgentError::MaxStepsExceeded {
             max_steps: self.config.max_steps,
         })
+    }
+
+    /// Run a single agent turn (non-cancellable wrapper).
+    pub async fn run_turn(
+        &mut self,
+        user_prompt: impl Into<String>,
+    ) -> Result<TurnOutcome, AgentError> {
+        self.run_turn_with_cancel(user_prompt, CancellationToken::new())
+            .await
     }
 }

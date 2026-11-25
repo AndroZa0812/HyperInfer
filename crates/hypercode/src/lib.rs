@@ -15,7 +15,7 @@ pub use a2a::{
 };
 pub use agent::{
     Agent, AgentConfig, AgentError, AgentEvent, ApprovalHandler, ApprovalMode, AutoApproveHandler,
-    ChatBackend, EventSink, NoopEventSink, RejectAllHandler, TurnOutcome,
+    ChatBackend, ChatStream, EventSink, NoopEventSink, RejectAllHandler, TurnOutcome,
 };
 pub use cli::{
     build_client_and_model, format_tool_call_preview, run_cli, CliOptions, ReplCommand,
@@ -814,5 +814,357 @@ mod tests {
 
         let opts_stdio = CliOptions::parse_from(["--a2a-stdio"]).unwrap();
         assert!(opts_stdio.a2a_stdio);
+    }
+
+    // --- Streaming & Cancellation Tests ---
+
+    struct CollectingSink {
+        events: Arc<Mutex<Vec<AgentEvent>>>,
+    }
+
+    impl EventSink for CollectingSink {
+        fn on_event(&self, event: &AgentEvent) {
+            self.events.lock().unwrap().push(event.clone());
+        }
+    }
+
+    /// Mock ChatBackend that streams multiple ChatChunk deltas.
+    struct StreamingBackend {
+        chunks: Vec<hyperinfer_core::ChatChunk>,
+    }
+
+    #[async_trait]
+    impl ChatBackend for StreamingBackend {
+        async fn chat(
+            &self,
+            _api_key_id: &str,
+            _request: ChatRequest,
+        ) -> Result<ChatResponse, HyperInferError> {
+            Err(HyperInferError::Config(std::io::Error::other(
+                "chat() not implemented",
+            )))
+        }
+
+        async fn chat_stream(
+            &self,
+            _api_key_id: &str,
+            _request: ChatRequest,
+        ) -> Result<ChatStream, HyperInferError> {
+            let items: Vec<Result<hyperinfer_core::ChatChunk, HyperInferError>> =
+                self.chunks.clone().into_iter().map(Ok).collect();
+            Ok(Box::pin(futures::stream::iter(items)))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_streaming_emits_assistant_delta_events() {
+        let chunks = vec![
+            hyperinfer_core::ChatChunk {
+                id: "stream-1".to_string(),
+                model: "test".to_string(),
+                delta: "Hello ".to_string(),
+                finish_reason: None,
+                usage: None,
+                tool_calls: None,
+            },
+            hyperinfer_core::ChatChunk {
+                id: "stream-2".to_string(),
+                model: "test".to_string(),
+                delta: "World".to_string(),
+                finish_reason: None,
+                usage: None,
+                tool_calls: None,
+            },
+            hyperinfer_core::ChatChunk {
+                id: "stream-3".to_string(),
+                model: "test".to_string(),
+                delta: "!".to_string(),
+                finish_reason: Some("stop".to_string()),
+                usage: Some(Usage {
+                    input_tokens: 10,
+                    output_tokens: 5,
+                }),
+                tool_calls: None,
+            },
+        ];
+
+        let backend = Arc::new(StreamingBackend { chunks });
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                ..Default::default()
+            },
+            backend,
+            ToolRegistry::new(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+
+        let collected = Arc::new(Mutex::new(Vec::new()));
+        agent.set_event_sink(CollectingSink {
+            events: collected.clone(),
+        });
+
+        let outcome = agent.run_turn("Say hello").await.unwrap();
+
+        let events = collected.lock().unwrap();
+        let deltas: Vec<&str> = events
+            .iter()
+            .filter_map(|e| match e {
+                AgentEvent::AssistantDelta { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(deltas, vec!["Hello ", "World", "!"]);
+        assert_eq!(outcome.final_response, "Hello World!");
+    }
+
+    /// Mock ChatBackend that yields 1 chunk then hangs forever.
+    struct HangingBackend;
+
+    #[async_trait]
+    impl ChatBackend for HangingBackend {
+        async fn chat(
+            &self,
+            _api_key_id: &str,
+            _request: ChatRequest,
+        ) -> Result<ChatResponse, HyperInferError> {
+            Err(HyperInferError::Config(std::io::Error::other(
+                "chat() not implemented",
+            )))
+        }
+
+        async fn chat_stream(
+            &self,
+            _api_key_id: &str,
+            _request: ChatRequest,
+        ) -> Result<ChatStream, HyperInferError> {
+            use futures::StreamExt;
+            let first = hyperinfer_core::ChatChunk {
+                id: "hang-1".to_string(),
+                model: "test".to_string(),
+                delta: "Starting...".to_string(),
+                finish_reason: None,
+                usage: None,
+                tool_calls: None,
+            };
+            let stream =
+                futures::stream::once(async move { Ok(first) }).chain(futures::stream::pending());
+            Ok(Box::pin(stream))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cancellation_aborts_streaming_turn() {
+        let backend = Arc::new(HangingBackend);
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                ..Default::default()
+            },
+            backend,
+            ToolRegistry::new(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel_clone = cancel.clone();
+
+        let agent_task = tokio::spawn(async move {
+            agent
+                .run_turn_with_cancel("Do something long", cancel_clone)
+                .await
+        });
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        cancel.cancel();
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), agent_task)
+            .await
+            .expect("Agent task should complete promptly after cancellation")
+            .expect("Agent task should not panic");
+
+        assert!(
+            matches!(result, Err(AgentError::Cancelled)),
+            "Expected AgentError::Cancelled, got {:?}",
+            result
+        );
+    }
+
+    #[tokio::test]
+    async fn test_host_runner_run_cancellable_kills_command() {
+        let ctx = ToolContext::new(std::env::temp_dir());
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let cancel_clone = cancel.clone();
+
+        let start = std::time::Instant::now();
+
+        let cancel_task = tokio::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+            cancel_clone.cancel();
+        });
+
+        let result = HostRunner
+            .run_cancellable(
+                "sleep 10",
+                &ctx.workspace_root,
+                std::time::Duration::from_secs(10),
+                &ctx.sandbox_policy,
+                cancel,
+            )
+            .await;
+
+        let _ = cancel_task.await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "Expected error from cancelled command");
+        let err_msg = result.unwrap_err();
+        assert!(
+            err_msg.to_lowercase().contains("canceled")
+                || err_msg.to_lowercase().contains("cancelled"),
+            "Error message should mention cancellation: {}",
+            err_msg
+        );
+        assert!(
+            elapsed < std::time::Duration::from_secs(2),
+            "Command should be killed quickly, took {:?}",
+            elapsed
+        );
+    }
+
+    /// Mock read-only tool that sleeps and returns its input ID.
+    struct SlowReadOnlyTool;
+
+    #[async_trait]
+    impl Tool for SlowReadOnlyTool {
+        fn name(&self) -> &str {
+            "slow_read"
+        }
+
+        fn definition(&self) -> hyperinfer_core::ToolDefinition {
+            hyperinfer_core::ToolDefinition {
+                name: "slow_read".to_string(),
+                description: "A slow read-only tool for testing concurrency".to_string(),
+                parameters: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "string" }
+                    },
+                    "required": ["id"]
+                }),
+            }
+        }
+
+        fn requires_approval(&self) -> bool {
+            false
+        }
+
+        async fn execute(&self, args: serde_json::Value, _ctx: &ToolContext) -> ToolOutput {
+            let id = match args["id"].as_str() {
+                Some(s) => s,
+                None => return ToolOutput::error("Missing 'id' argument"),
+            };
+            tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+            ToolOutput::success(format!("result-{}", id))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_concurrent_read_only_tools_preserve_order() {
+        let backend = Arc::new(ScriptedBackend::new(vec![
+            ChatMessage::assistant_with_tools(
+                "Running concurrent reads",
+                vec![
+                    ToolCall {
+                        id: "call_a".to_string(),
+                        name: "slow_read".to_string(),
+                        arguments: serde_json::json!({ "id": "a" }).to_string(),
+                    },
+                    ToolCall {
+                        id: "call_b".to_string(),
+                        name: "slow_read".to_string(),
+                        arguments: serde_json::json!({ "id": "b" }).to_string(),
+                    },
+                    ToolCall {
+                        id: "call_c".to_string(),
+                        name: "slow_read".to_string(),
+                        arguments: serde_json::json!({ "id": "c" }).to_string(),
+                    },
+                ],
+            ),
+            ChatMessage::assistant("All reads complete."),
+        ]));
+
+        let mut registry = ToolRegistry::new();
+        registry.register(SlowReadOnlyTool);
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                ..Default::default()
+            },
+            backend,
+            registry,
+            ToolContext::new(std::env::temp_dir()),
+        );
+
+        let collected = Arc::new(Mutex::new(Vec::new()));
+        agent.set_event_sink(CollectingSink {
+            events: collected.clone(),
+        });
+
+        let start = std::time::Instant::now();
+        let outcome = agent.run_turn("Run concurrent reads").await.unwrap();
+        let elapsed = start.elapsed();
+
+        assert!(outcome.final_response.contains("All reads complete"));
+        assert!(
+            elapsed < std::time::Duration::from_millis(300),
+            "3x 120ms read-only tools should run concurrently (<300ms), took {:?}",
+            elapsed
+        );
+
+        let events = collected.lock().unwrap();
+        let ids: Vec<String> = events
+            .iter()
+            .filter_map(|e| match e {
+                AgentEvent::ToolExecuted { tool_call, output } => {
+                    Some(format!("{}:{}", tool_call.id, output.content))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["call_a:result-a", "call_b:result-b", "call_c:result-c"]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_chat_only_mode_omits_tools_and_cli_parses_chat() {
+        let opts = CliOptions::parse_from(["--approval", "chat"]).unwrap();
+        assert_eq!(opts.approval_mode, ApprovalMode::ChatOnly);
+
+        let backend = Arc::new(ScriptedBackend::new(vec![ChatMessage::assistant("Done")]));
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "test".to_string(),
+                approval_mode: ApprovalMode::ChatOnly,
+                ..Default::default()
+            },
+            backend.clone(),
+            ToolRegistry::with_default_coding_tools(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+
+        let outcome = agent.run_turn("Hello").await.unwrap();
+        assert_eq!(outcome.final_response, "Done");
+
+        let requests = backend.seen_requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0].tools.is_none(),
+            "ChatOnly mode should omit tool definitions from ChatRequest"
+        );
     }
 }
