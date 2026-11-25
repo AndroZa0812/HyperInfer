@@ -8,6 +8,9 @@ pub enum RoutingError {
     #[error("all deployments failed for model: {0}")]
     AllDeploymentsFailed(String),
 
+    #[error("all deployments cooled down for model: {0}")]
+    AllDeploymentsCooledDown(String),
+
     #[error("max attempts exceeded ({attempts} attempts)")]
     MaxAttemptsExceeded { attempts: u32 },
 

@@ -35,6 +35,11 @@ static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
 pub struct ProxyAuth {
     pub team_id: String,
     pub api_key_id: String,
+    pub budget_cents: Option<i64>,
+    pub spent_cents: i64,
+    pub allowed_models: Option<Vec<String>>,
+    pub rpm_limit: Option<i32>,
+    pub tpm_limit: Option<i32>,
 }
 
 pub struct NoopState;
@@ -96,13 +101,42 @@ pub async fn validate_api_key<D: Database>(db: &D, api_key: &str) -> Result<Prox
             if !key.is_active {
                 return Err(401);
             }
+            if let Some(exp) = key.expires_at {
+                if exp <= chrono::Utc::now() {
+                    return Err(401);
+                }
+            }
             Ok(ProxyAuth {
                 team_id: key.team_id,
                 api_key_id: key.id,
+                budget_cents: key.budget_cents,
+                spent_cents: key.spent_cents,
+                allowed_models: key.allowed_models,
+                rpm_limit: key.rpm_limit,
+                tpm_limit: key.tpm_limit,
             })
         }
         Ok(None) => Err(401),
         Err(_) => Err(500),
+    }
+}
+
+impl ProxyAuth {
+    pub fn check_request_allowed(&self, model: &str) -> Result<(), (u16, String)> {
+        if let Some(ref models) = self.allowed_models {
+            if !models.is_empty() && !models.iter().any(|m| m == model) {
+                return Err((
+                    403,
+                    format!("Model '{}' is not allowed for this API key", model),
+                ));
+            }
+        }
+        if let Some(cap) = self.budget_cents {
+            if self.spent_cents >= cap {
+                return Err((402, "API key budget exceeded".to_string()));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -299,6 +333,12 @@ impl ProxyRouter {
     pub async fn record_failure(&self, deployment_id: &str) {
         self.engine
             .record_failure(deployment_id, self.state.as_ref())
+            .await;
+    }
+
+    pub async fn record_quota_exhausted(&self, deployment_id: &str) {
+        self.engine
+            .record_quota_exhausted(deployment_id, self.state.as_ref())
             .await;
     }
 }

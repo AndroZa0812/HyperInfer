@@ -121,6 +121,10 @@ pub async fn chat_completions_handler<
         }
     };
 
+    // Check virtual key model allowlist and budget
+    auth.check_request_allowed(&request.model)
+        .map_err(|(code, error)| ProxyError { error, code })?;
+
     // 2. Enforce team RPM / TPM quotas
     let estimated_tokens: u64 = (request
         .messages
@@ -165,6 +169,52 @@ pub async fn chat_completions_handler<
                     }
                     Err(e) => {
                         tracing::warn!(team_id = %auth.team_id, error = %e, "TPM quota check failed");
+                    }
+                    Ok(true) => {}
+                }
+            }
+        }
+    }
+
+    // Enforce per-key RPM / TPM limits
+    if let Some(ref limiter) = state.rate_limiter {
+        if let Some(key_rpm) = auth.rpm_limit {
+            if key_rpm > 0 {
+                match limiter
+                    .check_rpm(&format!("key:{}", auth.api_key_id), key_rpm as u64)
+                    .await
+                {
+                    Ok((false, _)) => {
+                        return Err(ProxyError {
+                            error: "API key RPM limit exceeded".to_string(),
+                            code: 429,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!(api_key_id = %auth.api_key_id, error = %e, "Key RPM check failed");
+                    }
+                    Ok((true, _)) => {}
+                }
+            }
+        }
+        if let Some(key_tpm) = auth.tpm_limit {
+            if key_tpm > 0 {
+                match limiter
+                    .check_tpm(
+                        &format!("key:{}", auth.api_key_id),
+                        key_tpm as u64,
+                        estimated_tokens,
+                    )
+                    .await
+                {
+                    Ok(false) => {
+                        return Err(ProxyError {
+                            error: "API key TPM limit exceeded".to_string(),
+                            code: 429,
+                        });
+                    }
+                    Err(e) => {
+                        tracing::warn!(api_key_id = %auth.api_key_id, error = %e, "Key TPM check failed");
                     }
                     Ok(true) => {}
                 }
@@ -225,7 +275,11 @@ pub async fn chat_completions_handler<
         {
             Ok(s) => s,
             Err(code) => {
-                proxy_router.record_failure(&deployment_id).await;
+                if code == 429 {
+                    proxy_router.record_quota_exhausted(&deployment_id).await;
+                } else {
+                    proxy_router.record_failure(&deployment_id).await;
+                }
                 return Err(ProxyError {
                     error: "Upstream streaming request failed".to_string(),
                     code,
@@ -291,6 +345,23 @@ pub async fn chat_completions_handler<
                     elapsed_ms,
                 )
                 .await;
+
+            // Charge weighted cost to API key
+            let cost_cents = hyperinfer_core::CostCalculator::with_defaults()
+                .calculate_cost_cents_ceil(
+                    &model_name,
+                    &hyperinfer_core::WeightedUsage {
+                        input_tokens: input_tokens as u64,
+                        cached_input_tokens: 0,
+                        output_tokens: output_tokens as u64,
+                        reasoning_tokens: 0,
+                    },
+                );
+            if cost_cents > 0 {
+                let _ = db
+                    .record_api_key_spend(&api_key_id, cost_cents)
+                    .await;
+            }
         };
 
         return Ok(Sse::new(sse_stream)
@@ -310,7 +381,11 @@ pub async fn chat_completions_handler<
     {
         Ok(resp) => resp,
         Err(code) => {
-            proxy_router.record_failure(&deployment_id).await;
+            if code == 429 {
+                proxy_router.record_quota_exhausted(&deployment_id).await;
+            } else {
+                proxy_router.record_failure(&deployment_id).await;
+            }
             return Err(ProxyError {
                 error: "Upstream request failed".to_string(),
                 code,
@@ -348,6 +423,21 @@ pub async fn chat_completions_handler<
         .await
     {
         tracing::warn!(error = ?e, "Failed to record proxy usage log");
+    }
+
+    // Charge weighted cost to API key
+    let cost_cents = hyperinfer_core::CostCalculator::with_defaults().calculate_cost_cents_ceil(
+        &request.model,
+        &hyperinfer_core::WeightedUsage {
+            input_tokens: response.usage.input_tokens as u64,
+            cached_input_tokens: 0,
+            output_tokens: response.usage.output_tokens as u64,
+            reasoning_tokens: 0,
+        },
+    );
+    if cost_cents > 0 {
+        let api_key_id = auth.api_key_id.clone();
+        let _ = state.db.record_api_key_spend(&api_key_id, cost_cents).await;
     }
 
     Ok(Json(response).into_response())

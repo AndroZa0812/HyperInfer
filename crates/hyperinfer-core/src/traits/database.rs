@@ -120,6 +120,11 @@ pub trait Database: Clone + Send + Sync + 'static {
         let _ = team_id;
         Ok(UsageSummary::default())
     }
+
+    async fn record_api_key_spend(&self, api_key_id: &str, cents: i64) -> Result<(), DbError> {
+        let _ = (api_key_id, cents);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -153,6 +158,16 @@ pub struct ApiKey {
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub expires_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub budget_cents: Option<i64>,
+    #[serde(default)]
+    pub spent_cents: i64,
+    #[serde(default)]
+    pub allowed_models: Option<Vec<String>>,
+    #[serde(default)]
+    pub rpm_limit: Option<i32>,
+    #[serde(default)]
+    pub tpm_limit: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
