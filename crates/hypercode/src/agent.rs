@@ -376,14 +376,14 @@ impl Agent {
         }
     }
 
-    async fn maybe_auto_compact(&mut self) -> Result<(), AgentError> {
+    async fn maybe_auto_compact(&mut self, target_model: &str) -> Result<(), AgentError> {
         let tokens_before = self
             .token_accounting
             .calibrated_context_tokens(&self.history);
         let effective_max = self
             .config
             .compaction
-            .effective_max_context_tokens(&self.config.model);
+            .effective_max_context_tokens(target_model);
         if tokens_before <= effective_max {
             return Ok(());
         }
@@ -607,14 +607,15 @@ impl Agent {
                 return Err(AgentError::Cancelled);
             }
 
-            self.maybe_auto_compact().await?;
-            self.event_sink.on_event(&AgentEvent::StepStarted { step });
-
-            // Select model for this step (architect vs editor)
+            // Select model for this step (architect vs editor) before auto-compaction
+            // so compaction respects the selected model's context window budget.
             let step_model = self
                 .config
                 .model_for_step(step, last_step_had_edits)
                 .to_string();
+
+            self.maybe_auto_compact(&step_model).await?;
+            self.event_sink.on_event(&AgentEvent::StepStarted { step });
 
             let request = ChatRequest {
                 model: step_model.clone(),
