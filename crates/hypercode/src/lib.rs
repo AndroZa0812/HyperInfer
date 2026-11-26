@@ -8,6 +8,7 @@ pub mod output_filter;
 pub mod sandbox;
 pub mod tool;
 pub mod tools;
+pub mod tui;
 
 pub use a2a::{
     A2aServer, A2aStreamEvent, AgentCapabilities, AgentCard, AgentSkill, Artifact, JsonRpcError,
@@ -41,6 +42,10 @@ pub use tool::{Tool, ToolContext, ToolOutput, ToolRegistry};
 pub use tools::{
     register_default_tools, BashTool, EditFileTool, GrepTool, ListFilesTool, ReadFileTool,
     WriteFileTool,
+};
+pub use tui::{
+    current_terminal_size, format_diff_preview_for_width, is_interactive_tty, render_banner,
+    wrap_text, RawModeGuard, TerminalSize, TuiViewport,
 };
 
 #[cfg(test)]

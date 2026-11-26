@@ -577,6 +577,222 @@ pub async fn build_client_and_model(
     Ok((Arc::new(client), model))
 }
 
+/// Process a single REPL input line (slash commands or agent turn).
+/// Returns `false` when the user requests to exit (`/quit`).
+async fn process_repl_input(
+    agent: &mut Agent,
+    event_sink: &TerminalEventSink,
+    sandbox_label: &str,
+    trimmed: &str,
+    viewport: Option<&mut crate::tui::TuiViewport>,
+) -> bool {
+    if let Some(cmd_res) = ReplCommand::parse(trimmed) {
+        match cmd_res {
+            Ok(ReplCommand::Help) => {
+                let help = "Available commands:\n  \
+                     /model     Show or switch Architect, Editor, and Compaction models\n  \
+                     /compact   Summarize older conversation turns\n  \
+                     /tokens    Show message count, token/cost breakdown, and config\n  \
+                     /reset     Clear conversation history\n  \
+                     /quit      Exit HyperCode";
+                println!("{}", help);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(help);
+                }
+            }
+            Ok(ReplCommand::Model {
+                role,
+                model: target,
+            }) => {
+                let msg = match (role.as_deref(), target) {
+                    (None, None) => format!(
+                        "Architect (primary): {}\nEditor:              {}\nCompaction:          {} (effective: {})",
+                        agent.model(),
+                        agent.editor_model().unwrap_or("<same as primary>"),
+                        agent.compaction_model().unwrap_or("<auto>"),
+                        agent
+                            .compaction_model()
+                            .or(agent.editor_model())
+                            .unwrap_or(agent.model()),
+                    ),
+                    (None, Some(new_model)) => {
+                        agent.set_model(new_model.clone());
+                        format!("Primary (Architect) model switched to '{}'.", new_model)
+                    }
+                    (Some("editor"), Some(new_model)) => {
+                        if matches!(
+                            new_model.to_ascii_lowercase().as_str(),
+                            "none" | "off" | "clear"
+                        ) {
+                            agent.set_editor_model(None);
+                            "Editor model cleared (will use primary model).".to_string()
+                        } else {
+                            agent.set_editor_model(Some(new_model.clone()));
+                            format!("Editor model set to '{}'.", new_model)
+                        }
+                    }
+                    (Some("compaction"), Some(new_model)) => {
+                        if matches!(
+                            new_model.to_ascii_lowercase().as_str(),
+                            "none" | "off" | "clear"
+                        ) {
+                            agent.set_compaction_model(None);
+                            "Compaction model cleared (will fall back to editor/primary)."
+                                .to_string()
+                        } else {
+                            agent.set_compaction_model(Some(new_model.clone()));
+                            format!("Compaction model set to '{}'.", new_model)
+                        }
+                    }
+                    (Some(other), _) => {
+                        let err = format!(
+                            "Unknown /model role '{}'. Use /model [editor|compaction] <name>.",
+                            other
+                        );
+                        eprintln!("\x1b[31m{}\x1b[0m", err);
+                        if let Some(vp) = viewport {
+                            vp.push_transcript(err);
+                        }
+                        return true;
+                    }
+                };
+                println!("{}", msg);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(msg);
+                }
+            }
+            Ok(ReplCommand::Compact) => match agent.compact().await {
+                Ok(true) => {
+                    let msg = format!(
+                        "Compaction complete (~{} tokens remaining).",
+                        agent.estimated_tokens()
+                    );
+                    println!("{}", msg);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(msg);
+                    }
+                }
+                Ok(false) => {
+                    let msg = "History is already compact; nothing to summarize.";
+                    println!("{}", msg);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(msg);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("\x1b[31mCompaction failed:\x1b[0m {}", e);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(format!("Compaction failed: {}", e));
+                    }
+                }
+            },
+            Ok(ReplCommand::Tokens) => {
+                let active_model = agent.model().to_string();
+                let ta = agent.token_accounting();
+                let fs = agent.filter_stats();
+                let ctx_pct = ta.context_utilization_pct(&active_model, agent.history());
+                let cost = ta.total_cost_usd(&active_model);
+                let mut summary = format!(
+                    "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}\n\
+                     Input: {} | Output: {} | Cache read: {} | Cache write: {}\n\
+                     Context: {:.1}% used | Est. cost: ${:.4}",
+                    agent.history().len(),
+                    agent.estimated_tokens(),
+                    active_model,
+                    sandbox_label,
+                    ta.input_tokens,
+                    ta.output_tokens,
+                    ta.cache_read_tokens,
+                    ta.cache_creation_tokens,
+                    ctx_pct,
+                    cost,
+                );
+                if ta.per_model.len() > 1 {
+                    summary.push_str("\nPer-model breakdown:");
+                    for (m, u) in &ta.per_model {
+                        let m_cost = crate::context::TokenAccounting::model_cost_usd(m, u);
+                        summary.push_str(&format!(
+                            "\n  - {}: {} req(s), {} in / {} out (${:.4})",
+                            m, u.requests, u.input_tokens, u.output_tokens, m_cost
+                        ));
+                    }
+                }
+                summary.push_str(&format!(
+                    "\n| Filter savings: ~{} tokens ({} cmds)",
+                    fs.total_tokens_saved, fs.commands_filtered
+                ));
+                println!("{}", summary);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(summary);
+                }
+            }
+            Ok(ReplCommand::Reset) => {
+                agent.reset_history();
+                let msg = "Conversation history reset.";
+                println!("{}", msg);
+                if let Some(vp) = viewport {
+                    vp.clear_transcript();
+                    vp.push_transcript(msg);
+                }
+            }
+            Ok(ReplCommand::Quit) => {
+                return false;
+            }
+            Err(msg) => {
+                eprintln!("\x1b[31m{}\x1b[0m", msg);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(msg);
+                }
+            }
+        }
+        return true;
+    }
+
+    let cancel = CancellationToken::new();
+    let ctrl_c_handle = tokio::spawn({
+        let cancel_inner = cancel.clone();
+        async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel_inner.cancel();
+            }
+        }
+    });
+
+    let turn_res = agent.run_turn_with_cancel(trimmed, cancel).await;
+    ctrl_c_handle.abort();
+
+    match turn_res {
+        Ok(outcome) => {
+            if !event_sink.take_streamed() && !outcome.final_response.trim().is_empty() {
+                println!(
+                    "\n\x1b[1;36mAssistant:\x1b[0m\n{}\n",
+                    outcome.final_response
+                );
+            }
+            if !outcome.final_response.trim().is_empty() {
+                if let Some(vp) = viewport {
+                    vp.push_transcript(format!("Assistant:\n{}", outcome.final_response));
+                }
+            }
+        }
+        Err(AgentError::Cancelled) => {
+            event_sink.take_streamed();
+            println!("\n[Turn canceled]\n");
+            if let Some(vp) = viewport {
+                vp.push_transcript("[Turn canceled]");
+            }
+        }
+        Err(e) => {
+            event_sink.take_streamed();
+            eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
+            if let Some(vp) = viewport {
+                vp.push_transcript(format!("Error: {}", e));
+            }
+        }
+    }
+    true
+}
+
 /// Entrypoint for running the `hypercode` CLI (single-shot or interactive REPL).
 pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     if opts.show_help {
@@ -663,9 +879,12 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     }
 
     // Interactive REPL mode
-    println!("\x1b[1;36m╭──────────────────────────────────────────────────────────╮\x1b[0m");
-    println!("\x1b[1;36m│  HyperCode — Provider-Agnostic Coding Agent Harness      │\x1b[0m");
-    println!("\x1b[1;36m╰──────────────────────────────────────────────────────────╯\x1b[0m");
+    let term_size = crate::tui::current_terminal_size();
+    let banner = crate::tui::render_banner(
+        "HyperCode — Provider-Agnostic Coding Agent Harness",
+        term_size.cols,
+    );
+    println!("{}", banner);
     println!("  Model:        \x1b[1m{}\x1b[0m", model);
     println!(
         "  Workspace:    \x1b[1m{}\x1b[0m",
@@ -683,182 +902,75 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     }
     println!("  Type \x1b[1m/help\x1b[0m for commands or \x1b[1m/quit\x1b[0m to exit.\n");
 
-    let stdin = io::stdin();
-    loop {
-        print!("\x1b[1;32mhypercode>\x1b[0m ");
-        let _ = io::stdout().flush();
+    let interactive = crate::tui::is_interactive_tty();
 
-        let mut input = String::new();
-        let bytes = stdin
-            .lock()
-            .read_line(&mut input)
-            .map_err(|e| format!("Failed to read stdin: {}", e))?;
-        if bytes == 0 {
-            // EOF (Ctrl-D)
-            println!();
-            break;
-        }
+    if interactive {
+        // Interactive TTY: use TuiViewport with resize detection
+        let mut viewport = crate::tui::TuiViewport::new(
+            "HyperCode — Provider-Agnostic Coding Agent Harness",
+            term_size,
+        );
+        viewport.status_bar = format!(
+            "Model: {} | Workspace: {} | Sandbox: {}",
+            model,
+            ws_context.workspace_root.display(),
+            sandbox_label
+        );
 
-        let trimmed = input.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if let Some(cmd_res) = ReplCommand::parse(trimmed) {
-            match cmd_res {
-                Ok(ReplCommand::Help) => {
-                    println!(
-                        "Available commands:\n  \
-                         /model     Show or switch Architect, Editor, and Compaction models\n  \
-                         /compact   Summarize older conversation turns\n  \
-                         /tokens    Show message count, token/cost breakdown, and config\n  \
-                         /reset     Clear conversation history\n  \
-                         /quit      Exit HyperCode"
-                    );
+        loop {
+            match crate::tui::read_interactive_line(&mut viewport) {
+                Ok(Some(input)) => {
+                    let trimmed = input.trim();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    viewport.push_transcript(format!("hypercode> {}", trimmed));
+                    if !process_repl_input(
+                        &mut agent,
+                        &event_sink,
+                        &sandbox_label,
+                        trimmed,
+                        Some(&mut viewport),
+                    )
+                    .await
+                    {
+                        break;
+                    }
                 }
-                Ok(ReplCommand::Model {
-                    role,
-                    model: target,
-                }) => match (role.as_deref(), target) {
-                    (None, None) => {
-                        println!(
-                            "Architect (primary): {}\nEditor:              {}\nCompaction:          {} (effective: {})",
-                            agent.model(),
-                            agent.editor_model().unwrap_or("<same as primary>"),
-                            agent.compaction_model().unwrap_or("<auto>"),
-                            agent.compaction_model().or(agent.editor_model()).unwrap_or(agent.model()),
-                        );
-                    }
-                    (None, Some(new_model)) => {
-                        agent.set_model(new_model.clone());
-                        println!("Primary (Architect) model switched to '{}'.", new_model);
-                    }
-                    (Some("editor"), Some(new_model)) => {
-                        if matches!(
-                            new_model.to_ascii_lowercase().as_str(),
-                            "none" | "off" | "clear"
-                        ) {
-                            agent.set_editor_model(None);
-                            println!("Editor model cleared (will use primary model).");
-                        } else {
-                            agent.set_editor_model(Some(new_model.clone()));
-                            println!("Editor model set to '{}'.", new_model);
-                        }
-                    }
-                    (Some("compaction"), Some(new_model)) => {
-                        if matches!(
-                            new_model.to_ascii_lowercase().as_str(),
-                            "none" | "off" | "clear"
-                        ) {
-                            agent.set_compaction_model(None);
-                            println!(
-                                "Compaction model cleared (will fall back to editor/primary)."
-                            );
-                        } else {
-                            agent.set_compaction_model(Some(new_model.clone()));
-                            println!("Compaction model set to '{}'.", new_model);
-                        }
-                    }
-                    (Some(other), _) => {
-                        eprintln!(
-                            "\x1b[31mUnknown /model role '{}'. Use /model [editor|compaction] <name>.\x1b[0m",
-                            other
-                        );
-                    }
-                },
-                Ok(ReplCommand::Compact) => match agent.compact().await {
-                    Ok(true) => {
-                        println!(
-                            "Compaction complete (~{} tokens remaining).",
-                            agent.estimated_tokens()
-                        );
-                    }
-                    Ok(false) => {
-                        println!("History is already compact; nothing to summarize.");
-                    }
-                    Err(e) => {
-                        eprintln!("\x1b[31mCompaction failed:\x1b[0m {}", e);
-                    }
-                },
-                Ok(ReplCommand::Tokens) => {
-                    let active_model = agent.model().to_string();
-                    let ta = agent.token_accounting();
-                    let fs = agent.filter_stats();
-                    let ctx_pct = ta.context_utilization_pct(&active_model, agent.history());
-                    let cost = ta.total_cost_usd(&active_model);
-                    println!(
-                        "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
-                        agent.history().len(),
-                        agent.estimated_tokens(),
-                        active_model,
-                        sandbox_label
-                    );
-                    println!(
-                        "Input: {} | Output: {} | Cache read: {} | Cache write: {}",
-                        ta.input_tokens,
-                        ta.output_tokens,
-                        ta.cache_read_tokens,
-                        ta.cache_creation_tokens
-                    );
-                    println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
-                    if ta.per_model.len() > 1 {
-                        println!("Per-model breakdown:");
-                        for (m, u) in &ta.per_model {
-                            let m_cost = crate::context::TokenAccounting::model_cost_usd(m, u);
-                            println!(
-                                "  - {}: {} req(s), {} in / {} out (${:.4})",
-                                m, u.requests, u.input_tokens, u.output_tokens, m_cost
-                            );
-                        }
-                    }
-                    println!(
-                        "| Filter savings: ~{} tokens ({} cmds)",
-                        fs.total_tokens_saved, fs.commands_filtered
-                    );
-                }
-                Ok(ReplCommand::Reset) => {
-                    agent.reset_history();
-                    println!("Conversation history reset.");
-                }
-                Ok(ReplCommand::Quit) => {
+                Ok(None) => {
+                    // EOF (Ctrl-D)
                     break;
                 }
-                Err(msg) => {
-                    eprintln!("\x1b[31m{}\x1b[0m", msg);
+                Err(e) => {
+                    eprintln!("\x1b[31mTUI error:\x1b[0m {}", e);
+                    break;
                 }
             }
-            continue;
         }
+    } else {
+        // Non-TTY (piped): use simple read_line
+        let stdin = io::stdin();
+        loop {
+            print!("\x1b[1;32mhypercode>\x1b[0m ");
+            let _ = io::stdout().flush();
 
-        let cancel = CancellationToken::new();
-        let ctrl_c_handle = tokio::spawn({
-            let cancel_inner = cancel.clone();
-            async move {
-                if tokio::signal::ctrl_c().await.is_ok() {
-                    cancel_inner.cancel();
-                }
+            let mut input = String::new();
+            let bytes = stdin
+                .lock()
+                .read_line(&mut input)
+                .map_err(|e| format!("Failed to read stdin: {}", e))?;
+            if bytes == 0 {
+                // EOF (Ctrl-D)
+                println!();
+                break;
             }
-        });
 
-        let turn_res = agent.run_turn_with_cancel(trimmed, cancel).await;
-        ctrl_c_handle.abort();
-
-        match turn_res {
-            Ok(outcome) => {
-                if !event_sink.take_streamed() && !outcome.final_response.trim().is_empty() {
-                    println!(
-                        "\n\x1b[1;36mAssistant:\x1b[0m\n{}\n",
-                        outcome.final_response
-                    );
-                }
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                continue;
             }
-            Err(AgentError::Cancelled) => {
-                event_sink.take_streamed();
-                println!("\n[Turn canceled]\n");
-            }
-            Err(e) => {
-                event_sink.take_streamed();
-                eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
+            if !process_repl_input(&mut agent, &event_sink, &sandbox_label, trimmed, None).await {
+                break;
             }
         }
     }
