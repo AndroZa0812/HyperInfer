@@ -20,6 +20,8 @@ import type {
   McpTeamPolicy,
   CatalogResponse,
   OpenAiModelListResponse,
+  UsageLogsFilter,
+  UsageLogsPage,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -202,4 +204,20 @@ export const api = {
       "/admin/catalog/refresh",
       { method: "POST" },
     ),
+
+  // Request Logs Explorer (HYP-71)
+  getUsageLogs: (filter?: UsageLogsFilter) => {
+    const params = new URLSearchParams();
+    if (filter?.team_id) params.set('team_id', filter.team_id);
+    if (filter?.api_key_id) params.set('api_key_id', filter.api_key_id);
+    if (filter?.model) params.set('model', filter.model);
+    if (filter?.status_code !== undefined) params.set('status_code', String(filter.status_code));
+    if (filter?.cache_hit !== undefined) params.set('cache_hit', String(filter.cache_hit));
+    if (filter?.from) params.set('from', filter.from);
+    if (filter?.to) params.set('to', filter.to);
+    if (filter?.limit !== undefined) params.set('limit', String(filter.limit));
+    if (filter?.offset !== undefined) params.set('offset', String(filter.offset));
+    const qs = params.toString();
+    return fetchApi<UsageLogsPage>(`/usage/logs${qs ? `?${qs}` : ''}`);
+  },
 };

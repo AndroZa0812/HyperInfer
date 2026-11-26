@@ -3,6 +3,7 @@
 pub mod catalog;
 pub mod deployments;
 pub mod keys;
+pub mod logs;
 pub mod mcp_admin;
 pub mod memories;
 pub mod multi_sdk;
@@ -218,6 +219,7 @@ where
             get(keys::list_api_keys).post(keys::create_api_key),
         )
         .route("/v1/usage/summary", get(teams::get_usage_summary))
+        .route("/v1/usage/logs", get(logs::list_usage_logs))
         .route(
             "/v1/model_aliases/{id}",
             get(teams::get_model_alias).delete(teams::delete_model_alias),

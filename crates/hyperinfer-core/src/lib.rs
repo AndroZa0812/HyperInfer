@@ -28,9 +28,9 @@ pub use redaction::{RedactionConfig, RedactionPlugin};
 pub use redis::{MemoryEventAction, MemoryUpdateEvent, PolicyUpdate, MEMORY_EVENTS_CHANNEL};
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{
-    ApiKey, ConfigStore, CreateMemoryRequest, Database, ListMemoriesFilter, Memory,
-    MemorySearchResult, ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team,
-    UpdateMemoryRequest, UsageLog, UsageSummary, User,
+    ApiKey, ConfigStore, CreateMemoryRequest, Database, ListMemoriesFilter, ListUsageLogsFilter,
+    Memory, MemorySearchResult, ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team,
+    UpdateMemoryRequest, UsageLog, UsageLogsPage, UsageSummary, User,
 };
 pub use types::{
     ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, ContentPart,

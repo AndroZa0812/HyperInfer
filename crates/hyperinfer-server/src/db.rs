@@ -286,7 +286,10 @@ impl Database for SqlxDb {
         let api_key_uuid = uuid::Uuid::parse_str(api_key_id).map_err(|_| DbError::InvalidUuid)?;
 
         let result: UsageLogRow = sqlx::query_as(
-            "INSERT INTO usage_logs (team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms, recorded_at"
+            "INSERT INTO usage_logs (team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms) \
+             VALUES ($1, $2, $3, $4, $5, $6) \
+             RETURNING id, team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms, recorded_at, \
+                       status_code, cached_input_tokens, reasoning_tokens, cost_cents, cache_hit, failover_used, deployment_name, stop_reason"
         )
         .bind(team_uuid)
         .bind(api_key_uuid)
@@ -931,6 +934,92 @@ impl Database for SqlxDb {
 
         row.map(Memory::from).ok_or(DbError::NotFound)
     }
+
+    async fn list_usage_logs(
+        &self,
+        filter: hyperinfer_core::ListUsageLogsFilter,
+    ) -> Result<hyperinfer_core::UsageLogsPage, DbError> {
+        let team_uuid = match filter.team_id.as_deref() {
+            Some(tid) => Some(uuid::Uuid::parse_str(tid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let key_uuid = match filter.api_key_id.as_deref() {
+            Some(kid) => Some(uuid::Uuid::parse_str(kid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let limit = filter.limit.clamp(1, 200);
+        let offset = filter.offset.max(0);
+
+        let mut count_qb: sqlx::QueryBuilder<sqlx::Postgres> =
+            sqlx::QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM usage_logs WHERE TRUE");
+        if let Some(tid) = team_uuid {
+            count_qb.push(" AND team_id = ").push_bind(tid);
+        }
+        if let Some(kid) = key_uuid {
+            count_qb.push(" AND api_key_id = ").push_bind(kid);
+        }
+        if let Some(ref model) = filter.model {
+            count_qb
+                .push(" AND model ILIKE ")
+                .push_bind(format!("%{model}%"));
+        }
+        if let Some(code) = filter.status_code {
+            count_qb.push(" AND status_code = ").push_bind(code);
+        }
+        if let Some(hit) = filter.cache_hit {
+            count_qb.push(" AND cache_hit = ").push_bind(hit);
+        }
+        if let Some(from) = filter.from {
+            count_qb.push(" AND recorded_at >= ").push_bind(from);
+        }
+        if let Some(to) = filter.to {
+            count_qb.push(" AND recorded_at <= ").push_bind(to);
+        }
+        let (total,): (i64,) = count_qb.build_query_as().fetch_one(&self.pool).await?;
+
+        let mut rows_qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+            "SELECT id, team_id, api_key_id, model, input_tokens, output_tokens, response_time_ms, recorded_at, \
+                    status_code, cached_input_tokens, reasoning_tokens, cost_cents, cache_hit, failover_used, deployment_name, stop_reason \
+             FROM usage_logs WHERE TRUE",
+        );
+        if let Some(tid) = team_uuid {
+            rows_qb.push(" AND team_id = ").push_bind(tid);
+        }
+        if let Some(kid) = key_uuid {
+            rows_qb.push(" AND api_key_id = ").push_bind(kid);
+        }
+        if let Some(ref model) = filter.model {
+            rows_qb
+                .push(" AND model ILIKE ")
+                .push_bind(format!("%{model}%"));
+        }
+        if let Some(code) = filter.status_code {
+            rows_qb.push(" AND status_code = ").push_bind(code);
+        }
+        if let Some(hit) = filter.cache_hit {
+            rows_qb.push(" AND cache_hit = ").push_bind(hit);
+        }
+        if let Some(from) = filter.from {
+            rows_qb.push(" AND recorded_at >= ").push_bind(from);
+        }
+        if let Some(to) = filter.to {
+            rows_qb.push(" AND recorded_at <= ").push_bind(to);
+        }
+        rows_qb
+            .push(" ORDER BY recorded_at DESC LIMIT ")
+            .push_bind(limit)
+            .push(" OFFSET ")
+            .push_bind(offset);
+
+        let rows: Vec<UsageLogRow> = rows_qb.build_query_as().fetch_all(&self.pool).await?;
+
+        Ok(hyperinfer_core::UsageLogsPage {
+            logs: rows.into_iter().map(UsageLog::from).collect(),
+            total,
+            limit,
+            offset,
+        })
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]
@@ -1068,6 +1157,14 @@ struct UsageLogRow {
     output_tokens: i32,
     response_time_ms: i64,
     recorded_at: DateTime<Utc>,
+    status_code: i16,
+    cached_input_tokens: i32,
+    reasoning_tokens: i32,
+    cost_cents: f64,
+    cache_hit: bool,
+    failover_used: bool,
+    deployment_name: Option<String>,
+    stop_reason: Option<String>,
 }
 
 impl From<UsageLogRow> for UsageLog {
@@ -1081,6 +1178,14 @@ impl From<UsageLogRow> for UsageLog {
             output_tokens: row.output_tokens,
             response_time_ms: row.response_time_ms,
             recorded_at: row.recorded_at,
+            status_code: row.status_code,
+            cached_input_tokens: row.cached_input_tokens,
+            reasoning_tokens: row.reasoning_tokens,
+            cost_cents: row.cost_cents,
+            cache_hit: row.cache_hit,
+            failover_used: row.failover_used,
+            deployment_name: row.deployment_name,
+            stop_reason: row.stop_reason,
         }
     }
 }
