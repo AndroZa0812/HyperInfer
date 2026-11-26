@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
-    import type { ModelAlias } from '#lib/types';
+    import type { ModelAlias, OpenAiModelListItem } from '#lib/types';
     import { onMount } from 'svelte';
     import Card from '#lib/components/Card.svelte';
     import Button from '#lib/components/Button.svelte';
@@ -17,6 +17,7 @@
     let temperature = $state<string | number>('0.7');
     let maxTokens = $state<string | number>('512');
     let aliases = $state<ModelAlias[]>([]);
+    let catalogModels = $state<OpenAiModelListItem[]>([]);
 
     let sending = $state(false);
     let responseText = $state('');
@@ -31,6 +32,12 @@
     onMount(async () => {
         if (typeof window !== 'undefined') {
             baseOrigin = window.location.origin;
+        }
+        try {
+            const modelsRes = await api.getModels();
+            catalogModels = modelsRes.data;
+        } catch {
+            // Optional live model suggestions
         }
         if ($auth.user?.team_id) {
             try {
@@ -154,7 +161,12 @@
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="Model or Alias" bind:value={model} placeholder="e.g. gpt-4o-mini" />
+                    <Input label="Model or Alias" list="playground-catalog-models" bind:value={model} placeholder="Select or type model ID" />
+                    <datalist id="playground-catalog-models">
+                        {#each catalogModels as m}
+                            <option value={m.id}>{m.owned_by}</option>
+                        {/each}
+                    </datalist>
                     <Input label="Virtual API Key" type="password" bind:value={apiKey} placeholder="hi-..." />
                 </div>
 

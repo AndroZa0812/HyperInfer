@@ -18,6 +18,8 @@ import type {
   RegisterMcpUpstreamRequest,
   McpToolsResponse,
   McpTeamPolicy,
+  CatalogResponse,
+  OpenAiModelListResponse,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -182,4 +184,22 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(policy),
     }),
+
+  // Dynamic model catalog (HYP-77)
+  getModels: (provider?: string) => {
+    const params = provider ? `?provider=${encodeURIComponent(provider)}` : '';
+    return fetchApi<OpenAiModelListResponse>(`/models${params}`);
+  },
+  getCatalog: (provider?: string, q?: string) => {
+    const params = new URLSearchParams();
+    if (provider) params.set('provider', provider);
+    if (q) params.set('q', q);
+    const qs = params.toString();
+    return fetchApi<CatalogResponse>(`/admin/catalog${qs ? `?${qs}` : ''}`);
+  },
+  refreshCatalog: () =>
+    fetchApi<{ status: string; source: string; updated_at_secs: number; count: number }>(
+      "/admin/catalog/refresh",
+      { method: "POST" },
+    ),
 };

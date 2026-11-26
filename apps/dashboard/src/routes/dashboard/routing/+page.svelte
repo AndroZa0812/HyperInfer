@@ -1,6 +1,6 @@
 <script lang="ts">
     import { api } from '#lib/api';
-    import type { Deployment, CreateDeploymentRequest, RoutingHealth } from '#lib/types';
+    import type { Deployment, CreateDeploymentRequest, ModelSpec, RoutingHealth } from '#lib/types';
     import { onMount } from 'svelte';
     import Card from '#lib/components/Card.svelte';
     import Modal from '#lib/components/Modal.svelte';
@@ -23,6 +23,19 @@
     let savingStrategy = $state(false);
     let strategyStatus = $state('');
     let modelNameOverride = $state('');
+    let catalogModels = $state<ModelSpec[]>([]);
+    let catalogSource = $state('');
+    let syncingCatalog = $state(false);
+    let catalogStatus = $state('');
+
+    let providerCatalogModels = $derived(
+        catalogModels.filter((m) => m.provider === formData.provider)
+    );
+    let matchedCatalogModel = $derived(
+        providerCatalogModels.find((m) => m.id === formData.model.trim()) ??
+        catalogModels.find((m) => m.id === formData.model.trim()) ??
+        null
+    );
 
     const STRATEGIES = [
         { value: 'weighted-shuffle', label: 'Weighted Shuffle' },
@@ -44,8 +57,33 @@
     });
 
     onMount(async () => {
-        await Promise.all([loadDeployments(), loadRoutingStatus()]);
+        await Promise.all([loadDeployments(), loadRoutingStatus(), loadCatalog()]);
     });
+
+    async function loadCatalog() {
+        try {
+            const res = await api.getCatalog();
+            catalogModels = res.models;
+            catalogSource = res.source;
+        } catch {
+            // Optional live catalog
+        }
+    }
+
+    async function syncCatalog() {
+        syncingCatalog = true;
+        catalogStatus = '';
+        try {
+            const res = await api.refreshCatalog();
+            catalogStatus = `Synced ${res.count} models`;
+            await loadCatalog();
+        } catch (e) {
+            console.error('Failed to sync catalog', e);
+            catalogStatus = 'Sync failed';
+        } finally {
+            syncingCatalog = false;
+        }
+    }
 
     async function loadRoutingStatus() {
         const [configRes, healthRes] = await Promise.allSettled([
@@ -243,6 +281,18 @@
                     <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Active Deployments</p>
                     <p class="text-xl font-bold text-[var(--on-surface)] mt-0.5">{routingHealth?.active_deployments ?? deployments.filter(d => d.is_active).length}</p>
                 </div>
+                <div>
+                    <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Model Catalog</p>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-sm font-semibold text-[var(--on-surface)]">{catalogModels.length} models</span>
+                        <Button variant="ghost" size="sm" disabled={syncingCatalog} onclick={syncCatalog}>
+                            {syncingCatalog ? 'Syncing...' : 'Sync Catalog'}
+                        </Button>
+                        {#if catalogStatus}
+                            <span class="text-xs text-[var(--on-surface-variant)]">{catalogStatus}</span>
+                        {/if}
+                    </div>
+                </div>
             </div>
             <div class="flex items-end gap-3">
                 <div>
@@ -330,9 +380,26 @@
                     >
                         <option value="openai">OpenAI</option>
                         <option value="anthropic">Anthropic</option>
+                        <option value="gemini">Google Gemini</option>
                     </select>
                 </div>
-                <Input id="dep-model" label="Model" bind:value={formData.model} />
+                <Input id="dep-model" label="Model" list="routing-catalog-models" bind:value={formData.model} />
+                <datalist id="routing-catalog-models">
+                    {#each providerCatalogModels as m}
+                        <option value={m.id}>{m.name}</option>
+                    {/each}
+                </datalist>
+                {#if matchedCatalogModel}
+                    <p class="text-xs text-[var(--on-surface-variant)] -mt-2">
+                        Catalog ({catalogSource || matchedCatalogModel.source}):
+                        {#if matchedCatalogModel.context_window}
+                            {matchedCatalogModel.context_window.toLocaleString()} ctx
+                        {/if}
+                        {#if matchedCatalogModel.pricing}
+                            · {'$'}{matchedCatalogModel.pricing.input_per_1m_usd}/M in · {'$'}{matchedCatalogModel.pricing.output_per_1m_usd}/M out
+                        {/if}
+                    </p>
+                {/if}
                 <Input id="dep-model-override" label="Model Name Override (optional)" bind:value={modelNameOverride} placeholder="e.g. gpt-4o-2024-08-06" />
                 <Input id="dep-base-url" label="Base URL" bind:value={formData.base_url} />
                 <Input id="dep-api-key-ref" label="API Key Ref" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />

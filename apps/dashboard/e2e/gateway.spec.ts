@@ -89,5 +89,19 @@ test.describe('Gateway Views (MCP, Playground, Runtime Config)', () => {
 		await page.goto('/dashboard');
 		await expect(page.getByText('Gateway Runtime')).toBeVisible();
 		await expect(page.getByText('Standard Mode')).toBeVisible();
+
+		// Dynamic model catalog endpoints (HYP-77)
+		const modelsRes = await page.request.get('/v1/models');
+		expect(modelsRes.ok()).toBeTruthy();
+		const modelsJson = await modelsRes.json();
+		expect(modelsJson.object).toBe('list');
+
+		const catalogRes = await page.request.get('/v1/admin/catalog');
+		expect(catalogRes.ok()).toBeTruthy();
+		const catalogJson = await catalogRes.json();
+		expect(Array.isArray(catalogJson.models)).toBeTruthy();
+
+		await page.goto('/dashboard/routing');
+		await expect(page.getByRole('button', { name: 'Sync Catalog' })).toBeVisible();
 	});
 });

@@ -8,6 +8,7 @@
 		required?: boolean;
 		id?: string;
 		name?: string;
+		list?: string;
 		autocomplete?: import('svelte/elements').HTMLInputAttributes['autocomplete'];
 		error?: string;
 		class?: string;
@@ -26,6 +27,7 @@
 		required = false,
 		id = generatedId,
 		name,
+		list,
 		autocomplete,
 		error,
 		class: className = '',
@@ -47,6 +49,7 @@
 	<input
 		{id}
 		{name}
+		{list}
 		{type}
 		{placeholder}
 		{disabled}

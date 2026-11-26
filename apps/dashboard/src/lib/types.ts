@@ -182,3 +182,43 @@ export interface McpTeamPolicy {
     deny_patterns: string[];
     catalog_mode: boolean;
 }
+
+export interface ModelPricing {
+    input_per_1m_usd: number;
+    output_per_1m_usd: number;
+    cache_read_per_1m_usd?: number;
+    cache_write_per_1m_usd?: number;
+    reasoning_per_1m_usd?: number;
+}
+
+export interface ModelSpec {
+    id: string;
+    provider: string;
+    name: string;
+    context_window?: number;
+    max_output_tokens?: number;
+    pricing?: ModelPricing;
+    reasoning: boolean;
+    tool_call: boolean;
+    source: string;
+}
+
+export interface CatalogResponse {
+    source: string;
+    updated_at_secs: number;
+    count: number;
+    models: ModelSpec[];
+}
+
+export interface OpenAiModelListItem {
+    id: string;
+    object: string;
+    owned_by: string;
+    context_window?: number;
+    pricing?: ModelPricing;
+}
+
+export interface OpenAiModelListResponse {
+    object: string;
+    data: OpenAiModelListItem[];
+}

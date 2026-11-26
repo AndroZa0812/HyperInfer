@@ -24,8 +24,10 @@ pub use cli::{
 };
 pub use context::{
     compact_history_with_llm, deduplicate_read_file_outputs, estimate_messages_tokens,
-    estimate_tokens, find_safe_compaction_split, model_context_profile, prune_old_tool_outputs,
-    CompactionConfig, ModelContextProfile, TokenAccounting, WorkspaceContext, INSTRUCTION_FILES,
+    estimate_tokens, find_safe_compaction_split, model_context_profile,
+    model_context_profile_from_catalog, prune_old_tool_outputs, refresh_model_catalog,
+    set_model_catalog, CompactionConfig, ModelContextProfile, TokenAccounting, WorkspaceContext,
+    INSTRUCTION_FILES,
 };
 pub use output_filter::{
     FilterOutcome, FilterStats, OutputFilter, OutputFilterConfig, SessionFilterSnapshot,
@@ -1502,6 +1504,29 @@ mod tests {
         assert_eq!(p.context_window, 32_000);
         assert_eq!(p.input_cost_per_million, 0.0);
         assert_eq!(p.output_cost_per_million, 0.0);
+    }
+
+    #[test]
+    fn test_model_context_profile_from_live_catalog() {
+        let raw = r#"{
+            "anthropic": {
+                "models": {
+                    "claude-fable-5": {
+                        "id": "claude-fable-5",
+                        "name": "Claude Fable 5",
+                        "limit": { "context": 1000000, "output": 128000 },
+                        "cost": { "input": 10.0, "output": 50.0, "cache_read": 1.0, "cache_write": 12.5 }
+                    }
+                }
+            }
+        }"#;
+        let catalog = hyperinfer_core::ModelCatalog::from_models_dev_json(raw).unwrap();
+        let p = model_context_profile_from_catalog(&catalog, "claude-fable-5").unwrap();
+        assert_eq!(p.context_window, 1_000_000);
+        assert_eq!(p.input_cost_per_million, 10.0);
+        assert_eq!(p.output_cost_per_million, 50.0);
+        assert_eq!(p.cache_read_cost_per_million, 1.0);
+        assert_eq!(p.cache_creation_cost_per_million, 12.5);
     }
 
     // --- CompactionConfig effective_max_context_tokens tests ---

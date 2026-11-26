@@ -3,10 +3,15 @@
 
 use crate::agent::{AgentError, ChatBackend};
 use crate::tools::list_files::is_ignored_dir;
-use hyperinfer_core::{ChatMessage, ChatRequest, MessageRole, Usage};
+use hyperinfer_core::{
+    default_cache_path, ChatMessage, ChatRequest, MessageRole, ModelCatalog, Usage,
+    DEFAULT_CACHE_TTL_SECS,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{OnceLock, RwLock};
+use std::time::Duration;
 
 /// Candidate project rule/instruction files searched in `workspace_root`.
 pub const INSTRUCTION_FILES: &[&str] = &["AGENTS.md", "CLAUDE.md", ".hypercode.md", ".cursorrules"];
@@ -177,8 +182,70 @@ pub struct ModelContextProfile {
     pub cache_creation_cost_per_million: f64,
 }
 
+static SHARED_CATALOG: OnceLock<RwLock<ModelCatalog>> = OnceLock::new();
+
+fn shared_catalog() -> &'static RwLock<ModelCatalog> {
+    SHARED_CATALOG.get_or_init(|| RwLock::new(ModelCatalog::new()))
+}
+
+/// Replace the process-wide `ModelCatalog` used by `model_context_profile`.
+pub fn set_model_catalog(catalog: ModelCatalog) {
+    if let Ok(mut guard) = shared_catalog().write() {
+        *guard = catalog;
+    }
+}
+
+/// Load or refresh the process-wide `ModelCatalog` from disk cache or `models.dev` / `HYPERINFER_CATALOG_URL`.
+pub async fn refresh_model_catalog() {
+    let cache = default_cache_path();
+    let loaded = ModelCatalog::load_or_fetch(
+        cache.as_deref(),
+        Duration::from_secs(DEFAULT_CACHE_TTL_SECS),
+    )
+    .await;
+    if !loaded.is_empty() {
+        set_model_catalog(loaded);
+    }
+}
+
+/// Build a `ModelContextProfile` from a `ModelCatalog` entry when available.
+pub fn model_context_profile_from_catalog(
+    catalog: &ModelCatalog,
+    model: &str,
+) -> Option<ModelContextProfile> {
+    let spec = catalog.get(None, model)?;
+    let context_window = spec.context_window.unwrap_or(128_000);
+    let (input, output, cache_read, cache_write) = match &spec.pricing {
+        Some(p) => (
+            p.input_per_1m_usd,
+            p.output_per_1m_usd,
+            p.cache_read_per_1m_usd.unwrap_or(p.input_per_1m_usd * 0.5),
+            p.cache_write_per_1m_usd.unwrap_or(p.input_per_1m_usd),
+        ),
+        None => (0.0, 0.0, 0.0, 0.0),
+    };
+    Some(ModelContextProfile {
+        context_window,
+        input_cost_per_million: input,
+        output_cost_per_million: output,
+        cache_read_cost_per_million: cache_read,
+        cache_creation_cost_per_million: cache_write,
+    })
+}
+
 /// Return the context window and pricing profile for a given model name.
+///
+/// Prefers live metadata from `hyperinfer_core::ModelCatalog` when loaded;
+/// falls back to conservative defaults when offline or for unknown local models.
 pub fn model_context_profile(model: &str) -> ModelContextProfile {
+    if let Ok(guard) = shared_catalog().read() {
+        if !guard.is_empty() {
+            if let Some(profile) = model_context_profile_from_catalog(&guard, model) {
+                return profile;
+            }
+        }
+    }
+
     let lower = model.to_lowercase();
     if lower.starts_with("claude-opus") {
         ModelContextProfile {
