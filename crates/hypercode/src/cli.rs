@@ -22,6 +22,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CliOptions {
     pub model: Option<String>,
+    pub editor_model: Option<String>,
+    pub compaction_model: Option<String>,
     pub prompt: Option<String>,
     pub workspace: PathBuf,
     pub approval_mode: ApprovalMode,
@@ -41,6 +43,8 @@ impl Default for CliOptions {
             .unwrap_or(false);
         Self {
             model: None,
+            editor_model: std::env::var("HYPERCODE_EDITOR_MODEL").ok(),
+            compaction_model: std::env::var("HYPERCODE_COMPACTION_MODEL").ok(),
             prompt: None,
             workspace: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
             approval_mode: ApprovalMode::SmartSandbox,
@@ -70,10 +74,22 @@ impl CliOptions {
                 "-h" | "--help" => {
                     opts.show_help = true;
                 }
-                "-m" | "--model" => {
+                "-m" | "--model" | "--architect-model" => {
                     opts.model = Some(
                         iter.next()
                             .ok_or_else(|| "Missing value for --model".to_string())?,
+                    );
+                }
+                "--editor-model" => {
+                    opts.editor_model = Some(
+                        iter.next()
+                            .ok_or_else(|| "Missing value for --editor-model".to_string())?,
+                    );
+                }
+                "--compaction-model" => {
+                    opts.compaction_model = Some(
+                        iter.next()
+                            .ok_or_else(|| "Missing value for --compaction-model".to_string())?,
                     );
                 }
                 "-p" | "--prompt" => {
@@ -165,7 +181,7 @@ USAGE:
     hypercode [OPTIONS] [PROMPT]
 
 OPTIONS:
-    -m, --model <MODEL>          Model name (e.g., gpt-4o, claude-3-5-sonnet-20241022,
+    -m, --model <MODEL>          Architect model name (e.g., gpt-4o, claude-3-5-sonnet-20241022,
                                  gemini-2.5-pro, antigravity/gemini-2.5-pro, qwen2.5-coder)
     -p, --prompt <PROMPT>        Run a single-shot task and exit
     -w, --workspace <PATH>       Workspace root directory (default: current directory)
@@ -186,10 +202,16 @@ ENVIRONMENT VARIABLES:
     HYPERCODE_LOCAL_URL          Base URL for local Ollama / vLLM / LM Studio server
     HYPERCODE_OPENSHELL_SANDBOX  Default OpenShell sandbox name
     HYPERCODE_USE_RTK            Enable rtk wrapping (1 or true)
+    HYPERCODE_EDITOR_MODEL       Default editor model
+    HYPERCODE_COMPACTION_MODEL   Default compaction model
 
 REPL COMMANDS:
     /compact                     Summarize older conversation turns to free context tokens
     /tokens                      Show current message count, estimated tokens, and config
+    /model                       Show current model configuration
+    /model <name>                Set the architect model
+    /model editor <name>         Set the editor model
+    /model compaction <name>     Set the compaction model
     /reset                       Clear conversation history (keeps system prompt)
     /help                        Show available REPL slash commands
     /quit, /exit                 Exit HyperCode"
@@ -204,6 +226,10 @@ pub enum ReplCommand {
     Tokens,
     Reset,
     Quit,
+    Model {
+        role: Option<String>,
+        model: Option<String>,
+    },
 }
 
 impl ReplCommand {
@@ -220,6 +246,27 @@ impl ReplCommand {
             "/tokens" | "/status" => Some(Ok(Self::Tokens)),
             "/reset" | "/clear" => Some(Ok(Self::Reset)),
             "/quit" | "/exit" | "/q" => Some(Ok(Self::Quit)),
+            "/model" => {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() == 1 {
+                    Some(Ok(Self::Model {
+                        role: None,
+                        model: None,
+                    }))
+                } else if parts.len() == 2 {
+                    Some(Ok(Self::Model {
+                        role: None,
+                        model: Some(parts[1].to_string()),
+                    }))
+                } else if parts.len() == 3 {
+                    Some(Ok(Self::Model {
+                        role: Some(parts[1].to_string()),
+                        model: Some(parts[2].to_string()),
+                    }))
+                } else {
+                    Some(Err("Usage: /model [role] [name]".to_string()))
+                }
+            }
             other => Some(Err(format!(
                 "Unknown slash command '{}'. Type /help for available commands.",
                 other
@@ -555,6 +602,8 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
 
     let agent_config = AgentConfig {
         model: model.clone(),
+        editor_model: opts.editor_model.clone(),
+        compaction_model: opts.compaction_model.clone(),
         max_steps: opts.max_steps,
         approval_mode: opts.approval_mode,
         ..Default::default()
@@ -660,12 +709,63 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                 Ok(ReplCommand::Help) => {
                     println!(
                         "Available commands:\n  \
+                         /model     Show or switch Architect, Editor, and Compaction models\n  \
                          /compact   Summarize older conversation turns\n  \
-                         /tokens    Show message count and estimated token usage\n  \
+                         /tokens    Show message count, token/cost breakdown, and config\n  \
                          /reset     Clear conversation history\n  \
                          /quit      Exit HyperCode"
                     );
                 }
+                Ok(ReplCommand::Model {
+                    role,
+                    model: target,
+                }) => match (role.as_deref(), target) {
+                    (None, None) => {
+                        println!(
+                            "Architect (primary): {}\nEditor:              {}\nCompaction:          {} (effective: {})",
+                            agent.model(),
+                            agent.editor_model().unwrap_or("<same as primary>"),
+                            agent.compaction_model().unwrap_or("<auto>"),
+                            agent.compaction_model().or(agent.editor_model()).unwrap_or(agent.model()),
+                        );
+                    }
+                    (None, Some(new_model)) => {
+                        agent.set_model(new_model.clone());
+                        println!("Primary (Architect) model switched to '{}'.", new_model);
+                    }
+                    (Some("editor"), Some(new_model)) => {
+                        if matches!(
+                            new_model.to_ascii_lowercase().as_str(),
+                            "none" | "off" | "clear"
+                        ) {
+                            agent.set_editor_model(None);
+                            println!("Editor model cleared (will use primary model).");
+                        } else {
+                            agent.set_editor_model(Some(new_model.clone()));
+                            println!("Editor model set to '{}'.", new_model);
+                        }
+                    }
+                    (Some("compaction"), Some(new_model)) => {
+                        if matches!(
+                            new_model.to_ascii_lowercase().as_str(),
+                            "none" | "off" | "clear"
+                        ) {
+                            agent.set_compaction_model(None);
+                            println!(
+                                "Compaction model cleared (will fall back to editor/primary)."
+                            );
+                        } else {
+                            agent.set_compaction_model(Some(new_model.clone()));
+                            println!("Compaction model set to '{}'.", new_model);
+                        }
+                    }
+                    (Some(other), _) => {
+                        eprintln!(
+                            "\x1b[31mUnknown /model role '{}'. Use /model [editor|compaction] <name>.\x1b[0m",
+                            other
+                        );
+                    }
+                },
                 Ok(ReplCommand::Compact) => match agent.compact().await {
                     Ok(true) => {
                         println!(
@@ -681,15 +781,16 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                     }
                 },
                 Ok(ReplCommand::Tokens) => {
+                    let active_model = agent.model().to_string();
                     let ta = agent.token_accounting();
                     let fs = agent.filter_stats();
-                    let ctx_pct = ta.context_utilization_pct(&model, agent.history());
-                    let cost = ta.estimated_cost_usd(&model);
+                    let ctx_pct = ta.context_utilization_pct(&active_model, agent.history());
+                    let cost = ta.total_cost_usd(&active_model);
                     println!(
                         "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
                         agent.history().len(),
                         agent.estimated_tokens(),
-                        model,
+                        active_model,
                         sandbox_label
                     );
                     println!(
@@ -700,6 +801,16 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                         ta.cache_creation_tokens
                     );
                     println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
+                    if ta.per_model.len() > 1 {
+                        println!("Per-model breakdown:");
+                        for (m, u) in &ta.per_model {
+                            let m_cost = crate::context::TokenAccounting::model_cost_usd(m, u);
+                            println!(
+                                "  - {}: {} req(s), {} in / {} out (${:.4})",
+                                m, u.requests, u.input_tokens, u.output_tokens, m_cost
+                            );
+                        }
+                    }
                     println!(
                         "| Filter savings: ~{} tokens ({} cmds)",
                         fs.total_tokens_saved, fs.commands_filtered

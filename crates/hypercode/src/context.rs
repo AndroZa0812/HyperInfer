@@ -359,6 +359,16 @@ impl CompactionConfig {
     }
 }
 
+/// Per-model token usage breakdown.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModelUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+    pub cache_creation_tokens: u64,
+    pub requests: u64,
+}
+
 /// Token usage accounting with calibrated context tracking.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct TokenAccounting {
@@ -370,6 +380,8 @@ pub struct TokenAccounting {
     pub last_prompt_tokens: Option<usize>,
     /// History length at the time of the last API response.
     pub last_history_len: usize,
+    /// Per-model usage breakdown.
+    pub per_model: std::collections::BTreeMap<String, ModelUsage>,
 }
 
 impl TokenAccounting {
@@ -387,6 +399,61 @@ impl TokenAccounting {
         if prompt_tokens > 0 {
             self.last_prompt_tokens = Some(prompt_tokens);
             self.last_history_len = history_len;
+        }
+    }
+
+    /// Record usage attributed to a specific model (updates totals + per-model breakdown).
+    pub fn record_usage_for_model(&mut self, model: &str, usage: &Usage, history_len: usize) {
+        self.record_usage(usage, history_len);
+        let cache_read = usage.cache_read_tokens.unwrap_or(0) as u64;
+        let cache_creation = usage.cache_creation_tokens.unwrap_or(0) as u64;
+        let entry = self.per_model.entry(model.to_string()).or_default();
+        entry.input_tokens += usage.input_tokens as u64;
+        entry.output_tokens += usage.output_tokens as u64;
+        entry.cache_read_tokens += cache_read;
+        entry.cache_creation_tokens += cache_creation;
+        entry.requests += 1;
+    }
+
+    /// Record auxiliary usage (e.g. compaction) without overwriting calibration state.
+    pub fn record_auxiliary_usage(&mut self, model: &str, usage: &Usage) {
+        self.input_tokens += usage.input_tokens as u64;
+        self.output_tokens += usage.output_tokens as u64;
+        let cache_read = usage.cache_read_tokens.unwrap_or(0) as u64;
+        let cache_creation = usage.cache_creation_tokens.unwrap_or(0) as u64;
+        self.cache_read_tokens += cache_read;
+        self.cache_creation_tokens += cache_creation;
+
+        let entry = self.per_model.entry(model.to_string()).or_default();
+        entry.input_tokens += usage.input_tokens as u64;
+        entry.output_tokens += usage.output_tokens as u64;
+        entry.cache_read_tokens += cache_read;
+        entry.cache_creation_tokens += cache_creation;
+        entry.requests += 1;
+    }
+
+    /// Compute USD cost for a single model's usage.
+    pub fn model_cost_usd(model: &str, usage: &ModelUsage) -> f64 {
+        let profile = model_context_profile(model);
+        let input_cost = (usage.input_tokens as f64 / 1_000_000.0) * profile.input_cost_per_million;
+        let output_cost =
+            (usage.output_tokens as f64 / 1_000_000.0) * profile.output_cost_per_million;
+        let cache_read_cost =
+            (usage.cache_read_tokens as f64 / 1_000_000.0) * profile.cache_read_cost_per_million;
+        let cache_creation_cost = (usage.cache_creation_tokens as f64 / 1_000_000.0)
+            * profile.cache_creation_cost_per_million;
+        input_cost + output_cost + cache_read_cost + cache_creation_cost
+    }
+
+    /// Compute total USD cost across all models (or fallback to single-model estimate).
+    pub fn total_cost_usd(&self, fallback_model: &str) -> f64 {
+        if !self.per_model.is_empty() {
+            self.per_model
+                .iter()
+                .map(|(m, u)| Self::model_cost_usd(m, u))
+                .sum()
+        } else {
+            self.estimated_cost_usd(fallback_model)
         }
     }
 
@@ -588,16 +655,17 @@ pub fn find_safe_compaction_split(
 
 /// Tier 2 Compaction (`/compact`): Summarize older conversation turns using the LLM
 /// and replace them with a compact `<conversation_summary>` message.
-pub async fn compact_history_with_llm(
+/// Compact history using the LLM, returning usage info for cost tracking.
+pub async fn compact_history_with_llm_usage(
     history: &mut Vec<ChatMessage>,
     keep_recent_messages: usize,
     backend: &dyn ChatBackend,
     api_key_id: &str,
     model: &str,
-) -> Result<bool, AgentError> {
+) -> Result<(bool, Option<Usage>), AgentError> {
     let (start_idx, split_idx) = match find_safe_compaction_split(history, keep_recent_messages) {
         Some(bounds) => bounds,
-        None => return Ok(false),
+        None => return Ok((false, None)),
     };
 
     let slice_to_summarize = &history[start_idx..split_idx];
@@ -638,6 +706,7 @@ pub async fn compact_history_with_llm(
     };
 
     let resp = backend.chat(api_key_id, sum_request).await?;
+    let usage = resp.usage.clone();
     let summary_text = resp
         .choices
         .into_iter()
@@ -664,5 +733,19 @@ pub async fn compact_history_with_llm(
     }
 
     history.splice(start_idx..split_idx, summary_messages);
-    Ok(true)
+    Ok((true, Some(usage)))
+}
+
+/// Compact history using the LLM (backward-compatible wrapper).
+pub async fn compact_history_with_llm(
+    history: &mut Vec<ChatMessage>,
+    keep_recent_messages: usize,
+    backend: &dyn ChatBackend,
+    api_key_id: &str,
+    model: &str,
+) -> Result<bool, AgentError> {
+    let (compacted, _usage) =
+        compact_history_with_llm_usage(history, keep_recent_messages, backend, api_key_id, model)
+            .await?;
+    Ok(compacted)
 }
