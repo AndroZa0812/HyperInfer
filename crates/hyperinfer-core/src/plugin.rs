@@ -47,17 +47,28 @@ pub trait GatewayPlugin: Send + Sync {
 #[derive(Clone, Default)]
 pub struct PluginPipeline {
     plugins: Vec<Arc<dyn GatewayPlugin>>,
+    redaction: Option<Arc<crate::redaction::RedactionPlugin>>,
 }
 
 impl PluginPipeline {
     pub fn new() -> Self {
         Self {
             plugins: Vec::new(),
+            redaction: None,
         }
     }
 
     pub fn add(&mut self, plugin: Arc<dyn GatewayPlugin>) {
         self.plugins.push(plugin);
+    }
+
+    pub fn add_redaction(&mut self, plugin: Arc<crate::redaction::RedactionPlugin>) {
+        self.redaction = Some(plugin.clone());
+        self.plugins.push(plugin);
+    }
+
+    pub fn redaction(&self) -> Option<Arc<crate::redaction::RedactionPlugin>> {
+        self.redaction.clone()
     }
 
     pub fn with_plugin(mut self, plugin: Arc<dyn GatewayPlugin>) -> Self {

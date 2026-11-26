@@ -43,16 +43,29 @@ pub struct GatewaySettings {
 #[derive(Clone)]
 pub struct GatewaySettingsState {
     pub settings: Arc<RwLock<GatewaySettings>>,
+    pub live_redaction: Option<Arc<RedactionPlugin>>,
 }
 
 impl GatewaySettingsState {
     pub fn new(pipeline_plugins: Vec<String>) -> Self {
+        Self::with_live_redaction(pipeline_plugins, None)
+    }
+
+    pub fn with_live_redaction(
+        pipeline_plugins: Vec<String>,
+        live_redaction: Option<Arc<RedactionPlugin>>,
+    ) -> Self {
+        let initial_redaction = live_redaction
+            .as_ref()
+            .map(|p| p.config())
+            .unwrap_or_default();
         Self {
             settings: Arc::new(RwLock::new(GatewaySettings {
                 pipeline_plugins,
-                redaction: RedactionConfig::default(),
+                redaction: initial_redaction,
                 cache: SemanticCacheConfig::default(),
             })),
+            live_redaction,
         }
     }
 }
@@ -90,6 +103,10 @@ pub async fn update_redaction_config(
         }
     }
 
+    if let Some(plugin) = &state.live_redaction {
+        plugin.update_config(config.clone());
+    }
+
     let mut guard = state.settings.write().await;
     guard.redaction = config.clone();
     Json(config).into_response()
@@ -100,9 +117,12 @@ pub async fn test_redaction(
     _admin: RequireAdmin,
     Json(req): Json<TestRedactionRequest>,
 ) -> impl IntoResponse {
-    let config = state.settings.read().await.redaction.clone();
-    let plugin = RedactionPlugin::new(config);
-    let redacted = plugin.redact_str(&req.sample);
+    let redacted = if let Some(plugin) = &state.live_redaction {
+        plugin.redact_str(&req.sample)
+    } else {
+        let config = state.settings.read().await.redaction.clone();
+        RedactionPlugin::new(config).redact_str(&req.sample)
+    };
     Json(TestRedactionResponse { redacted })
 }
 
@@ -141,9 +161,13 @@ mod tests {
     use axum_test::TestServer;
     use hyperinfer_core::User;
 
-    fn test_server() -> (TestServer, String) {
+    fn test_server() -> (TestServer, String, Arc<RedactionPlugin>) {
         let secret = "gw-settings-secret";
-        let state = GatewaySettingsState::new(vec!["redaction".to_string()]);
+        let live_redaction = Arc::new(RedactionPlugin::with_defaults());
+        let state = GatewaySettingsState::with_live_redaction(
+            vec!["redaction".to_string()],
+            Some(live_redaction.clone()),
+        );
         let app = Router::new()
             .route("/v1/admin/gateway/settings", get(get_gateway_settings))
             .route("/v1/admin/gateway/redaction", put(update_redaction_config))
@@ -164,12 +188,12 @@ mod tests {
             created_at: chrono::Utc::now(),
         };
         let token = create_auth_token(&admin, secret, 3600).unwrap();
-        (TestServer::new(app), token)
+        (TestServer::new(app), token, live_redaction)
     }
 
     #[tokio::test]
     async fn test_redaction_validation_and_live_preview() {
-        let (server, token) = test_server();
+        let (server, token, live_redaction) = test_server();
 
         // Reject invalid custom regex
         let bad = server
@@ -182,7 +206,7 @@ mod tests {
             .await;
         bad.assert_status(StatusCode::BAD_REQUEST);
 
-        // Save valid custom pattern and test preview
+        // Save valid custom pattern and test preview + live plugin hot-reload
         let ok = server
             .put("/v1/admin/gateway/redaction")
             .add_header("Authorization", format!("Bearer {token}"))
@@ -193,6 +217,12 @@ mod tests {
             }))
             .await;
         ok.assert_status_ok();
+
+        // Live pipeline plugin immediately applies the updated rules
+        assert_eq!(
+            live_redaction.redact_str("Contact alice@example.com with SECRET-9999"),
+            "Contact [REDACTED_EMAIL] with [CUSTOM_SECRET]"
+        );
 
         let preview = server
             .post("/v1/admin/gateway/redaction/test")
@@ -211,7 +241,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_config_validation_and_update() {
-        let (server, token) = test_server();
+        let (server, token, _) = test_server();
 
         let bad = server
             .put("/v1/admin/gateway/cache")

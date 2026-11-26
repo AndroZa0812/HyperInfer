@@ -337,8 +337,10 @@ where
         .with_state(catalog_state);
 
     // Gateway Plugins, Redaction & Semantic Cache admin routes (HYP-73)
-    let gw_settings_state =
-        gateway_settings::GatewaySettingsState::new(state.plugins.plugin_names());
+    let gw_settings_state = gateway_settings::GatewaySettingsState::with_live_redaction(
+        state.plugins.plugin_names(),
+        state.plugins.redaction(),
+    );
     let gw_settings_router = Router::new()
         .route(
             "/v1/admin/gateway/settings",

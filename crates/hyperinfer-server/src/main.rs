@@ -331,7 +331,7 @@ async fn run_postgres(
 
     let mut plugins = hyperinfer_core::PluginPipeline::new();
     if enable_pii_redaction {
-        plugins.add(Arc::new(hyperinfer_core::RedactionPlugin::with_defaults()));
+        plugins.add_redaction(Arc::new(hyperinfer_core::RedactionPlugin::with_defaults()));
     }
 
     let state: ProdState = AppState {
