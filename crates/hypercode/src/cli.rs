@@ -538,30 +538,44 @@ async fn process_repl_input(
     model: &str,
     sandbox_label: &str,
     trimmed: &str,
+    viewport: Option<&mut crate::tui::TuiViewport>,
 ) -> bool {
     if let Some(cmd_res) = ReplCommand::parse(trimmed) {
         match cmd_res {
             Ok(ReplCommand::Help) => {
-                println!(
-                    "Available commands:\n  \
+                let help = "Available commands:\n  \
                      /compact   Summarize older conversation turns\n  \
                      /tokens    Show message count and estimated token usage\n  \
                      /reset     Clear conversation history\n  \
-                     /quit      Exit HyperCode"
-                );
+                     /quit      Exit HyperCode";
+                println!("{}", help);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(help);
+                }
             }
             Ok(ReplCommand::Compact) => match agent.compact().await {
                 Ok(true) => {
-                    println!(
+                    let msg = format!(
                         "Compaction complete (~{} tokens remaining).",
                         agent.estimated_tokens()
                     );
+                    println!("{}", msg);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(msg);
+                    }
                 }
                 Ok(false) => {
-                    println!("History is already compact; nothing to summarize.");
+                    let msg = "History is already compact; nothing to summarize.";
+                    println!("{}", msg);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(msg);
+                    }
                 }
                 Err(e) => {
                     eprintln!("\x1b[31mCompaction failed:\x1b[0m {}", e);
+                    if let Some(vp) = viewport {
+                        vp.push_transcript(format!("Compaction failed: {}", e));
+                    }
                 }
             },
             Ok(ReplCommand::Tokens) => {
@@ -569,35 +583,46 @@ async fn process_repl_input(
                 let fs = agent.filter_stats();
                 let ctx_pct = ta.context_utilization_pct(model, agent.history());
                 let cost = ta.estimated_cost_usd(model);
-                println!(
-                    "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
+                let summary = format!(
+                    "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}\n\
+                     Input: {} | Output: {} | Cache read: {} | Cache write: {}\n\
+                     Context: {:.1}% used | Est. cost: ${:.4}\n\
+                     | Filter savings: ~{} tokens ({} cmds)",
                     agent.history().len(),
                     agent.estimated_tokens(),
                     model,
-                    sandbox_label
-                );
-                println!(
-                    "Input: {} | Output: {} | Cache read: {} | Cache write: {}",
+                    sandbox_label,
                     ta.input_tokens,
                     ta.output_tokens,
                     ta.cache_read_tokens,
-                    ta.cache_creation_tokens
+                    ta.cache_creation_tokens,
+                    ctx_pct,
+                    cost,
+                    fs.total_tokens_saved,
+                    fs.commands_filtered
                 );
-                println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
-                println!(
-                    "| Filter savings: ~{} tokens ({} cmds)",
-                    fs.total_tokens_saved, fs.commands_filtered
-                );
+                println!("{}", summary);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(summary);
+                }
             }
             Ok(ReplCommand::Reset) => {
                 agent.reset_history();
-                println!("Conversation history reset.");
+                let msg = "Conversation history reset.";
+                println!("{}", msg);
+                if let Some(vp) = viewport {
+                    vp.clear_transcript();
+                    vp.push_transcript(msg);
+                }
             }
             Ok(ReplCommand::Quit) => {
                 return false;
             }
             Err(msg) => {
                 eprintln!("\x1b[31m{}\x1b[0m", msg);
+                if let Some(vp) = viewport {
+                    vp.push_transcript(msg);
+                }
             }
         }
         return true;
@@ -624,14 +649,25 @@ async fn process_repl_input(
                     outcome.final_response
                 );
             }
+            if !outcome.final_response.trim().is_empty() {
+                if let Some(vp) = viewport {
+                    vp.push_transcript(format!("Assistant:\n{}", outcome.final_response));
+                }
+            }
         }
         Err(AgentError::Cancelled) => {
             event_sink.take_streamed();
             println!("\n[Turn canceled]\n");
+            if let Some(vp) = viewport {
+                vp.push_transcript("[Turn canceled]");
+            }
         }
         Err(e) => {
             event_sink.take_streamed();
             eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
+            if let Some(vp) = viewport {
+                vp.push_transcript(format!("Error: {}", e));
+            }
         }
     }
     true
@@ -767,8 +803,15 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
                         continue;
                     }
                     viewport.push_transcript(format!("hypercode> {}", trimmed));
-                    if !process_repl_input(&mut agent, &event_sink, &model, &sandbox_label, trimmed)
-                        .await
+                    if !process_repl_input(
+                        &mut agent,
+                        &event_sink,
+                        &model,
+                        &sandbox_label,
+                        trimmed,
+                        Some(&mut viewport),
+                    )
+                    .await
                     {
                         break;
                     }
@@ -805,7 +848,16 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
             if trimmed.is_empty() {
                 continue;
             }
-            if !process_repl_input(&mut agent, &event_sink, &model, &sandbox_label, trimmed).await {
+            if !process_repl_input(
+                &mut agent,
+                &event_sink,
+                &model,
+                &sandbox_label,
+                trimmed,
+                None,
+            )
+            .await
+            {
                 break;
             }
         }

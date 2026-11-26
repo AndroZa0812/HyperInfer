@@ -129,10 +129,16 @@ pub fn wrap_text(text: &str, width: usize) -> Vec<String> {
 /// Format a diff preview to fit within the given width.
 pub fn format_diff_preview_for_width(diff: &str, width: u16) -> String {
     let width = width.max(20) as usize;
+    let cont_width = width.saturating_sub(2).max(1);
     let mut result = String::new();
 
     for line in diff.lines() {
-        let wrapped = wrap_text(line, width);
+        if line.chars().count() <= width {
+            result.push_str(line);
+            result.push('\n');
+            continue;
+        }
+        let wrapped = wrap_text(line, cont_width);
         for (i, wline) in wrapped.iter().enumerate() {
             if i > 0 {
                 result.push_str("  ");
