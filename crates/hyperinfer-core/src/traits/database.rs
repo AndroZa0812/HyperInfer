@@ -229,6 +229,15 @@ pub trait Database: Clone + Send + Sync + 'static {
         let _ = (id, team_id);
         Err(DbError::NotFound)
     }
+
+    async fn list_usage_logs(&self, filter: ListUsageLogsFilter) -> Result<UsageLogsPage, DbError> {
+        Ok(UsageLogsPage {
+            logs: Vec::new(),
+            total: 0,
+            limit: filter.limit,
+            offset: filter.offset,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,6 +312,10 @@ pub struct NewUsageLog {
     pub response_time_ms: i64,
 }
 
+fn default_status_code() -> i16 {
+    200
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UsageLog {
     pub id: String,
@@ -313,6 +326,66 @@ pub struct UsageLog {
     pub output_tokens: i32,
     pub response_time_ms: i64,
     pub recorded_at: DateTime<Utc>,
+    #[serde(default = "default_status_code")]
+    pub status_code: i16,
+    #[serde(default)]
+    pub cached_input_tokens: i32,
+    #[serde(default)]
+    pub reasoning_tokens: i32,
+    #[serde(default)]
+    pub cost_cents: f64,
+    #[serde(default)]
+    pub cache_hit: bool,
+    #[serde(default)]
+    pub failover_used: bool,
+    #[serde(default)]
+    pub deployment_name: Option<String>,
+    #[serde(default)]
+    pub stop_reason: Option<String>,
+}
+
+impl Default for UsageLog {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            team_id: String::new(),
+            api_key_id: String::new(),
+            model: String::new(),
+            input_tokens: 0,
+            output_tokens: 0,
+            response_time_ms: 0,
+            recorded_at: Utc::now(),
+            status_code: 200,
+            cached_input_tokens: 0,
+            reasoning_tokens: 0,
+            cost_cents: 0.0,
+            cache_hit: false,
+            failover_used: false,
+            deployment_name: None,
+            stop_reason: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListUsageLogsFilter {
+    pub team_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub model: Option<String>,
+    pub status_code: Option<i16>,
+    pub cache_hit: Option<bool>,
+    pub from: Option<DateTime<Utc>>,
+    pub to: Option<DateTime<Utc>>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageLogsPage {
+    pub logs: Vec<UsageLog>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

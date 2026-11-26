@@ -260,6 +260,14 @@ impl Database for InMemoryDb {
             output_tokens,
             response_time_ms,
             recorded_at: Utc::now(),
+            status_code: 200,
+            cached_input_tokens: 0,
+            reasoning_tokens: 0,
+            cost_cents: 0.0,
+            cache_hit: false,
+            failover_used: false,
+            deployment_name: None,
+            stop_reason: None,
         };
         store.usage_logs.push(log.clone());
         Ok(log)
@@ -631,5 +639,73 @@ impl Database for InMemoryDb {
         }
         mem.updated_at = now;
         Ok(mem.clone())
+    }
+
+    async fn list_usage_logs(
+        &self,
+        filter: hyperinfer_core::ListUsageLogsFilter,
+    ) -> Result<hyperinfer_core::UsageLogsPage, DbError> {
+        let store = self.store.read().unwrap();
+        let limit = filter.limit.clamp(1, 200);
+        let offset = filter.offset.max(0);
+
+        let mut matched: Vec<UsageLog> = store
+            .usage_logs
+            .iter()
+            .filter(|l| {
+                if let Some(ref tid) = filter.team_id {
+                    if &l.team_id != tid {
+                        return false;
+                    }
+                }
+                if let Some(ref kid) = filter.api_key_id {
+                    if &l.api_key_id != kid {
+                        return false;
+                    }
+                }
+                if let Some(ref model) = filter.model {
+                    if !l.model.to_lowercase().contains(&model.to_lowercase()) {
+                        return false;
+                    }
+                }
+                if let Some(code) = filter.status_code {
+                    if l.status_code != code {
+                        return false;
+                    }
+                }
+                if let Some(hit) = filter.cache_hit {
+                    if l.cache_hit != hit {
+                        return false;
+                    }
+                }
+                if let Some(from) = filter.from {
+                    if l.recorded_at < from {
+                        return false;
+                    }
+                }
+                if let Some(to) = filter.to {
+                    if l.recorded_at > to {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        matched.sort_by_key(|b| std::cmp::Reverse(b.recorded_at));
+        let total = matched.len() as i64;
+        let logs = matched
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+
+        Ok(hyperinfer_core::UsageLogsPage {
+            logs,
+            total,
+            limit,
+            offset,
+        })
     }
 }

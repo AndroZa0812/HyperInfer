@@ -125,6 +125,7 @@ impl Database for StubDb {
             output_tokens,
             response_time_ms,
             recorded_at: Utc::now(),
+            ..Default::default()
         })
     }
     async fn list_deployments(

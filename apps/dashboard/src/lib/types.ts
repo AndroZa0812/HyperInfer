@@ -222,3 +222,41 @@ export interface OpenAiModelListResponse {
     object: string;
     data: OpenAiModelListItem[];
 }
+
+export interface UsageLog {
+    id: string;
+    team_id: string;
+    api_key_id: string;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    response_time_ms: number;
+    recorded_at: string;
+    status_code: number;
+    cached_input_tokens: number;
+    reasoning_tokens: number;
+    cost_cents: number;
+    cache_hit: boolean;
+    failover_used: boolean;
+    deployment_name?: string | null;
+    stop_reason?: string | null;
+}
+
+export interface UsageLogsPage {
+    logs: UsageLog[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+export interface UsageLogsFilter {
+    team_id?: string;
+    api_key_id?: string;
+    model?: string;
+    status_code?: number;
+    cache_hit?: boolean;
+    from?: string;
+    to?: string;
+    limit?: number;
+    offset?: number;
+}
