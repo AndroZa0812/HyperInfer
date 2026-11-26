@@ -260,3 +260,28 @@ export interface UsageLogsFilter {
     limit?: number;
     offset?: number;
 }
+
+export interface RedactionConfig {
+    redact_api_keys: boolean;
+    redact_bearer_tokens: boolean;
+    redact_emails: boolean;
+    redact_ssns: boolean;
+    custom_patterns: [string, string][];
+    redact_requests: boolean;
+    redact_responses: boolean;
+}
+
+export interface SemanticCacheConfig {
+    enabled: boolean;
+    similarity_threshold: number;
+    ttl_secs: number;
+    embedding_provider: string;
+    embedding_model: string;
+    sse_replay: boolean;
+}
+
+export interface GatewaySettings {
+    pipeline_plugins: string[];
+    redaction: RedactionConfig;
+    cache: SemanticCacheConfig;
+}

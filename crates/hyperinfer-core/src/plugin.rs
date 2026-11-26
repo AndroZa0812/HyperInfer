@@ -73,6 +73,10 @@ impl PluginPipeline {
         self.plugins.len()
     }
 
+    pub fn plugin_names(&self) -> Vec<String> {
+        self.plugins.iter().map(|p| p.name().to_string()).collect()
+    }
+
     /// Run pre-request hooks in registration order.
     /// Stops immediately on ShortCircuit or Respond.
     pub async fn run_pre_request(

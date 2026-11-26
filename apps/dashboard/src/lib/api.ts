@@ -22,6 +22,9 @@ import type {
   OpenAiModelListResponse,
   UsageLogsFilter,
   UsageLogsPage,
+  GatewaySettings,
+  RedactionConfig,
+  SemanticCacheConfig,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -220,4 +223,22 @@ export const api = {
     const qs = params.toString();
     return fetchApi<UsageLogsPage>(`/usage/logs${qs ? `?${qs}` : ''}`);
   },
+
+  // Gateway Plugins, Redaction & Semantic Cache (HYP-73)
+  getGatewaySettings: () => fetchApi<GatewaySettings>("/admin/gateway/settings"),
+  updateRedactionConfig: (config: RedactionConfig) =>
+    fetchApi<RedactionConfig>("/admin/gateway/redaction", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }),
+  testRedaction: (sample: string) =>
+    fetchApi<{ redacted: string }>("/admin/gateway/redaction/test", {
+      method: "POST",
+      body: JSON.stringify({ sample }),
+    }),
+  updateCacheConfig: (config: SemanticCacheConfig) =>
+    fetchApi<SemanticCacheConfig>("/admin/gateway/cache", {
+      method: "PUT",
+      body: JSON.stringify(config),
+    }),
 };

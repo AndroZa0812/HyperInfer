@@ -5,13 +5,15 @@
 
 use async_trait::async_trait;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::plugin::{GatewayPlugin, PluginAction, PluginContext};
 use crate::types::{ChatRequest, ChatResponse, ContentPart};
 
 /// Configuration for the redaction plugin.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct RedactionConfig {
     pub redact_api_keys: bool,
     pub redact_bearer_tokens: bool,
