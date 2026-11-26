@@ -328,4 +328,26 @@ mod tests {
         assert!(matches!(action, PluginAction::Continue));
         assert_eq!(req.messages[0].content, "Secret sk-ant-abc123def456ghi789");
     }
+
+    #[tokio::test]
+    async fn test_reversible_without_vault_preserves_response_redaction() {
+        let plugin = RedactionPlugin::new(RedactionConfig {
+            reversible: true,
+            redact_requests: false,
+            redact_responses: true,
+            ..Default::default()
+        });
+
+        let mut req = sample_request("Hello");
+        let mut ctx = PluginContext::default();
+        plugin.pre_request(&mut ctx, &mut req).await;
+        assert!(!ctx.metadata.contains_key(REDACTION_VAULT_METADATA_KEY));
+
+        let mut resp = sample_response("Leaked key sk-ant-abc123def456ghi789");
+        plugin.post_response(&mut ctx, &mut resp).await;
+        assert_eq!(
+            resp.choices[0].message.content,
+            "Leaked key [REDACTED_API_KEY]"
+        );
+    }
 }

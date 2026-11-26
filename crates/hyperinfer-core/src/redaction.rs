@@ -427,15 +427,18 @@ impl GatewayPlugin for RedactionPlugin {
             (guard.config.redact_responses, guard.config.reversible)
         };
 
+        let mut restored = false;
         if reversible {
             if let Some(raw_vault) = ctx.metadata.remove(REDACTION_VAULT_METADATA_KEY) {
                 if let Ok(vault) = serde_json::from_value::<RedactionVault>(raw_vault) {
                     for choice in &mut resp.choices {
                         vault.restore_message(&mut choice.message);
                     }
+                    restored = true;
                 }
             }
-        } else if redact_responses {
+        }
+        if redact_responses && !restored {
             self.redact_response(resp);
         }
     }

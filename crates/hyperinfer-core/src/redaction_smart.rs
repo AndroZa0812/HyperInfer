@@ -252,6 +252,11 @@ impl StreamRehydrator {
         }
     }
 
+    /// Access the underlying per-request [`RedactionVault`].
+    pub fn vault(&self) -> &RedactionVault {
+        &self.vault
+    }
+
     /// Push the next streamed text delta and return the safe re-hydrated prefix.
     pub fn push_chunk(&mut self, delta: &str) -> String {
         if self.vault.is_empty() {

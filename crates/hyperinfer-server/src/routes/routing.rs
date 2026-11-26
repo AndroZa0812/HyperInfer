@@ -365,6 +365,8 @@ pub async fn chat_completions_handler<
             let mut stream = stream;
             let mut last_chunk_id = String::new();
             let mut last_chunk_model = model_name.clone();
+            let mut tool_call_rehydrators: std::collections::HashMap<String, hyperinfer_core::StreamRehydrator> =
+                std::collections::HashMap::new();
 
             let mut stream_failed = false;
             while let Some(item) = stream.next().await {
@@ -379,6 +381,31 @@ pub async fn chat_completions_handler<
                         if let Some(ref mut rehydrator) = stream_rehydrator {
                             if !chunk.delta.is_empty() {
                                 chunk.delta = rehydrator.push_chunk(&chunk.delta);
+                            }
+                            if let Some(ref mut calls) = chunk.tool_calls {
+                                for (idx, call) in calls.iter_mut().enumerate() {
+                                    if !call.arguments.is_empty() {
+                                        let key = if call.id.is_empty() {
+                                            idx.to_string()
+                                        } else {
+                                            call.id.clone()
+                                        };
+                                        let tc_rehydrator = tool_call_rehydrators
+                                            .entry(key)
+                                            .or_insert_with(|| {
+                                                hyperinfer_core::StreamRehydrator::new(
+                                                    rehydrator.vault().clone(),
+                                                )
+                                            });
+                                        call.arguments = tc_rehydrator.push_chunk(&call.arguments);
+                                        if chunk.finish_reason.is_some() {
+                                            let tc_tail = tc_rehydrator.flush();
+                                            if !tc_tail.is_empty() {
+                                                call.arguments.push_str(&tc_tail);
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             if chunk.finish_reason.is_some() {
                                 let tail = rehydrator.flush();
@@ -415,14 +442,29 @@ pub async fn chat_completions_handler<
 
             if let Some(ref mut rehydrator) = stream_rehydrator {
                 let tail = rehydrator.flush();
-                if !tail.is_empty() {
+                let mut flushed_calls = Vec::new();
+                for (id, tc_rehydrator) in &mut tool_call_rehydrators {
+                    let tc_tail = tc_rehydrator.flush();
+                    if !tc_tail.is_empty() {
+                        flushed_calls.push(hyperinfer_core::ToolCall {
+                            id: id.clone(),
+                            name: String::new(),
+                            arguments: tc_tail,
+                        });
+                    }
+                }
+                if !tail.is_empty() || !flushed_calls.is_empty() {
                     let final_chunk = hyperinfer_core::ChatChunk {
                         id: last_chunk_id,
                         model: last_chunk_model,
                         delta: tail,
                         finish_reason: None,
                         usage: None,
-                        tool_calls: None,
+                        tool_calls: if flushed_calls.is_empty() {
+                            None
+                        } else {
+                            Some(flushed_calls)
+                        },
                     };
                     if let Ok(json) = serde_json::to_string(&final_chunk) {
                         yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data(json));
