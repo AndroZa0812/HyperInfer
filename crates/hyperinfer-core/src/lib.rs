@@ -11,6 +11,7 @@ pub mod error;
 pub mod plugin;
 pub mod rate_limiting;
 pub mod redaction;
+pub mod redaction_smart;
 pub mod redis;
 pub mod telemetry_consumer;
 pub mod traits;
@@ -24,7 +25,11 @@ pub use cost::{CostCalculator, TokenCostWeights, WeightedUsage};
 pub use error::{ConfigError, DbError, HyperInferError};
 pub use plugin::{GatewayPlugin, PluginAction, PluginContext, PluginPipeline};
 pub use rate_limiting::{RateLimiter, USAGE_REQUESTS_KEY_PREFIX, USAGE_TOKENS_KEY_PREFIX};
-pub use redaction::{RedactionConfig, RedactionPlugin};
+pub use redaction::{
+    PlaceholderFormat, RedactionConfig, RedactionPlugin, RedactionVault, SmartRedactionBackend,
+    SmartRedactionConfig, SmartRedactionFailMode, StreamRehydrator, REDACTION_VAULT_METADATA_KEY,
+    SKIP_REDACTION_HEADER, SKIP_REDACTION_METADATA_KEY,
+};
 pub use redis::{MemoryEventAction, MemoryUpdateEvent, PolicyUpdate, MEMORY_EVENTS_CHANNEL};
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{

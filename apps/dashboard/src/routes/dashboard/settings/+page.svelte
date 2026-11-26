@@ -27,14 +27,46 @@
         custom_patterns: [],
         redact_requests: true,
         redact_responses: true,
+        reversible: false,
+        placeholder_format: 'indexed',
+        smart: {
+            enabled: false,
+            backend: 'presidio',
+            presidio_url: 'http://127.0.0.1:5001',
+            presidio_language: 'en',
+            presidio_entities: [
+                'PERSON',
+                'LOCATION',
+                'PHONE_NUMBER',
+                'CREDIT_CARD',
+                'IBAN_CODE',
+                'US_SSN',
+                'EMAIL_ADDRESS',
+            ],
+            presidio_score_threshold: 0.5,
+            llm_base_url: 'http://127.0.0.1:11434/v1',
+            llm_model: 'qwen2.5:3b',
+            llm_api_key: '',
+            llm_categories: ['pii', 'secrets', 'financial', 'internal_names'],
+            timeout_ms: 3000,
+            fail_mode: 'fallback_regex',
+        },
     });
     let customPatternsText = $state('');
+    let presidioEntitiesText = $state(
+        'PERSON, LOCATION, PHONE_NUMBER, CREDIT_CARD, IBAN_CODE, US_SSN, EMAIL_ADDRESS'
+    );
+    let presidioScoreText = $state('0.5');
+    let llmCategoriesText = $state('pii, secrets, financial, internal_names');
+    let smartTimeoutText = $state<string | number>('3000');
     let redactionStatus = $state('');
     let redactionError = $state('');
     let savingRedaction = $state(false);
 
     let testSample = $state('');
     let testOutput = $state('');
+    let testVaultEntries = $state<Record<string, string> | null>(null);
+    let testError = $state('');
 
     let cache = $state<SemanticCacheConfig>({
         enabled: false,
@@ -74,10 +106,22 @@
         try {
             const settings = await api.getGatewaySettings();
             pipelinePlugins = settings.pipeline_plugins;
-            redaction = settings.redaction;
+            redaction = {
+                ...redaction,
+                ...settings.redaction,
+                smart: {
+                    ...redaction.smart,
+                    ...(settings.redaction.smart ?? {}),
+                    llm_api_key: settings.redaction.smart?.llm_api_key ?? '',
+                },
+            };
             customPatternsText = settings.redaction.custom_patterns
                 .map(([pat, rep]) => `${pat} => ${rep}`)
                 .join('\n');
+            presidioEntitiesText = (redaction.smart.presidio_entities ?? []).join(', ');
+            presidioScoreText = String(redaction.smart.presidio_score_threshold ?? 0.5);
+            llmCategoriesText = (redaction.smart.llm_categories ?? []).join(', ');
+            smartTimeoutText = String(redaction.smart.timeout_ms ?? 3000);
             cache = settings.cache;
             cacheThresholdText = String(settings.cache.similarity_threshold);
             cacheTtlText = String(settings.cache.ttl_secs);
@@ -102,16 +146,60 @@
                 if (idx === -1) return [line, '[REDACTED]'] as [string, string];
                 return [line.slice(0, idx).trim(), line.slice(idx + 2).trim() || '[REDACTED]'] as [string, string];
             });
+        const presidioScore = Number(presidioScoreText);
+        const timeoutMs = Math.round(Number(smartTimeoutText));
+        if (redaction.smart.enabled) {
+            if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+                redactionError = 'Smart redaction timeout must be a positive number of milliseconds';
+                savingRedaction = false;
+                return;
+            }
+            if (
+                redaction.smart.backend === 'presidio' &&
+                (!Number.isFinite(presidioScore) || presidioScore < 0 || presidioScore > 1)
+            ) {
+                redactionError = 'Presidio score threshold must be between 0.0 and 1.0';
+                savingRedaction = false;
+                return;
+            }
+        }
+        const presidioEntities = presidioEntitiesText
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const llmCategories = llmCategoriesText
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const llmApiKey = redaction.smart.llm_api_key?.trim() || undefined;
         try {
             const updated = await api.updateRedactionConfig({
                 ...redaction,
                 custom_patterns: customPatterns,
+                smart: {
+                    ...redaction.smart,
+                    presidio_entities: presidioEntities,
+                    presidio_score_threshold: Number.isFinite(presidioScore) ? presidioScore : 0.5,
+                    llm_categories: llmCategories,
+                    llm_api_key: llmApiKey,
+                    timeout_ms: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 3000,
+                },
             });
-            redaction = updated;
+            redaction = {
+                ...updated,
+                smart: {
+                    ...updated.smart,
+                    llm_api_key: updated.smart.llm_api_key ?? '',
+                },
+            };
+            presidioEntitiesText = (redaction.smart.presidio_entities ?? []).join(', ');
+            presidioScoreText = String(redaction.smart.presidio_score_threshold ?? 0.5);
+            llmCategoriesText = (redaction.smart.llm_categories ?? []).join(', ');
+            smartTimeoutText = String(redaction.smart.timeout_ms ?? 3000);
             redactionStatus = 'Redaction settings saved';
         } catch (e) {
             console.error('Failed to save redaction settings', e);
-            redactionError = 'Invalid regex pattern or failed to save redaction settings';
+            redactionError = 'Invalid regex pattern or smart redaction configuration';
         } finally {
             savingRedaction = false;
         }
@@ -119,11 +207,19 @@
 
     async function runRedactionTest() {
         if (!testSample.trim()) return;
+        testError = '';
+        testVaultEntries = null;
         try {
             const res = await api.testRedaction(testSample);
             testOutput = res.redacted;
+            testVaultEntries =
+                res.vault_entries && Object.keys(res.vault_entries).length > 0
+                    ? res.vault_entries
+                    : null;
         } catch (e) {
             console.error('Failed to test redaction', e);
+            testOutput = '';
+            testError = 'Redaction test failed (check smart redaction connector status or fail-closed mode).';
         }
     }
 
@@ -364,6 +460,100 @@
                         ></textarea>
                     </div>
 
+                    <div class="pt-4 border-t border-[var(--ghost-border)] space-y-3">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-medium text-[var(--on-surface)]">Reversible Redaction (Opt-In)</p>
+                                <p class="text-xs text-[var(--on-surface-variant)]">
+                                    Tokenize secrets into per-request placeholders and restore original values in the LLM response.
+                                </p>
+                            </div>
+                            <label class="flex items-center gap-2 text-sm text-[var(--on-surface)] cursor-pointer">
+                                <input type="checkbox" bind:checked={redaction.reversible} />
+                                Enable Reversible Mode
+                            </label>
+                        </div>
+
+                        {#if redaction.reversible}
+                            <div class="max-w-xs">
+                                <label for="placeholder-format" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
+                                    Placeholder Format
+                                </label>
+                                <select
+                                    id="placeholder-format"
+                                    bind:value={redaction.placeholder_format}
+                                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
+                                >
+                                    <option value="indexed">Indexed ([REDACTED_API_KEY_1])</option>
+                                    <option value="uuid">UUID ([REDACTED_API_KEY_a1b2c3d4])</option>
+                                </select>
+                            </div>
+                        {/if}
+                    </div>
+
+                    <div class="pt-4 border-t border-[var(--ghost-border)] space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <p class="text-sm font-medium text-[var(--on-surface)]">Smart Redaction (Microsoft Presidio / Local LLM)</p>
+                                <p class="text-xs text-[var(--on-surface-variant)]">
+                                    Run a semantic PII &amp; secret detector sidecar or trusted local LLM before forwarding prompts upstream.
+                                </p>
+                            </div>
+                            <label class="flex items-center gap-2 text-sm text-[var(--on-surface)] cursor-pointer">
+                                <input type="checkbox" bind:checked={redaction.smart.enabled} />
+                                Enable Smart Redaction
+                            </label>
+                        </div>
+
+                        {#if redaction.smart.enabled}
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label for="smart-backend" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
+                                        Backend
+                                    </label>
+                                    <select
+                                        id="smart-backend"
+                                        bind:value={redaction.smart.backend}
+                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
+                                    >
+                                        <option value="presidio">Microsoft Presidio Analyzer</option>
+                                        <option value="llm">Local / Trusted LLM</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="smart-fail-mode" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
+                                        Failure Mode
+                                    </label>
+                                    <select
+                                        id="smart-fail-mode"
+                                        bind:value={redaction.smart.fail_mode}
+                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
+                                    >
+                                        <option value="fallback_regex">Fallback to Regex</option>
+                                        <option value="fail_closed">Fail Closed (HTTP 503)</option>
+                                    </select>
+                                </div>
+                                <Input label="Timeout (ms)" type="number" bind:value={smartTimeoutText} />
+                            </div>
+
+                            {#if redaction.smart.backend === 'presidio'}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Input label="Presidio Analyzer URL" bind:value={redaction.smart.presidio_url} placeholder="http://127.0.0.1:5001" />
+                                    <Input label="Language" bind:value={redaction.smart.presidio_language} placeholder="en" />
+                                    <Input label="Score Threshold (0.0 - 1.0)" type="text" bind:value={presidioScoreText} />
+                                    <Input label="Entities (comma-separated)" bind:value={presidioEntitiesText} placeholder="PERSON, LOCATION, PHONE_NUMBER" />
+                                </div>
+                            {:else}
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <Input label="LLM Base URL (OpenAI-compatible)" bind:value={redaction.smart.llm_base_url} placeholder="http://127.0.0.1:11434/v1" />
+                                    <Input label="LLM Model" bind:value={redaction.smart.llm_model} placeholder="qwen2.5:3b" />
+                                    <Input label="API Key (optional)" type="password" bind:value={redaction.smart.llm_api_key} placeholder="Leave empty for local Ollama/vLLM" />
+                                    <Input label="Categories (comma-separated)" bind:value={llmCategoriesText} placeholder="pii, secrets, financial, internal_names" />
+                                </div>
+                            {/if}
+                        {/if}
+                    </div>
+
                     {#if redactionError}
                         <p class="text-xs text-[var(--error)]">{redactionError}</p>
                     {/if}
@@ -392,9 +582,24 @@
                                 Test Redaction
                             </Button>
                         </div>
+                        {#if testError}
+                            <p class="text-xs text-[var(--error)]">{testError}</p>
+                        {/if}
                         {#if testOutput}
                             <div class="p-3 rounded-lg bg-[var(--surface-container-low)] text-xs font-mono text-[var(--on-surface)]">
                                 {testOutput}
+                            </div>
+                        {/if}
+                        {#if testVaultEntries}
+                            <div class="p-3 rounded-lg bg-[var(--surface-container-low)] space-y-1">
+                                <p class="text-[10px] font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">
+                                    Reversible Vault Mappings
+                                </p>
+                                {#each Object.entries(testVaultEntries) as [placeholder, original]}
+                                    <div class="text-xs font-mono text-[var(--on-surface)]">
+                                        <span class="text-[var(--primary)]">{placeholder}</span> → {original}
+                                    </div>
+                                {/each}
                             </div>
                         {/if}
                     </div>

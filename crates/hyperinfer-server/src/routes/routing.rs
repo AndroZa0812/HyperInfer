@@ -353,16 +353,40 @@ pub async fn chat_completions_handler<
         let team_id = auth.team_id.clone();
         let api_key_id = auth.api_key_id.clone();
         let model_name = request.model.clone();
+        let mut stream_rehydrator = plugin_ctx
+            .metadata
+            .remove(hyperinfer_core::REDACTION_VAULT_METADATA_KEY)
+            .and_then(|v| serde_json::from_value::<hyperinfer_core::RedactionVault>(v).ok())
+            .map(hyperinfer_core::StreamRehydrator::new);
 
         let sse_stream = async_stream::stream! {
             let mut input_tokens: u32 = 0;
             let mut output_tokens: u32 = 0;
             let mut stream = stream;
+            let mut last_chunk_id = String::new();
+            let mut last_chunk_model = model_name.clone();
 
             let mut stream_failed = false;
             while let Some(item) = stream.next().await {
                 match item {
-                    Ok(chunk) => {
+                    Ok(mut chunk) => {
+                        if !chunk.id.is_empty() {
+                            last_chunk_id = chunk.id.clone();
+                        }
+                        if !chunk.model.is_empty() {
+                            last_chunk_model = chunk.model.clone();
+                        }
+                        if let Some(ref mut rehydrator) = stream_rehydrator {
+                            if !chunk.delta.is_empty() {
+                                chunk.delta = rehydrator.push_chunk(&chunk.delta);
+                            }
+                            if chunk.finish_reason.is_some() {
+                                let tail = rehydrator.flush();
+                                if !tail.is_empty() {
+                                    chunk.delta.push_str(&tail);
+                                }
+                            }
+                        }
                         if let Some(ref usage) = chunk.usage {
                             input_tokens = usage.input_tokens;
                             output_tokens = usage.output_tokens;
@@ -387,6 +411,23 @@ pub async fn chat_completions_handler<
                         .data("Upstream streaming request failed"),
                 );
                 return;
+            }
+
+            if let Some(ref mut rehydrator) = stream_rehydrator {
+                let tail = rehydrator.flush();
+                if !tail.is_empty() {
+                    let final_chunk = hyperinfer_core::ChatChunk {
+                        id: last_chunk_id,
+                        model: last_chunk_model,
+                        delta: tail,
+                        finish_reason: None,
+                        usage: None,
+                        tool_calls: None,
+                    };
+                    if let Ok(json) = serde_json::to_string(&final_chunk) {
+                        yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data(json));
+                    }
+                }
             }
 
             yield Ok::<SseEvent, std::convert::Infallible>(SseEvent::default().data("[DONE]"));
