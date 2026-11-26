@@ -3,15 +3,19 @@
 //! Scrubs API keys, bearer tokens, emails, SSNs, and custom patterns
 //! from request/response content before logging or telemetry emission.
 
+use std::sync::{Arc, RwLock};
+
 use async_trait::async_trait;
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::plugin::{GatewayPlugin, PluginAction, PluginContext};
 use crate::types::{ChatRequest, ChatResponse, ContentPart};
 
 /// Configuration for the redaction plugin.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct RedactionConfig {
     pub redact_api_keys: bool,
     pub redact_bearer_tokens: bool,
@@ -36,15 +40,13 @@ impl Default for RedactionConfig {
     }
 }
 
-/// Redaction plugin that scrubs sensitive data from requests and responses.
-#[derive(Clone)]
-pub struct RedactionPlugin {
+struct CompiledRedaction {
     config: RedactionConfig,
     patterns: Vec<(Regex, String)>,
 }
 
-impl RedactionPlugin {
-    pub fn new(config: RedactionConfig) -> Self {
+impl CompiledRedaction {
+    fn compile(config: RedactionConfig) -> Self {
         let mut patterns = Vec::new();
 
         if config.redact_api_keys {
@@ -81,14 +83,46 @@ impl RedactionPlugin {
 
         Self { config, patterns }
     }
+}
+
+/// Redaction plugin that scrubs sensitive data from requests and responses.
+/// Supports hot-reloading its `RedactionConfig` at runtime.
+#[derive(Clone)]
+pub struct RedactionPlugin {
+    inner: Arc<RwLock<CompiledRedaction>>,
+}
+
+impl RedactionPlugin {
+    pub fn new(config: RedactionConfig) -> Self {
+        Self {
+            inner: Arc::new(RwLock::new(CompiledRedaction::compile(config))),
+        }
+    }
 
     pub fn with_defaults() -> Self {
         Self::new(RedactionConfig::default())
     }
 
+    /// Hot-reload the active redaction configuration.
+    pub fn update_config(&self, config: RedactionConfig) {
+        let compiled = CompiledRedaction::compile(config);
+        let mut guard = self.inner.write().unwrap_or_else(|e| e.into_inner());
+        *guard = compiled;
+    }
+
+    /// Return a snapshot of the active redaction configuration.
+    pub fn config(&self) -> RedactionConfig {
+        self.inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .config
+            .clone()
+    }
+
     pub fn redact_str(&self, input: &str) -> String {
+        let guard = self.inner.read().unwrap_or_else(|e| e.into_inner());
         let mut result = input.to_string();
-        for (re, replacement) in &self.patterns {
+        for (re, replacement) in &guard.patterns {
             result = re.replace_all(&result, replacement.as_str()).to_string();
         }
         result
@@ -130,14 +164,26 @@ impl GatewayPlugin for RedactionPlugin {
     }
 
     async fn pre_request(&self, _ctx: &mut PluginContext, req: &mut ChatRequest) -> PluginAction {
-        if self.config.redact_requests {
+        let enabled = self
+            .inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .config
+            .redact_requests;
+        if enabled {
             self.redact_request(req);
         }
         PluginAction::Continue
     }
 
     async fn post_response(&self, _ctx: &mut PluginContext, resp: &mut ChatResponse) {
-        if self.config.redact_responses {
+        let enabled = self
+            .inner
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .config
+            .redact_responses;
+        if enabled {
             self.redact_response(resp);
         }
     }

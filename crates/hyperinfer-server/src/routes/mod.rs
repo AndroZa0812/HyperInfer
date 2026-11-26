@@ -2,6 +2,7 @@
 
 pub mod catalog;
 pub mod deployments;
+pub mod gateway_settings;
 pub mod keys;
 pub mod logs;
 pub mod mcp_admin;
@@ -335,6 +336,34 @@ where
         ))
         .with_state(catalog_state);
 
+    // Gateway Plugins, Redaction & Semantic Cache admin routes (HYP-73)
+    let gw_settings_state = gateway_settings::GatewaySettingsState::with_live_redaction(
+        state.plugins.plugin_names(),
+        state.plugins.redaction(),
+    );
+    let gw_settings_router = Router::new()
+        .route(
+            "/v1/admin/gateway/settings",
+            get(gateway_settings::get_gateway_settings),
+        )
+        .route(
+            "/v1/admin/gateway/redaction",
+            axum::routing::put(gateway_settings::update_redaction_config),
+        )
+        .route(
+            "/v1/admin/gateway/redaction/test",
+            post(gateway_settings::test_redaction),
+        )
+        .route(
+            "/v1/admin/gateway/cache",
+            axum::routing::put(gateway_settings::update_cache_config),
+        )
+        .layer(middleware::from_fn_with_state(
+            state.jwt_secret.clone(),
+            auth_middleware,
+        ))
+        .with_state(gw_settings_state);
+
     let mut app = Router::new()
         .merge(config_sync_router)
         .merge(v1_jwt_router)
@@ -345,7 +374,8 @@ where
         .merge(proxy_router)
         .merge(routing_config_routes)
         .merge(catalog_public_router)
-        .merge(catalog_admin_router);
+        .merge(catalog_admin_router)
+        .merge(gw_settings_router);
 
     if enable_docs {
         info!("Swagger UI enabled at /docs");

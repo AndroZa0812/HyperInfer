@@ -82,4 +82,34 @@ test.describe('Settings', () => {
 			});
 		}
 	});
+
+	test('configures PII redaction, runs live preview, and saves semantic cache settings (HYP-73)', async ({
+		authedPage: page,
+	}) => {
+		await page.goto('/dashboard/settings');
+		await page.getByRole('button', { name: 'Plugins & Cache', exact: true }).click();
+		await expect(page.getByRole('heading', { name: 'PII & Secret Redaction' })).toBeVisible();
+
+		// Add custom redaction pattern and save
+		await page.getByLabel(/Custom Regex Rules/).fill('SECRET-[0-9]+ => [CUSTOM_SECRET]');
+		await page.getByRole('button', { name: 'Save Redaction' }).click();
+		await expect(page.getByText('Redaction settings saved')).toBeVisible();
+
+		// Live redaction preview
+		await page.getByPlaceholder(/Paste sample text/).fill('Email alice@example.com with SECRET-42');
+		await page.getByRole('button', { name: 'Test Redaction' }).click();
+		await expect(page.getByText('Email [REDACTED_EMAIL] with [CUSTOM_SECRET]')).toBeVisible();
+
+		// Update semantic cache settings
+		await page.getByLabel('Enable Semantic Cache').check();
+		await page.getByLabel('Cache TTL (seconds)').fill('1800');
+		await page.getByRole('button', { name: 'Save Cache Settings' }).click();
+		await expect(page.getByText('Cache settings saved')).toBeVisible();
+
+		// Reload and confirm persistence
+		await page.reload();
+		await page.getByRole('button', { name: 'Plugins & Cache', exact: true }).click();
+		await expect(page.getByLabel('Enable Semantic Cache')).toBeChecked();
+		await expect(page.getByLabel('Cache TTL (seconds)')).toHaveValue('1800');
+	});
 });
