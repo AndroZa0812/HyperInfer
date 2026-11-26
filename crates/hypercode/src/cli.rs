@@ -530,6 +530,113 @@ pub async fn build_client_and_model(
     Ok((Arc::new(client), model))
 }
 
+/// Process a single REPL input line (slash commands or agent turn).
+/// Returns `false` when the user requests to exit (`/quit`).
+async fn process_repl_input(
+    agent: &mut Agent,
+    event_sink: &TerminalEventSink,
+    model: &str,
+    sandbox_label: &str,
+    trimmed: &str,
+) -> bool {
+    if let Some(cmd_res) = ReplCommand::parse(trimmed) {
+        match cmd_res {
+            Ok(ReplCommand::Help) => {
+                println!(
+                    "Available commands:\n  \
+                     /compact   Summarize older conversation turns\n  \
+                     /tokens    Show message count and estimated token usage\n  \
+                     /reset     Clear conversation history\n  \
+                     /quit      Exit HyperCode"
+                );
+            }
+            Ok(ReplCommand::Compact) => match agent.compact().await {
+                Ok(true) => {
+                    println!(
+                        "Compaction complete (~{} tokens remaining).",
+                        agent.estimated_tokens()
+                    );
+                }
+                Ok(false) => {
+                    println!("History is already compact; nothing to summarize.");
+                }
+                Err(e) => {
+                    eprintln!("\x1b[31mCompaction failed:\x1b[0m {}", e);
+                }
+            },
+            Ok(ReplCommand::Tokens) => {
+                let ta = agent.token_accounting();
+                let fs = agent.filter_stats();
+                let ctx_pct = ta.context_utilization_pct(model, agent.history());
+                let cost = ta.estimated_cost_usd(model);
+                println!(
+                    "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
+                    agent.history().len(),
+                    agent.estimated_tokens(),
+                    model,
+                    sandbox_label
+                );
+                println!(
+                    "Input: {} | Output: {} | Cache read: {} | Cache write: {}",
+                    ta.input_tokens,
+                    ta.output_tokens,
+                    ta.cache_read_tokens,
+                    ta.cache_creation_tokens
+                );
+                println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
+                println!(
+                    "| Filter savings: ~{} tokens ({} cmds)",
+                    fs.total_tokens_saved, fs.commands_filtered
+                );
+            }
+            Ok(ReplCommand::Reset) => {
+                agent.reset_history();
+                println!("Conversation history reset.");
+            }
+            Ok(ReplCommand::Quit) => {
+                return false;
+            }
+            Err(msg) => {
+                eprintln!("\x1b[31m{}\x1b[0m", msg);
+            }
+        }
+        return true;
+    }
+
+    let cancel = CancellationToken::new();
+    let ctrl_c_handle = tokio::spawn({
+        let cancel_inner = cancel.clone();
+        async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                cancel_inner.cancel();
+            }
+        }
+    });
+
+    let turn_res = agent.run_turn_with_cancel(trimmed, cancel).await;
+    ctrl_c_handle.abort();
+
+    match turn_res {
+        Ok(outcome) => {
+            if !event_sink.take_streamed() && !outcome.final_response.trim().is_empty() {
+                println!(
+                    "\n\x1b[1;36mAssistant:\x1b[0m\n{}\n",
+                    outcome.final_response
+                );
+            }
+        }
+        Err(AgentError::Cancelled) => {
+            event_sink.take_streamed();
+            println!("\n[Turn canceled]\n");
+        }
+        Err(e) => {
+            event_sink.take_streamed();
+            eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
+        }
+    }
+    true
+}
+
 /// Entrypoint for running the `hypercode` CLI (single-shot or interactive REPL).
 pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     if opts.show_help {
@@ -614,9 +721,12 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     }
 
     // Interactive REPL mode
-    println!("\x1b[1;36m╭──────────────────────────────────────────────────────────╮\x1b[0m");
-    println!("\x1b[1;36m│  HyperCode — Provider-Agnostic Coding Agent Harness      │\x1b[0m");
-    println!("\x1b[1;36m╰──────────────────────────────────────────────────────────╯\x1b[0m");
+    let term_size = crate::tui::current_terminal_size();
+    let banner = crate::tui::render_banner(
+        "HyperCode — Provider-Agnostic Coding Agent Harness",
+        term_size.cols,
+    );
+    println!("{}", banner);
     println!("  Model:        \x1b[1m{}\x1b[0m", model);
     println!(
         "  Workspace:    \x1b[1m{}\x1b[0m",
@@ -634,120 +744,69 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
     }
     println!("  Type \x1b[1m/help\x1b[0m for commands or \x1b[1m/quit\x1b[0m to exit.\n");
 
-    let stdin = io::stdin();
-    loop {
-        print!("\x1b[1;32mhypercode>\x1b[0m ");
-        let _ = io::stdout().flush();
+    let interactive = crate::tui::is_interactive_tty();
 
-        let mut input = String::new();
-        let bytes = stdin
-            .lock()
-            .read_line(&mut input)
-            .map_err(|e| format!("Failed to read stdin: {}", e))?;
-        if bytes == 0 {
-            // EOF (Ctrl-D)
-            println!();
-            break;
-        }
+    if interactive {
+        // Interactive TTY: use TuiViewport with resize detection
+        let mut viewport = crate::tui::TuiViewport::new(
+            "HyperCode — Provider-Agnostic Coding Agent Harness",
+            term_size,
+        );
+        viewport.status_bar = format!(
+            "Model: {} | Workspace: {} | Sandbox: {}",
+            model,
+            ws_context.workspace_root.display(),
+            sandbox_label
+        );
 
-        let trimmed = input.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if let Some(cmd_res) = ReplCommand::parse(trimmed) {
-            match cmd_res {
-                Ok(ReplCommand::Help) => {
-                    println!(
-                        "Available commands:\n  \
-                         /compact   Summarize older conversation turns\n  \
-                         /tokens    Show message count and estimated token usage\n  \
-                         /reset     Clear conversation history\n  \
-                         /quit      Exit HyperCode"
-                    );
-                }
-                Ok(ReplCommand::Compact) => match agent.compact().await {
-                    Ok(true) => {
-                        println!(
-                            "Compaction complete (~{} tokens remaining).",
-                            agent.estimated_tokens()
-                        );
+        loop {
+            match crate::tui::read_interactive_line(&mut viewport) {
+                Ok(Some(input)) => {
+                    let trimmed = input.trim();
+                    if trimmed.is_empty() {
+                        continue;
                     }
-                    Ok(false) => {
-                        println!("History is already compact; nothing to summarize.");
+                    viewport.push_transcript(format!("hypercode> {}", trimmed));
+                    if !process_repl_input(&mut agent, &event_sink, &model, &sandbox_label, trimmed)
+                        .await
+                    {
+                        break;
                     }
-                    Err(e) => {
-                        eprintln!("\x1b[31mCompaction failed:\x1b[0m {}", e);
-                    }
-                },
-                Ok(ReplCommand::Tokens) => {
-                    let ta = agent.token_accounting();
-                    let fs = agent.filter_stats();
-                    let ctx_pct = ta.context_utilization_pct(&model, agent.history());
-                    let cost = ta.estimated_cost_usd(&model);
-                    println!(
-                        "Messages: {} | Estimated tokens: ~{} | Model: {} | Sandbox: {}",
-                        agent.history().len(),
-                        agent.estimated_tokens(),
-                        model,
-                        sandbox_label
-                    );
-                    println!(
-                        "Input: {} | Output: {} | Cache read: {} | Cache write: {}",
-                        ta.input_tokens,
-                        ta.output_tokens,
-                        ta.cache_read_tokens,
-                        ta.cache_creation_tokens
-                    );
-                    println!("Context: {:.1}% used | Est. cost: ${:.4}", ctx_pct, cost);
-                    println!(
-                        "| Filter savings: ~{} tokens ({} cmds)",
-                        fs.total_tokens_saved, fs.commands_filtered
-                    );
                 }
-                Ok(ReplCommand::Reset) => {
-                    agent.reset_history();
-                    println!("Conversation history reset.");
-                }
-                Ok(ReplCommand::Quit) => {
+                Ok(None) => {
+                    // EOF (Ctrl-D)
                     break;
                 }
-                Err(msg) => {
-                    eprintln!("\x1b[31m{}\x1b[0m", msg);
+                Err(e) => {
+                    eprintln!("\x1b[31mTUI error:\x1b[0m {}", e);
+                    break;
                 }
             }
-            continue;
         }
+    } else {
+        // Non-TTY (piped): use simple read_line
+        let stdin = io::stdin();
+        loop {
+            print!("\x1b[1;32mhypercode>\x1b[0m ");
+            let _ = io::stdout().flush();
 
-        let cancel = CancellationToken::new();
-        let ctrl_c_handle = tokio::spawn({
-            let cancel_inner = cancel.clone();
-            async move {
-                if tokio::signal::ctrl_c().await.is_ok() {
-                    cancel_inner.cancel();
-                }
+            let mut input = String::new();
+            let bytes = stdin
+                .lock()
+                .read_line(&mut input)
+                .map_err(|e| format!("Failed to read stdin: {}", e))?;
+            if bytes == 0 {
+                // EOF (Ctrl-D)
+                println!();
+                break;
             }
-        });
 
-        let turn_res = agent.run_turn_with_cancel(trimmed, cancel).await;
-        ctrl_c_handle.abort();
-
-        match turn_res {
-            Ok(outcome) => {
-                if !event_sink.take_streamed() && !outcome.final_response.trim().is_empty() {
-                    println!(
-                        "\n\x1b[1;36mAssistant:\x1b[0m\n{}\n",
-                        outcome.final_response
-                    );
-                }
+            let trimmed = input.trim();
+            if trimmed.is_empty() {
+                continue;
             }
-            Err(AgentError::Cancelled) => {
-                event_sink.take_streamed();
-                println!("\n[Turn canceled]\n");
-            }
-            Err(e) => {
-                event_sink.take_streamed();
-                eprintln!("\n\x1b[31;1mError:\x1b[0m {}\n", e);
+            if !process_repl_input(&mut agent, &event_sink, &model, &sandbox_label, trimmed).await {
+                break;
             }
         }
     }
