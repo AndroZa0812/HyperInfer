@@ -82,13 +82,24 @@ fn default_status() -> String {
 fn redact_session_fields(
     redactor: &RedactionPlugin,
     title: &mut Option<String>,
+    mcp_tool_calls: &mut [McpToolCallSummary],
     trajectory: &mut [TrajectoryEvent],
 ) {
     if let Some(ref mut t) = title {
         *t = redactor.redact_str(t);
     }
+    for call in mcp_tool_calls.iter_mut() {
+        call.server = redactor.redact_str(&call.server);
+        call.tool = redactor.redact_str(&call.tool);
+    }
     for ev in trajectory.iter_mut() {
         ev.content = redactor.redact_str(&ev.content);
+        if let Some(ref mut name) = ev.tool_name {
+            *name = redactor.redact_str(name);
+        }
+        if let Some(ref mut server) = ev.mcp_server {
+            *server = redactor.redact_str(server);
+        }
     }
 }
 
@@ -180,17 +191,51 @@ pub async fn upsert_agent_session<D: Database, C: ConfigStore>(
     } else {
         claims.team_id.clone()
     };
-    let user_id = body
-        .user_id
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| Some(claims.sub.clone()));
+    let user_id = if claims.role == "admin" {
+        body.user_id
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| Some(claims.sub.clone()))
+    } else {
+        Some(claims.sub.clone())
+    };
+
+    let api_key_id = body.api_key_id.filter(|s| !s.trim().is_empty());
+    if claims.role != "admin" {
+        if let Some(ref kid) = api_key_id {
+            match state.db.get_api_key(kid).await {
+                Ok(Some(key)) if key.team_id == claims.team_id => {}
+                Ok(_) => {
+                    return (
+                        StatusCode::FORBIDDEN,
+                        "API key does not belong to caller team",
+                    )
+                        .into_response();
+                }
+                Err(DbError::InvalidUuid) => {
+                    return (StatusCode::BAD_REQUEST, "Invalid API key UUID").into_response();
+                }
+                Err(_) => {
+                    return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "Failed to validate API key ownership",
+                    )
+                        .into_response();
+                }
+            }
+        }
+    }
 
     let redactor = state
         .plugins
         .redaction()
         .map(|arc| (*arc).clone())
         .unwrap_or_else(RedactionPlugin::with_defaults);
-    redact_session_fields(&redactor, &mut body.title, &mut body.trajectory);
+    redact_session_fields(
+        &redactor,
+        &mut body.title,
+        &mut body.mcp_tool_calls,
+        &mut body.trajectory,
+    );
 
     let (cost_cents, cache_savings_cents) = compute_cost_and_savings(
         &body.model,
@@ -206,7 +251,7 @@ pub async fn upsert_agent_session<D: Database, C: ConfigStore>(
         session_key: body.session_key.trim().to_string(),
         team_id,
         user_id,
-        api_key_id: body.api_key_id.filter(|s| !s.trim().is_empty()),
+        api_key_id,
         agent_name: body.agent_name,
         model: body.model.trim().to_string(),
         status: body.status,
@@ -259,7 +304,22 @@ pub async fn list_agent_sessions<D: Database, C: ConfigStore>(
     };
 
     match state.db.list_agent_sessions(filter).await {
-        Ok(page) => Json(page).into_response(),
+        Ok(mut page) => {
+            let redactor = state
+                .plugins
+                .redaction()
+                .map(|arc| (*arc).clone())
+                .unwrap_or_else(RedactionPlugin::with_defaults);
+            for s in &mut page.sessions {
+                redact_session_fields(
+                    &redactor,
+                    &mut s.title,
+                    &mut s.mcp_tool_calls,
+                    &mut s.trajectory,
+                );
+            }
+            Json(page).into_response()
+        }
         Err(DbError::InvalidUuid) => (StatusCode::BAD_REQUEST, "Invalid UUID").into_response(),
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -286,7 +346,12 @@ pub async fn get_agent_session<D: Database, C: ConfigStore>(
                 .redaction()
                 .map(|arc| (*arc).clone())
                 .unwrap_or_else(RedactionPlugin::with_defaults);
-            redact_session_fields(&redactor, &mut session.title, &mut session.trajectory);
+            redact_session_fields(
+                &redactor,
+                &mut session.title,
+                &mut session.mcp_tool_calls,
+                &mut session.trajectory,
+            );
             Json(session).into_response()
         }
         Ok(None) => (StatusCode::NOT_FOUND, "Agent session not found").into_response(),
@@ -450,5 +515,41 @@ mod tests {
             .add_header("Authorization", format!("Bearer {member_jwt}"))
             .await;
         member_detail.assert_status(StatusCode::FORBIDDEN);
+
+        // Non-admin cannot attribute a session to another team's API key
+        let spoofed_key = server
+            .post("/v1/agent/sessions")
+            .add_header("Authorization", format!("Bearer {member_jwt}"))
+            .json(&serde_json::json!({
+                "session_key": "hc-spoof-01",
+                "api_key_id": k1_id,
+                "model": "gpt-4o",
+                "status": "completed"
+            }))
+            .await;
+        spoofed_key.assert_status(StatusCode::FORBIDDEN);
+
+        // Non-admin user_id is always forced to authenticated subject and MCP tool metadata is redacted
+        let member_own = server
+            .post("/v1/agent/sessions")
+            .add_header("Authorization", format!("Bearer {member_jwt}"))
+            .json(&serde_json::json!({
+                "session_key": "hc-member-own",
+                "user_id": "00000000-0000-0000-0000-000000000000",
+                "model": "gpt-4o",
+                "status": "completed",
+                "mcp_tool_calls": [
+                    { "server": "srv-alice@example.com", "tool": "run-sk-proj-abcdefghijklmnop", "count": 1 }
+                ]
+            }))
+            .await;
+        member_own.assert_status(StatusCode::CREATED);
+        let own_session: AgentSession = member_own.json();
+        assert_ne!(
+            own_session.user_id.as_deref(),
+            Some("00000000-0000-0000-0000-000000000000")
+        );
+        assert_eq!(own_session.mcp_tool_calls[0].server, "[REDACTED_EMAIL]");
+        assert_eq!(own_session.mcp_tool_calls[0].tool, "run-[REDACTED_API_KEY]");
     }
 }
