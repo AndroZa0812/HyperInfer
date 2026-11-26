@@ -1,7 +1,7 @@
 //! The HyperCode Agent Loop (ReAct Engine) and Permission/Sandbox Gate.
 
 use crate::context::{
-    compact_history_with_llm, deduplicate_read_file_outputs, estimate_messages_tokens,
+    compact_history_with_llm_usage, deduplicate_read_file_outputs, estimate_messages_tokens,
     prune_old_tool_outputs, CompactionConfig, TokenAccounting, WorkspaceContext,
 };
 use crate::tool::{ToolContext, ToolOutput, ToolRegistry};
@@ -191,6 +191,10 @@ impl ChatBackend for HyperInferClient {
 pub struct AgentConfig {
     /// Target model identifier (e.g. `"claude-sonnet-4-20250514"`, `"gpt-4o"`, `"gemini-2.5-pro"`, `"antigravity/gemini-2.5-pro"`).
     pub model: String,
+    /// Optional cheaper model for editing steps (after architect has planned).
+    pub editor_model: Option<String>,
+    /// Optional cheaper model for context compaction.
+    pub compaction_model: Option<String>,
     /// Virtual key / caller identifier passed to `HyperInferClient`.
     pub api_key_id: String,
     /// System instructions prepended to the conversation.
@@ -207,6 +211,8 @@ impl Default for AgentConfig {
     fn default() -> Self {
         Self {
             model: "gpt-4o".to_string(),
+            editor_model: None,
+            compaction_model: None,
             api_key_id: "hypercode-local".to_string(),
             system_prompt: concat!(
                 "You are HyperCode, an expert AI coding assistant.\n",
@@ -224,6 +230,26 @@ impl Default for AgentConfig {
             max_tokens: Some(4096),
             approval_mode: ApprovalMode::SmartSandbox,
             compaction: CompactionConfig::default(),
+        }
+    }
+}
+
+impl AgentConfig {
+    /// Determine the effective compaction model (compaction_model > editor_model > model).
+    pub fn effective_compaction_model(&self) -> &str {
+        self.compaction_model
+            .as_deref()
+            .or(self.editor_model.as_deref())
+            .unwrap_or(&self.model)
+    }
+
+    /// Determine which model to use for a given step.
+    /// After the first step, if the previous step had edits, use the editor model.
+    pub fn model_for_step(&self, step: usize, last_step_had_edits: bool) -> &str {
+        if step > 1 && last_step_had_edits {
+            self.editor_model.as_deref().unwrap_or(&self.model)
+        } else {
+            &self.model
         }
     }
 }
@@ -322,14 +348,19 @@ impl Agent {
             self.config.compaction.keep_recent_messages,
             self.config.compaction.max_old_tool_output_chars,
         );
-        let summarized = compact_history_with_llm(
+        let comp_model = self.config.effective_compaction_model().to_string();
+        let (summarized, comp_usage) = compact_history_with_llm_usage(
             &mut self.history,
             self.config.compaction.keep_recent_messages,
             self.backend.as_ref(),
             &self.config.api_key_id,
-            &self.config.model,
+            &comp_model,
         )
         .await?;
+        if let Some(usage) = comp_usage {
+            self.token_accounting
+                .record_auxiliary_usage(&comp_model, &usage);
+        }
 
         if deduped > 0 || pruned > 0 || summarized {
             let tokens_after = estimate_messages_tokens(&self.history);
@@ -345,14 +376,14 @@ impl Agent {
         }
     }
 
-    async fn maybe_auto_compact(&mut self) -> Result<(), AgentError> {
+    async fn maybe_auto_compact(&mut self, target_model: &str) -> Result<(), AgentError> {
         let tokens_before = self
             .token_accounting
             .calibrated_context_tokens(&self.history);
         let effective_max = self
             .config
             .compaction
-            .effective_max_context_tokens(&self.config.model);
+            .effective_max_context_tokens(target_model);
         if tokens_before <= effective_max {
             return Ok(());
         }
@@ -376,14 +407,20 @@ impl Agent {
             .calibrated_context_tokens(&self.history);
         let mut summarized = false;
         if after_tier1 > effective_max {
-            summarized = compact_history_with_llm(
+            let comp_model = self.config.effective_compaction_model().to_string();
+            let (result, comp_usage) = compact_history_with_llm_usage(
                 &mut self.history,
                 self.config.compaction.keep_recent_messages,
                 self.backend.as_ref(),
                 &self.config.api_key_id,
-                &self.config.model,
+                &comp_model,
             )
             .await?;
+            summarized = result;
+            if let Some(usage) = comp_usage {
+                self.token_accounting
+                    .record_auxiliary_usage(&comp_model, &usage);
+            }
         }
 
         if deduped > 0 || pruned > 0 || summarized {
@@ -432,6 +469,36 @@ impl Agent {
     /// Get a reference to the session's token accounting state.
     pub fn token_accounting(&self) -> &TokenAccounting {
         &self.token_accounting
+    }
+
+    /// Get the primary model name.
+    pub fn model(&self) -> &str {
+        &self.config.model
+    }
+
+    /// Set the primary model name.
+    pub fn set_model(&mut self, model: impl Into<String>) {
+        self.config.model = model.into();
+    }
+
+    /// Get the editor model name (if configured).
+    pub fn editor_model(&self) -> Option<&str> {
+        self.config.editor_model.as_deref()
+    }
+
+    /// Set the editor model name.
+    pub fn set_editor_model(&mut self, model: Option<String>) {
+        self.config.editor_model = model;
+    }
+
+    /// Get the compaction model name (if configured).
+    pub fn compaction_model(&self) -> Option<&str> {
+        self.config.compaction_model.as_deref()
+    }
+
+    /// Set the compaction model name.
+    pub fn set_compaction_model(&mut self, model: Option<String>) {
+        self.config.compaction_model = model;
     }
 
     /// Return the target path if `call` is a mutating file tool targeting a protected metadata path.
@@ -533,17 +600,25 @@ impl Agent {
 
         let mut total_usage = Usage::default();
         let mut tool_calls_executed = 0usize;
+        let mut last_step_had_edits = false;
 
         for step in 1..=self.config.max_steps {
             if cancel.is_cancelled() {
                 return Err(AgentError::Cancelled);
             }
 
-            self.maybe_auto_compact().await?;
+            // Select model for this step (architect vs editor) before auto-compaction
+            // so compaction respects the selected model's context window budget.
+            let step_model = self
+                .config
+                .model_for_step(step, last_step_had_edits)
+                .to_string();
+
+            self.maybe_auto_compact(&step_model).await?;
             self.event_sink.on_event(&AgentEvent::StepStarted { step });
 
             let request = ChatRequest {
-                model: self.config.model.clone(),
+                model: step_model.clone(),
                 messages: self.history.clone(),
                 temperature: self.config.temperature,
                 max_tokens: self.config.max_tokens,
@@ -616,7 +691,7 @@ impl Agent {
                 );
             }
             self.token_accounting
-                .record_usage(&usage, self.history.len());
+                .record_usage_for_model(&step_model, &usage, self.history.len());
 
             let assistant_msg = if tool_calls.is_empty() {
                 ChatMessage::assistant(full_content.clone())
@@ -759,6 +834,11 @@ impl Agent {
                     i += 1;
                 }
             }
+
+            // Track whether this step had file edits for next step's model selection
+            last_step_had_edits = tool_calls
+                .iter()
+                .any(|tc| tc.name == "edit_file" || tc.name == "write_file");
         }
 
         Err(AgentError::MaxStepsExceeded {

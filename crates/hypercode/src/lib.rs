@@ -24,11 +24,11 @@ pub use cli::{
     TerminalApprovalHandler, TerminalEventSink,
 };
 pub use context::{
-    compact_history_with_llm, deduplicate_read_file_outputs, estimate_messages_tokens,
-    estimate_tokens, find_safe_compaction_split, model_context_profile,
+    compact_history_with_llm, compact_history_with_llm_usage, deduplicate_read_file_outputs,
+    estimate_messages_tokens, estimate_tokens, find_safe_compaction_split, model_context_profile,
     model_context_profile_from_catalog, prune_old_tool_outputs, refresh_model_catalog,
-    set_model_catalog, CompactionConfig, ModelContextProfile, TokenAccounting, WorkspaceContext,
-    INSTRUCTION_FILES,
+    set_model_catalog, CompactionConfig, ModelContextProfile, ModelUsage, TokenAccounting,
+    WorkspaceContext, INSTRUCTION_FILES,
 };
 pub use output_filter::{
     FilterOutcome, FilterStats, OutputFilter, OutputFilterConfig, SessionFilterSnapshot,
@@ -1819,5 +1819,179 @@ mod tests {
         assert_eq!(ta.output_tokens, 5);
         assert_eq!(ta.cache_read_tokens, 2);
         assert_eq!(ta.cache_creation_tokens, 1);
+    }
+
+    // --- Architect + Editor Multi-Model Split Tests ---
+
+    #[test]
+    fn test_effective_compaction_model_fallback_chain() {
+        let mut cfg = AgentConfig {
+            model: "claude-opus-4".to_string(),
+            ..Default::default()
+        };
+        assert_eq!(cfg.effective_compaction_model(), "claude-opus-4");
+
+        cfg.editor_model = Some("claude-haiku-3-5".to_string());
+        assert_eq!(cfg.effective_compaction_model(), "claude-haiku-3-5");
+
+        cfg.compaction_model = Some("gpt-4o-mini".to_string());
+        assert_eq!(cfg.effective_compaction_model(), "gpt-4o-mini");
+    }
+
+    #[tokio::test]
+    async fn test_compaction_dispatches_to_compaction_and_editor_models() {
+        // Explicit compaction_model takes precedence over editor_model
+        let backend = Arc::new(ScriptedBackend::new(vec![ChatMessage::assistant(
+            "Summary of prior turns",
+        )]));
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "claude-opus-4".to_string(),
+                editor_model: Some("claude-haiku-3-5".to_string()),
+                compaction_model: Some("gpt-4o-mini".to_string()),
+                compaction: CompactionConfig {
+                    keep_recent_messages: 2,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            backend.clone(),
+            ToolRegistry::new(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+        agent.push_message(ChatMessage::user("turn 1"));
+        agent.push_message(ChatMessage::assistant("reply 1"));
+        agent.push_message(ChatMessage::user("turn 2"));
+        agent.push_message(ChatMessage::assistant("reply 2"));
+
+        assert!(agent.compact().await.unwrap());
+        {
+            let seen = backend.seen_requests.lock().unwrap();
+            assert_eq!(seen.len(), 1);
+            assert_eq!(seen[0].model, "gpt-4o-mini");
+        }
+        assert!(agent
+            .token_accounting()
+            .per_model
+            .contains_key("gpt-4o-mini"));
+
+        // Without compaction_model, falls back to editor_model
+        let backend2 = Arc::new(ScriptedBackend::new(vec![ChatMessage::assistant(
+            "Summary via editor",
+        )]));
+        let mut agent2 = Agent::new(
+            AgentConfig {
+                model: "claude-opus-4".to_string(),
+                editor_model: Some("claude-haiku-3-5".to_string()),
+                compaction_model: None,
+                compaction: CompactionConfig {
+                    keep_recent_messages: 2,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            backend2.clone(),
+            ToolRegistry::new(),
+            ToolContext::new(std::env::temp_dir()),
+        );
+        agent2.push_message(ChatMessage::user("turn 1"));
+        agent2.push_message(ChatMessage::assistant("reply 1"));
+        agent2.push_message(ChatMessage::user("turn 2"));
+        agent2.push_message(ChatMessage::assistant("reply 2"));
+
+        assert!(agent2.compact().await.unwrap());
+        let seen2 = backend2.seen_requests.lock().unwrap();
+        assert_eq!(seen2.len(), 1);
+        assert_eq!(seen2[0].model, "claude-haiku-3-5");
+    }
+
+    #[tokio::test]
+    async fn test_multi_model_architect_editor_dispatch_and_per_model_cost() {
+        let tmp = TempDir::new().unwrap();
+        let backend = Arc::new(ScriptedBackend::new(vec![
+            ChatMessage::assistant_with_tools(
+                "Creating file",
+                vec![make_call(
+                    "write_file",
+                    serde_json::json!({ "path": "hello.txt", "content": "hi\n" }),
+                )],
+            ),
+            ChatMessage::assistant("File written."),
+        ]));
+
+        let mut agent = Agent::new(
+            AgentConfig {
+                model: "claude-opus-4".to_string(),
+                editor_model: Some("claude-haiku-3-5".to_string()),
+                approval_mode: ApprovalMode::AutoApprove,
+                ..Default::default()
+            },
+            backend.clone(),
+            ToolRegistry::with_default_coding_tools(),
+            ToolContext::new(tmp.path()),
+        );
+
+        let outcome = agent.run_turn("Create hello.txt").await.unwrap();
+        assert_eq!(outcome.final_response, "File written.");
+
+        let seen = backend.seen_requests.lock().unwrap();
+        assert_eq!(seen.len(), 2);
+        assert_eq!(seen[0].model, "claude-opus-4");
+        assert_eq!(seen[1].model, "claude-haiku-3-5");
+
+        let ta = agent.token_accounting();
+        assert_eq!(ta.per_model.len(), 2);
+        assert_eq!(ta.per_model["claude-opus-4"].requests, 1);
+        assert_eq!(ta.per_model["claude-haiku-3-5"].requests, 1);
+        assert!(ta.total_cost_usd("claude-opus-4") > 0.0);
+    }
+
+    #[test]
+    fn test_cli_multi_model_flags_and_model_repl_command() {
+        let opts = CliOptions::parse_from([
+            "--architect-model",
+            "claude-opus-4",
+            "--editor-model",
+            "claude-haiku-3-5",
+            "--compaction-model",
+            "gpt-4o-mini",
+        ])
+        .unwrap();
+        assert_eq!(opts.model.as_deref(), Some("claude-opus-4"));
+        assert_eq!(opts.editor_model.as_deref(), Some("claude-haiku-3-5"));
+        assert_eq!(opts.compaction_model.as_deref(), Some("gpt-4o-mini"));
+
+        assert_eq!(
+            ReplCommand::parse("/model").unwrap().unwrap(),
+            ReplCommand::Model {
+                role: None,
+                model: None,
+            }
+        );
+        assert_eq!(
+            ReplCommand::parse("/model gpt-4o").unwrap().unwrap(),
+            ReplCommand::Model {
+                role: None,
+                model: Some("gpt-4o".to_string()),
+            }
+        );
+        assert_eq!(
+            ReplCommand::parse("/model editor qwen2.5-coder")
+                .unwrap()
+                .unwrap(),
+            ReplCommand::Model {
+                role: Some("editor".to_string()),
+                model: Some("qwen2.5-coder".to_string()),
+            }
+        );
+        assert_eq!(
+            ReplCommand::parse("/model compaction claude-haiku")
+                .unwrap()
+                .unwrap(),
+            ReplCommand::Model {
+                role: Some("compaction".to_string()),
+                model: Some("claude-haiku".to_string()),
+            }
+        );
     }
 }
