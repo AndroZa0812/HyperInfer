@@ -33,9 +33,11 @@ pub use redaction::{
 pub use redis::{MemoryEventAction, MemoryUpdateEvent, PolicyUpdate, MEMORY_EVENTS_CHANNEL};
 pub use telemetry_consumer::TelemetryConsumer;
 pub use traits::{
-    ApiKey, ConfigStore, CreateMemoryRequest, Database, ListMemoriesFilter, ListUsageLogsFilter,
-    Memory, MemorySearchResult, ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team,
-    UpdateMemoryRequest, UsageLog, UsageLogsPage, UsageSummary, User,
+    AgentSession, AgentSessionsPage, ApiKey, ConfigStore, CreateMemoryRequest, Database,
+    ListAgentSessionsFilter, ListMemoriesFilter, ListUsageLogsFilter, McpToolCallSummary, Memory,
+    MemorySearchResult, ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team,
+    TrajectoryEvent, UpdateMemoryRequest, UpsertAgentSessionRequest, UsageLog, UsageLogsPage,
+    UsageSummary, User,
 };
 pub use types::{
     ChatChunk, ChatMessage, ChatRequest, ChatResponse, Choice, Config, ContentPart,

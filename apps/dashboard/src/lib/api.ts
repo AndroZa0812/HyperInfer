@@ -26,6 +26,9 @@ import type {
   RedactionConfig,
   SemanticCacheConfig,
   TestRedactionResponse,
+  AgentSession,
+  AgentSessionsFilter,
+  AgentSessionsPage,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -242,4 +245,20 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(config),
     }),
+
+  // HyperCode Agent Sessions & Trajectory Observability (HYP-76)
+  getAgentSessions: (filter?: AgentSessionsFilter) => {
+    const params = new URLSearchParams();
+    if (filter?.team_id) params.set("team_id", filter.team_id);
+    if (filter?.user_id) params.set("user_id", filter.user_id);
+    if (filter?.api_key_id) params.set("api_key_id", filter.api_key_id);
+    if (filter?.status) params.set("status", filter.status);
+    if (filter?.model) params.set("model", filter.model);
+    if (filter?.limit !== undefined) params.set("limit", String(filter.limit));
+    if (filter?.offset !== undefined) params.set("offset", String(filter.offset));
+    const qs = params.toString();
+    return fetchApi<AgentSessionsPage>(`/agent/sessions${qs ? `?${qs}` : ""}`);
+  },
+  getAgentSession: (id: string) =>
+    fetchApi<AgentSession>(`/agent/sessions/${encodeURIComponent(id)}`),
 };

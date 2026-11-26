@@ -238,6 +238,31 @@ pub trait Database: Clone + Send + Sync + 'static {
             offset: filter.offset,
         })
     }
+
+    async fn upsert_agent_session(
+        &self,
+        req: UpsertAgentSessionRequest,
+    ) -> Result<AgentSession, DbError> {
+        let _ = req;
+        Err(DbError::NotFound)
+    }
+
+    async fn list_agent_sessions(
+        &self,
+        filter: ListAgentSessionsFilter,
+    ) -> Result<AgentSessionsPage, DbError> {
+        Ok(AgentSessionsPage {
+            sessions: Vec::new(),
+            total: 0,
+            limit: filter.limit,
+            offset: filter.offset,
+        })
+    }
+
+    async fn get_agent_session(&self, id: &str) -> Result<Option<AgentSession>, DbError> {
+        let _ = id;
+        Ok(None)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -455,4 +480,104 @@ pub struct SearchMemoriesRequest {
 pub struct MemorySearchResult {
     pub memory: Memory,
     pub score: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpToolCallSummary {
+    pub server: String,
+    pub tool: String,
+    pub count: i32,
+    #[serde(default)]
+    pub avg_latency_ms: i64,
+    #[serde(default)]
+    pub errors: i32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TrajectoryEvent {
+    pub step: i32,
+    pub timestamp: DateTime<Utc>,
+    pub kind: String,
+    pub role: String,
+    pub content: String,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub mcp_server: Option<String>,
+    #[serde(default)]
+    pub tokens: Option<i64>,
+    #[serde(default)]
+    pub latency_ms: Option<i64>,
+    #[serde(default)]
+    pub cache_hit: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSession {
+    pub id: String,
+    pub session_key: String,
+    pub team_id: String,
+    pub user_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub agent_name: String,
+    pub model: String,
+    pub status: String,
+    pub title: Option<String>,
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
+    pub reasoning_tokens: i64,
+    pub cost_cents: f64,
+    pub cache_savings_cents: f64,
+    pub cache_hits: i32,
+    pub total_latency_ms: i64,
+    #[serde(default)]
+    pub mcp_tool_calls: Vec<McpToolCallSummary>,
+    #[serde(default)]
+    pub trajectory: Vec<TrajectoryEvent>,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpsertAgentSessionRequest {
+    pub session_key: String,
+    pub team_id: String,
+    pub user_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub agent_name: String,
+    pub model: String,
+    pub status: String,
+    pub title: Option<String>,
+    pub input_tokens: i64,
+    pub cached_input_tokens: i64,
+    pub output_tokens: i64,
+    pub reasoning_tokens: i64,
+    pub cost_cents: f64,
+    pub cache_savings_cents: f64,
+    pub cache_hits: i32,
+    pub total_latency_ms: i64,
+    pub mcp_tool_calls: Vec<McpToolCallSummary>,
+    pub trajectory: Vec<TrajectoryEvent>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub ended_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListAgentSessionsFilter {
+    pub team_id: Option<String>,
+    pub user_id: Option<String>,
+    pub api_key_id: Option<String>,
+    pub status: Option<String>,
+    pub model: Option<String>,
+    pub limit: i64,
+    pub offset: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSessionsPage {
+    pub sessions: Vec<AgentSession>,
+    pub total: i64,
+    pub limit: i64,
+    pub offset: i64,
 }

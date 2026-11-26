@@ -21,6 +21,7 @@ struct MemoryStore {
     deployments: Vec<Deployment>,
     routing_config: Option<RoutingConfig>,
     memories: Vec<Memory>,
+    agent_sessions: Vec<hyperinfer_core::AgentSession>,
 }
 
 #[derive(Clone, Default)]
@@ -707,5 +708,138 @@ impl Database for InMemoryDb {
             limit,
             offset,
         })
+    }
+
+    async fn upsert_agent_session(
+        &self,
+        req: hyperinfer_core::UpsertAgentSessionRequest,
+    ) -> Result<hyperinfer_core::AgentSession, DbError> {
+        let mut store = self.store.write().unwrap();
+        if let Some(existing) = store
+            .agent_sessions
+            .iter_mut()
+            .find(|s| s.team_id == req.team_id && s.session_key == req.session_key)
+        {
+            if req.user_id.is_some() {
+                existing.user_id = req.user_id;
+            }
+            if req.api_key_id.is_some() {
+                existing.api_key_id = req.api_key_id;
+            }
+            existing.agent_name = req.agent_name;
+            existing.model = req.model;
+            existing.status = req.status;
+            if req.title.is_some() {
+                existing.title = req.title;
+            }
+            existing.input_tokens = req.input_tokens;
+            existing.cached_input_tokens = req.cached_input_tokens;
+            existing.output_tokens = req.output_tokens;
+            existing.reasoning_tokens = req.reasoning_tokens;
+            existing.cost_cents = req.cost_cents;
+            existing.cache_savings_cents = req.cache_savings_cents;
+            existing.cache_hits = req.cache_hits;
+            existing.total_latency_ms = req.total_latency_ms;
+            existing.mcp_tool_calls = req.mcp_tool_calls;
+            existing.trajectory = req.trajectory;
+            existing.ended_at = req.ended_at;
+            return Ok(existing.clone());
+        }
+
+        let session = hyperinfer_core::AgentSession {
+            id: Uuid::new_v4().to_string(),
+            session_key: req.session_key,
+            team_id: req.team_id,
+            user_id: req.user_id,
+            api_key_id: req.api_key_id,
+            agent_name: req.agent_name,
+            model: req.model,
+            status: req.status,
+            title: req.title,
+            input_tokens: req.input_tokens,
+            cached_input_tokens: req.cached_input_tokens,
+            output_tokens: req.output_tokens,
+            reasoning_tokens: req.reasoning_tokens,
+            cost_cents: req.cost_cents,
+            cache_savings_cents: req.cache_savings_cents,
+            cache_hits: req.cache_hits,
+            total_latency_ms: req.total_latency_ms,
+            mcp_tool_calls: req.mcp_tool_calls,
+            trajectory: req.trajectory,
+            started_at: req.started_at.unwrap_or_else(Utc::now),
+            ended_at: req.ended_at,
+        };
+        store.agent_sessions.push(session.clone());
+        Ok(session)
+    }
+
+    async fn list_agent_sessions(
+        &self,
+        filter: hyperinfer_core::ListAgentSessionsFilter,
+    ) -> Result<hyperinfer_core::AgentSessionsPage, DbError> {
+        let store = self.store.read().unwrap();
+        let limit = filter.limit.clamp(1, 200);
+        let offset = filter.offset.max(0);
+
+        let mut matched: Vec<hyperinfer_core::AgentSession> = store
+            .agent_sessions
+            .iter()
+            .filter(|s| {
+                if let Some(ref tid) = filter.team_id {
+                    if &s.team_id != tid {
+                        return false;
+                    }
+                }
+                if let Some(ref uid) = filter.user_id {
+                    if s.user_id.as_deref() != Some(uid.as_str()) {
+                        return false;
+                    }
+                }
+                if let Some(ref kid) = filter.api_key_id {
+                    if s.api_key_id.as_deref() != Some(kid.as_str()) {
+                        return false;
+                    }
+                }
+                if let Some(ref st) = filter.status {
+                    if &s.status != st {
+                        return false;
+                    }
+                }
+                if let Some(ref model) = filter.model {
+                    if !s.model.to_lowercase().contains(&model.to_lowercase()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .map(|mut s| {
+                s.trajectory.clear();
+                s
+            })
+            .collect();
+
+        matched.sort_by_key(|s| std::cmp::Reverse(s.started_at));
+        let total = matched.len() as i64;
+        let sessions = matched
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+
+        Ok(hyperinfer_core::AgentSessionsPage {
+            sessions,
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    async fn get_agent_session(
+        &self,
+        id: &str,
+    ) -> Result<Option<hyperinfer_core::AgentSession>, DbError> {
+        let store = self.store.read().unwrap();
+        Ok(store.agent_sessions.iter().find(|s| s.id == id).cloned())
     }
 }
