@@ -2,8 +2,10 @@
 //! connectors (Microsoft Presidio Analyzer & local/trusted LLM pre-pass).
 
 use std::collections::HashMap;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::time::Duration;
 
+use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use serde::{Deserialize, Serialize};
 
 use crate::types::{ChatMessage, ContentPart};
@@ -610,5 +612,71 @@ fn strip_markdown_json_fence(raw: &str) -> &str {
         rest.trim_end_matches("```").trim()
     } else {
         trimmed
+    }
+}
+
+/// DNS resolver for outbound smart-redaction HTTP requests that prevents DNS rebinding
+/// to cloud metadata, link-local, or private/loopback addresses.
+#[derive(Clone, Copy)]
+pub(crate) struct RedactionDnsResolver {
+    pub(crate) allow_localhost: bool,
+}
+
+fn is_blocked_ip(ip: IpAddr, allow_localhost: bool) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            if allow_localhost && v4.is_loopback() {
+                return false;
+            }
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || (v4.octets()[0] == 100 && (v4.octets()[1] & 0b1100_0000) == 64)
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_blocked_ip(IpAddr::V4(v4), allow_localhost);
+            }
+            if allow_localhost && v6.is_loopback() {
+                return false;
+            }
+            let seg0 = v6.segments()[0];
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (seg0 & 0xfe00) == 0xfc00 // ULA fc00::/7
+                || (seg0 & 0xffc0) == 0xfe80 // Link-local fe80::/10
+        }
+    }
+}
+
+impl Resolve for RedactionDnsResolver {
+    fn resolve(&self, name: Name) -> Resolving {
+        let host = name.as_str().to_string();
+        let allow_localhost = self.allow_localhost;
+        Box::pin(async move {
+            let addrs = tokio::task::spawn_blocking(move || (host.as_str(), 0).to_socket_addrs())
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+            let allowed: Vec<std::net::SocketAddr> = addrs
+                .filter(|addr| !is_blocked_ip(addr.ip(), allow_localhost))
+                .collect();
+
+            if allowed.is_empty() {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "Resolved IP address is blocked by SSRF policy",
+                ))
+                    as Box<dyn std::error::Error + Send + Sync>);
+            }
+
+            let iter: Addrs = Box::new(allowed.into_iter());
+            Ok(iter)
+        })
     }
 }

@@ -117,6 +117,17 @@ impl IntoResponse for ProxyError {
     }
 }
 
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
 pub async fn chat_completions_handler<
     D: Database + Clone + Send + Sync + 'static,
     C: ConfigStore,
@@ -155,7 +166,7 @@ pub async fn chat_completions_handler<
             .get(hyperinfer_core::SKIP_REDACTION_HEADER)
             .and_then(|v| v.to_str().ok())
         {
-            if header_val == redaction.skip_token() {
+            if constant_time_eq(header_val.as_bytes(), redaction.skip_token().as_bytes()) {
                 metadata.insert(
                     hyperinfer_core::SKIP_REDACTION_METADATA_KEY.to_string(),
                     serde_json::Value::Bool(true),

@@ -83,11 +83,14 @@ pub struct TestRedactionResponse {
     pub vault_entries: Option<HashMap<String, String>>,
 }
 
-fn validate_redaction_endpoint_url(url: &str) -> Result<(), &'static str> {
-    let allow_localhost = std::env::var("ALLOW_LOCALHOST_REDACTION")
+pub fn allow_localhost_redaction() -> bool {
+    std::env::var("ALLOW_LOCALHOST_REDACTION")
         .map(|v| v != "false" && v != "0")
-        .unwrap_or(true);
-    crate::proxy::validate_base_url(url.trim(), allow_localhost)
+        .unwrap_or(true)
+}
+
+fn validate_redaction_endpoint_url(url: &str) -> Result<(), &'static str> {
+    crate::proxy::validate_base_url(url.trim(), allow_localhost_redaction())
         .map_err(|_| "Endpoint URL must be a valid non-blocked http:// or https:// URL")
 }
 
@@ -197,7 +200,7 @@ pub async fn test_redaction(
         plugin.as_ref().clone()
     } else {
         let config = state.settings.read().await.redaction.clone();
-        RedactionPlugin::new(config)
+        RedactionPlugin::with_localhost_policy(config, allow_localhost_redaction())
     };
 
     let reversible = plugin.config().reversible;

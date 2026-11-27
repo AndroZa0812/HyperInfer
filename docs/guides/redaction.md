@@ -18,13 +18,13 @@ By default, `RedactionPlugin` runs in **one-way regex mode** (`reversible: false
 
 | Field | Default | Matches |
 | :--- | :--- | :--- |
-| `redact_api_keys` | `true` | Common provider API key formats (`sk-...`, `sk-ant-...`, `AIza...`, `ghp_...`, `xoxb-...`, etc.) |
+| `redact_api_keys` | `true` | Common gateway & provider API key prefixes (`sk-`, `sk-proj-`, `sk-ant-`, `hi-`, `hi-local-`, `hi-admin-`) |
 | `redact_bearer_tokens` | `true` | `Bearer <token>` authorization strings (preserving the `Bearer ` prefix) |
 | `redact_emails` | `true` | Email addresses |
 | `redact_ssns` | `true` | US Social Security Numbers (`XXX-XX-XXXX`) |
 | `custom_patterns` | `[]` | Array of `[regex, replacement]` tuples applied in order |
 | `redact_requests` | `true` | Apply redaction to outbound chat messages and tool-call arguments |
-| `redact_responses` | `true` | Apply one-way redaction to inbound responses (ignored when `reversible: true`) |
+| `redact_responses` | `true` | Apply one-way redaction to inbound responses (skipped when a per-request reversible vault restores the response) |
 
 ---
 
@@ -253,8 +253,8 @@ If you want to redact domain-specific secrets (internal codenames, customer IDs,
 | `llm_api_key` | `null` | Optional bearer token sent as `Authorization: Bearer <key>` when calling a trusted remote provider. |
 | `llm_categories` | `["pii", "secrets", "financial", "internal_names"]` | Sensitivity categories passed to the redactor prompt. |
 
-!!! info "Recursion Guard"
-    Point `llm_base_url` directly at your local Ollama/vLLM instance or trusted upstream provider rather than looping back through the public gateway proxy. Outbound LLM redaction calls include the `X-HyperInfer-Skip-Redaction: 1` marker header for internal interceptors, and programmatic callers can set `SKIP_REDACTION_METADATA_KEY` in `PluginContext.metadata` to bypass redaction for trusted internal sub-requests.
+!!! info "Recursion Guard & SSRF Protection"
+    Point `llm_base_url` directly at your local Ollama/vLLM instance or trusted upstream provider rather than looping back through the public gateway proxy. Outbound LLM redaction calls attach a per-instance authenticated `X-HyperInfer-Skip-Redaction` token verified in `chat_completions_handler` so self-calls cannot recurse and external clients cannot spoof the header to bypass redaction. Set `ALLOW_LOCALHOST_REDACTION=false` in production to restrict smart redaction endpoints with `SafeResolver` and block loopback targets.
 
 ---
 

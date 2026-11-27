@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use tracing::warn;
 
 use crate::plugin::{GatewayPlugin, PluginAction, PluginContext};
-use crate::redaction_smart::{redact_with_llm, redact_with_presidio};
+use crate::redaction_smart::{redact_with_llm, redact_with_presidio, RedactionDnsResolver};
 use crate::types::{ChatMessage, ChatRequest, ChatResponse, ContentPart};
 
 pub use crate::redaction_smart::{
@@ -175,15 +175,16 @@ pub struct RedactionPlugin {
 
 impl RedactionPlugin {
     pub fn new(config: RedactionConfig) -> Self {
+        Self::with_localhost_policy(config, true)
+    }
+
+    pub fn with_localhost_policy(config: RedactionConfig, allow_localhost: bool) -> Self {
         let http_client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .dns_resolver(Arc::new(RedactionDnsResolver { allow_localhost }))
             .connect_timeout(Duration::from_secs(10))
             .build()
             .unwrap_or_default();
-        Self::with_http_client(config, http_client)
-    }
-
-    pub fn with_http_client(config: RedactionConfig, http_client: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(RwLock::new(CompiledRedaction::compile(config))),
             http_client,
