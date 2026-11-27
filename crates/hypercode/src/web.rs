@@ -5,7 +5,10 @@
 //! strict localhost `Origin` checks. Serves the embedded SvelteKit UI
 //! (`apps/hypercode-web`) when compiled with `--features embedded-web`.
 
-use crate::agent::{Agent, AgentConfig, AgentEvent, ApprovalHandler, ChatBackend, EventSink};
+use crate::agent::{
+    Agent, AgentConfig, AgentEvent, ApprovalHandler, ChatBackend, EventSink, NoopEventSink,
+    RejectAllHandler,
+};
 use crate::cli::format_tool_call_preview;
 use crate::context::WorkspaceContext;
 use crate::tool::{ToolContext, ToolRegistry};
@@ -360,15 +363,25 @@ impl WebServer {
 
 // ── Middleware ───────────────────────────────────────────────────────────────
 
+fn is_same_daemon_origin(headers: &HeaderMap) -> bool {
+    let Some(origin) = headers.get(header::ORIGIN) else {
+        return true;
+    };
+    let Ok(origin_str) = origin.to_str() else {
+        return false;
+    };
+    if !is_allowed_localhost_origin(origin_str) {
+        return false;
+    }
+    match headers.get(header::HOST).and_then(|h| h.to_str().ok()) {
+        Some(host) => origin_str.eq_ignore_ascii_case(&format!("http://{host}")),
+        None => true,
+    }
+}
+
 async fn origin_guard_middleware(req: Request<axum::body::Body>, next: Next) -> Response {
-    if let Some(origin) = req.headers().get(header::ORIGIN) {
-        let allowed = origin
-            .to_str()
-            .map(is_allowed_localhost_origin)
-            .unwrap_or(false);
-        if !allowed {
-            return (StatusCode::FORBIDDEN, "Cross-origin requests are forbidden").into_response();
-        }
+    if !is_same_daemon_origin(req.headers()) {
+        return (StatusCode::FORBIDDEN, "Cross-origin requests are forbidden").into_response();
     }
     next.run(req).await
 }
@@ -378,14 +391,8 @@ async fn web_auth_middleware(
     req: Request<axum::body::Body>,
     next: Next,
 ) -> Response {
-    if let Some(origin) = req.headers().get(header::ORIGIN) {
-        let allowed = origin
-            .to_str()
-            .map(is_allowed_localhost_origin)
-            .unwrap_or(false);
-        if !allowed {
-            return (StatusCode::FORBIDDEN, "Cross-origin requests are forbidden").into_response();
-        }
+    if !is_same_daemon_origin(req.headers()) {
+        return (StatusCode::FORBIDDEN, "Cross-origin requests are forbidden").into_response();
     }
 
     let bearer = req
@@ -752,6 +759,9 @@ async fn send_message_handler(
         let outcome = session.agent.run_turn_with_cancel(prompt, cancel).await;
         session.running = false;
         session.active_cancel = None;
+        // Release per-turn channel senders so the SSE stream closes cleanly.
+        session.agent.set_event_sink(NoopEventSink);
+        session.agent.set_approval_handler(RejectAllHandler);
 
         let captured_tools = tool_events.lock().map(|g| g.clone()).unwrap_or_default();
         for t in &captured_tools {
@@ -1031,6 +1041,15 @@ mod tests {
             .get("/api/info")
             .add_header("Authorization", format!("Bearer {token}"))
             .add_header("Origin", "https://evil.example")
+            .await
+            .assert_status(StatusCode::FORBIDDEN);
+
+        // Cross-port localhost origin rejected when Host header differs
+        server
+            .get("/api/info")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .add_header("Host", "127.0.0.1:3200")
+            .add_header("Origin", "http://127.0.0.1:9999")
             .await
             .assert_status(StatusCode::FORBIDDEN);
 

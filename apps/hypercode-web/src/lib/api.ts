@@ -77,8 +77,9 @@ export const webApi = {
 		const reader = res.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
+		let finished = false;
 
-		while (true) {
+		while (!finished) {
 			const { value, done } = await reader.read();
 			if (done) break;
 			buffer += decoder.decode(value, { stream: true });
@@ -92,13 +93,22 @@ export const webApi = {
 						const payload = line.slice(5).trim();
 						if (!payload) continue;
 						try {
-							onEvent(JSON.parse(payload) as WebStreamEvent);
+							const ev = JSON.parse(payload) as WebStreamEvent;
+							onEvent(ev);
+							if (ev.type === 'turn_completed' || ev.type === 'error') {
+								finished = true;
+								break;
+							}
 						} catch {
 							// Ignore non-JSON keepalive frames
 						}
 					}
 				}
+				if (finished) break;
 			}
+		}
+		if (finished) {
+			await reader.cancel().catch(() => {});
 		}
 	}
 };
