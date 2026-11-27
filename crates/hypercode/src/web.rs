@@ -797,16 +797,22 @@ async fn send_message_handler(
         .into_response()
 }
 
+fn git_command(root: &std::path::Path) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new("git");
+    cmd.current_dir(root)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env_remove("GIT_INDEX_FILE");
+    cmd
+}
+
 async fn git_diff_handler(State(state): State<Arc<WebState>>) -> impl IntoResponse {
     let root = state.workspace_ctx.workspace_root.clone();
     let branch = read_git_branch(&root).await;
 
     let status_out = tokio::time::timeout(
         Duration::from_secs(5),
-        tokio::process::Command::new("git")
-            .args(["status", "--porcelain"])
-            .current_dir(&root)
-            .output(),
+        git_command(&root).args(["status", "--porcelain"]).output(),
     )
     .await;
 
@@ -826,10 +832,7 @@ async fn git_diff_handler(State(state): State<Arc<WebState>>) -> impl IntoRespon
 
     let diff_out = tokio::time::timeout(
         Duration::from_secs(5),
-        tokio::process::Command::new("git")
-            .args(["diff", "HEAD"])
-            .current_dir(&root)
-            .output(),
+        git_command(&root).args(["diff", "HEAD"]).output(),
     )
     .await;
 
@@ -837,10 +840,7 @@ async fn git_diff_handler(State(state): State<Arc<WebState>>) -> impl IntoRespon
         Ok(Ok(out)) if out.status.success() => String::from_utf8_lossy(&out.stdout).to_string(),
         _ => match tokio::time::timeout(
             Duration::from_secs(5),
-            tokio::process::Command::new("git")
-                .args(["diff"])
-                .current_dir(&root)
-                .output(),
+            git_command(&root).args(["diff"]).output(),
         )
         .await
         {
@@ -859,9 +859,8 @@ async fn git_diff_handler(State(state): State<Arc<WebState>>) -> impl IntoRespon
 async fn read_git_branch(root: &std::path::Path) -> Option<String> {
     let out = tokio::time::timeout(
         Duration::from_secs(3),
-        tokio::process::Command::new("git")
+        git_command(root)
             .args(["rev-parse", "--abbrev-ref", "HEAD"])
-            .current_dir(root)
             .output(),
     )
     .await
@@ -1058,30 +1057,28 @@ mod tests {
     #[tokio::test]
     async fn test_session_create_and_git_diff() {
         let dir = tempfile::tempdir().unwrap();
-        std::process::Command::new("git")
-            .args(["init"])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
+        let run_git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(dir.path())
+                .env_remove("GIT_DIR")
+                .env_remove("GIT_WORK_TREE")
+                .env_remove("GIT_INDEX_FILE")
+                .output()
+                .unwrap()
+        };
+        run_git(&["init"]);
         std::fs::write(dir.path().join("README.md"), "v1\n").unwrap();
-        std::process::Command::new("git")
-            .args(["add", "README.md"])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
-        std::process::Command::new("git")
-            .args([
-                "-c",
-                "user.name=Test",
-                "-c",
-                "user.email=test@example.com",
-                "commit",
-                "-m",
-                "init",
-            ])
-            .current_dir(dir.path())
-            .output()
-            .unwrap();
+        run_git(&["add", "README.md"]);
+        run_git(&[
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "-m",
+            "init",
+        ]);
         std::fs::write(dir.path().join("README.md"), "v2\n").unwrap();
 
         let (_web, server, token) = test_web_server(dir.path());
