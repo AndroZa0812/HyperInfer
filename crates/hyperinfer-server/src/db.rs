@@ -1020,6 +1020,245 @@ impl Database for SqlxDb {
             offset,
         })
     }
+
+    async fn upsert_agent_session(
+        &self,
+        req: hyperinfer_core::UpsertAgentSessionRequest,
+    ) -> Result<hyperinfer_core::AgentSession, DbError> {
+        let team_uuid = uuid::Uuid::parse_str(&req.team_id).map_err(|_| DbError::InvalidUuid)?;
+        let user_uuid = match req.user_id.as_deref() {
+            Some(uid) if !uid.is_empty() => {
+                Some(uuid::Uuid::parse_str(uid).map_err(|_| DbError::InvalidUuid)?)
+            }
+            _ => None,
+        };
+        let key_uuid = match req.api_key_id.as_deref() {
+            Some(kid) if !kid.is_empty() => {
+                Some(uuid::Uuid::parse_str(kid).map_err(|_| DbError::InvalidUuid)?)
+            }
+            _ => None,
+        };
+        let mcp_json = serde_json::to_value(&req.mcp_tool_calls)
+            .map_err(|e| DbError::ValidationError(e.to_string()))?;
+        let traj_json = serde_json::to_value(&req.trajectory)
+            .map_err(|e| DbError::ValidationError(e.to_string()))?;
+        let started_at = req.started_at.unwrap_or_else(Utc::now);
+
+        let row: AgentSessionRow = sqlx::query_as(
+            "INSERT INTO agent_sessions (
+                session_key, team_id, user_id, api_key_id, agent_name, model, status, title,
+                input_tokens, cached_input_tokens, output_tokens, reasoning_tokens,
+                cost_cents, cache_savings_cents, cache_hits, total_latency_ms,
+                mcp_tool_calls, trajectory, started_at, ended_at
+             ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8,
+                $9, $10, $11, $12,
+                $13, $14, $15, $16,
+                $17, $18, $19, $20
+             )
+             ON CONFLICT (team_id, session_key) DO UPDATE SET
+                user_id = COALESCE(EXCLUDED.user_id, agent_sessions.user_id),
+                api_key_id = COALESCE(EXCLUDED.api_key_id, agent_sessions.api_key_id),
+                agent_name = EXCLUDED.agent_name,
+                model = EXCLUDED.model,
+                status = EXCLUDED.status,
+                title = COALESCE(EXCLUDED.title, agent_sessions.title),
+                input_tokens = EXCLUDED.input_tokens,
+                cached_input_tokens = EXCLUDED.cached_input_tokens,
+                output_tokens = EXCLUDED.output_tokens,
+                reasoning_tokens = EXCLUDED.reasoning_tokens,
+                cost_cents = EXCLUDED.cost_cents,
+                cache_savings_cents = EXCLUDED.cache_savings_cents,
+                cache_hits = EXCLUDED.cache_hits,
+                total_latency_ms = EXCLUDED.total_latency_ms,
+                mcp_tool_calls = EXCLUDED.mcp_tool_calls,
+                trajectory = EXCLUDED.trajectory,
+                ended_at = EXCLUDED.ended_at
+             RETURNING id, session_key, team_id, user_id, api_key_id, agent_name, model, status, title,
+                       input_tokens, cached_input_tokens, output_tokens, reasoning_tokens,
+                       cost_cents, cache_savings_cents, cache_hits, total_latency_ms,
+                       mcp_tool_calls, trajectory, started_at, ended_at",
+        )
+        .bind(&req.session_key)
+        .bind(team_uuid)
+        .bind(user_uuid)
+        .bind(key_uuid)
+        .bind(&req.agent_name)
+        .bind(&req.model)
+        .bind(&req.status)
+        .bind(&req.title)
+        .bind(req.input_tokens)
+        .bind(req.cached_input_tokens)
+        .bind(req.output_tokens)
+        .bind(req.reasoning_tokens)
+        .bind(req.cost_cents)
+        .bind(req.cache_savings_cents)
+        .bind(req.cache_hits)
+        .bind(req.total_latency_ms)
+        .bind(mcp_json)
+        .bind(traj_json)
+        .bind(started_at)
+        .bind(req.ended_at)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(hyperinfer_core::AgentSession::from(row))
+    }
+
+    async fn list_agent_sessions(
+        &self,
+        filter: hyperinfer_core::ListAgentSessionsFilter,
+    ) -> Result<hyperinfer_core::AgentSessionsPage, DbError> {
+        let team_uuid = match filter.team_id.as_deref() {
+            Some(tid) => Some(uuid::Uuid::parse_str(tid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let user_uuid = match filter.user_id.as_deref() {
+            Some(uid) => Some(uuid::Uuid::parse_str(uid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let key_uuid = match filter.api_key_id.as_deref() {
+            Some(kid) => Some(uuid::Uuid::parse_str(kid).map_err(|_| DbError::InvalidUuid)?),
+            None => None,
+        };
+        let limit = filter.limit.clamp(1, 200);
+        let offset = filter.offset.max(0);
+
+        let mut count_qb: sqlx::QueryBuilder<sqlx::Postgres> =
+            sqlx::QueryBuilder::new("SELECT COUNT(*)::BIGINT FROM agent_sessions WHERE TRUE");
+        if let Some(tid) = team_uuid {
+            count_qb.push(" AND team_id = ").push_bind(tid);
+        }
+        if let Some(uid) = user_uuid {
+            count_qb.push(" AND user_id = ").push_bind(uid);
+        }
+        if let Some(kid) = key_uuid {
+            count_qb.push(" AND api_key_id = ").push_bind(kid);
+        }
+        if let Some(ref status) = filter.status {
+            count_qb.push(" AND status = ").push_bind(status);
+        }
+        if let Some(ref model) = filter.model {
+            count_qb
+                .push(" AND model ILIKE ")
+                .push_bind(format!("%{model}%"));
+        }
+        let (total,): (i64,) = count_qb.build_query_as().fetch_one(&self.pool).await?;
+
+        let mut rows_qb: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+            "SELECT id, session_key, team_id, user_id, api_key_id, agent_name, model, status, title, \
+                    input_tokens, cached_input_tokens, output_tokens, reasoning_tokens, \
+                    cost_cents, cache_savings_cents, cache_hits, total_latency_ms, \
+                    mcp_tool_calls, '[]'::jsonb AS trajectory, started_at, ended_at \
+             FROM agent_sessions WHERE TRUE",
+        );
+        if let Some(tid) = team_uuid {
+            rows_qb.push(" AND team_id = ").push_bind(tid);
+        }
+        if let Some(uid) = user_uuid {
+            rows_qb.push(" AND user_id = ").push_bind(uid);
+        }
+        if let Some(kid) = key_uuid {
+            rows_qb.push(" AND api_key_id = ").push_bind(kid);
+        }
+        if let Some(ref status) = filter.status {
+            rows_qb.push(" AND status = ").push_bind(status);
+        }
+        if let Some(ref model) = filter.model {
+            rows_qb
+                .push(" AND model ILIKE ")
+                .push_bind(format!("%{model}%"));
+        }
+        rows_qb
+            .push(" ORDER BY started_at DESC LIMIT ")
+            .push_bind(limit)
+            .push(" OFFSET ")
+            .push_bind(offset);
+
+        let rows: Vec<AgentSessionRow> = rows_qb.build_query_as().fetch_all(&self.pool).await?;
+
+        Ok(hyperinfer_core::AgentSessionsPage {
+            sessions: rows
+                .into_iter()
+                .map(hyperinfer_core::AgentSession::from)
+                .collect(),
+            total,
+            limit,
+            offset,
+        })
+    }
+
+    async fn get_agent_session(
+        &self,
+        id: &str,
+    ) -> Result<Option<hyperinfer_core::AgentSession>, DbError> {
+        let uuid = uuid::Uuid::parse_str(id).map_err(|_| DbError::InvalidUuid)?;
+        let row: Option<AgentSessionRow> = sqlx::query_as(
+            "SELECT id, session_key, team_id, user_id, api_key_id, agent_name, model, status, title,
+                    input_tokens, cached_input_tokens, output_tokens, reasoning_tokens,
+                    cost_cents, cache_savings_cents, cache_hits, total_latency_ms,
+                    mcp_tool_calls, trajectory, started_at, ended_at
+             FROM agent_sessions WHERE id = $1",
+        )
+        .bind(uuid)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(hyperinfer_core::AgentSession::from))
+    }
+}
+
+#[derive(Debug, Clone, sqlx::FromRow)]
+struct AgentSessionRow {
+    id: uuid::Uuid,
+    session_key: String,
+    team_id: uuid::Uuid,
+    user_id: Option<uuid::Uuid>,
+    api_key_id: Option<uuid::Uuid>,
+    agent_name: String,
+    model: String,
+    status: String,
+    title: Option<String>,
+    input_tokens: i64,
+    cached_input_tokens: i64,
+    output_tokens: i64,
+    reasoning_tokens: i64,
+    cost_cents: f64,
+    cache_savings_cents: f64,
+    cache_hits: i32,
+    total_latency_ms: i64,
+    mcp_tool_calls: serde_json::Value,
+    trajectory: serde_json::Value,
+    started_at: DateTime<Utc>,
+    ended_at: Option<DateTime<Utc>>,
+}
+
+impl From<AgentSessionRow> for hyperinfer_core::AgentSession {
+    fn from(row: AgentSessionRow) -> Self {
+        Self {
+            id: row.id.to_string(),
+            session_key: row.session_key,
+            team_id: row.team_id.to_string(),
+            user_id: row.user_id.map(|u| u.to_string()),
+            api_key_id: row.api_key_id.map(|u| u.to_string()),
+            agent_name: row.agent_name,
+            model: row.model,
+            status: row.status,
+            title: row.title,
+            input_tokens: row.input_tokens,
+            cached_input_tokens: row.cached_input_tokens,
+            output_tokens: row.output_tokens,
+            reasoning_tokens: row.reasoning_tokens,
+            cost_cents: row.cost_cents,
+            cache_savings_cents: row.cache_savings_cents,
+            cache_hits: row.cache_hits,
+            total_latency_ms: row.total_latency_ms,
+            mcp_tool_calls: serde_json::from_value(row.mcp_tool_calls).unwrap_or_default(),
+            trajectory: serde_json::from_value(row.trajectory).unwrap_or_default(),
+            started_at: row.started_at,
+            ended_at: row.ended_at,
+        }
+    }
 }
 
 #[derive(Debug, Clone, sqlx::FromRow, Serialize)]

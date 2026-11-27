@@ -312,3 +312,65 @@ export interface GatewaySettings {
     redaction: RedactionConfig;
     cache: SemanticCacheConfig;
 }
+
+export interface McpToolCallSummary {
+    server: string;
+    tool: string;
+    count: number;
+    avg_latency_ms: number;
+    errors: number;
+}
+
+export interface TrajectoryEvent {
+    step: number;
+    timestamp: string;
+    kind: string;
+    role: string;
+    content: string;
+    tool_name?: string | null;
+    mcp_server?: string | null;
+    tokens?: number | null;
+    latency_ms?: number | null;
+    cache_hit: boolean;
+}
+
+export interface AgentSession {
+    id: string;
+    session_key: string;
+    team_id: string;
+    user_id?: string | null;
+    api_key_id?: string | null;
+    agent_name: string;
+    model: string;
+    status: string;
+    title?: string | null;
+    input_tokens: number;
+    cached_input_tokens: number;
+    output_tokens: number;
+    reasoning_tokens: number;
+    cost_cents: number;
+    cache_savings_cents: number;
+    cache_hits: number;
+    total_latency_ms: number;
+    mcp_tool_calls: McpToolCallSummary[];
+    trajectory: TrajectoryEvent[];
+    started_at: string;
+    ended_at?: string | null;
+}
+
+export interface AgentSessionsPage {
+    sessions: AgentSession[];
+    total: number;
+    limit: number;
+    offset: number;
+}
+
+export interface AgentSessionsFilter {
+    team_id?: string;
+    user_id?: string;
+    api_key_id?: string;
+    status?: string;
+    model?: string;
+    limit?: number;
+    offset?: number;
+}

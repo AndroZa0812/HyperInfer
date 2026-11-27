@@ -1,5 +1,6 @@
 //! HTTP route modules and Axum router construction.
 
+pub mod agent_sessions;
 pub mod catalog;
 pub mod deployments;
 pub mod gateway_settings;
@@ -221,6 +222,14 @@ where
         )
         .route("/v1/usage/summary", get(teams::get_usage_summary))
         .route("/v1/usage/logs", get(logs::list_usage_logs))
+        .route(
+            "/v1/agent/sessions",
+            get(agent_sessions::list_agent_sessions).post(agent_sessions::upsert_agent_session),
+        )
+        .route(
+            "/v1/agent/sessions/{id}",
+            get(agent_sessions::get_agent_session),
+        )
         .route(
             "/v1/model_aliases/{id}",
             get(teams::get_model_alias).delete(teams::delete_model_alias),

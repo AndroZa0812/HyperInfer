@@ -3,7 +3,9 @@ mod database;
 
 pub use config_store::ConfigStore;
 pub use database::{
-    ApiKey, CreateMemoryRequest, Database, ListMemoriesFilter, ListUsageLogsFilter, Memory,
+    AgentSession, AgentSessionsPage, ApiKey, CreateMemoryRequest, Database,
+    ListAgentSessionsFilter, ListMemoriesFilter, ListUsageLogsFilter, McpToolCallSummary, Memory,
     MemorySearchResult, ModelAlias, NewUsageLog, Quota, SearchMemoriesRequest, Team,
-    UpdateMemoryRequest, UsageLog, UsageLogsPage, UsageSummary, User,
+    TrajectoryEvent, UpdateMemoryRequest, UpsertAgentSessionRequest, UsageLog, UsageLogsPage,
+    UsageSummary, User,
 };
