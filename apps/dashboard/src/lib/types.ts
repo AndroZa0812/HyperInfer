@@ -261,6 +261,25 @@ export interface UsageLogsFilter {
     offset?: number;
 }
 
+export type PlaceholderFormat = 'indexed' | 'uuid';
+export type SmartRedactionBackend = 'presidio' | 'llm';
+export type SmartRedactionFailMode = 'fallback_regex' | 'fail_closed';
+
+export interface SmartRedactionConfig {
+    enabled: boolean;
+    backend: SmartRedactionBackend;
+    presidio_url: string;
+    presidio_language: string;
+    presidio_entities: string[];
+    presidio_score_threshold: number;
+    llm_base_url: string;
+    llm_model: string;
+    llm_api_key?: string;
+    llm_categories: string[];
+    timeout_ms: number;
+    fail_mode: SmartRedactionFailMode;
+}
+
 export interface RedactionConfig {
     redact_api_keys: boolean;
     redact_bearer_tokens: boolean;
@@ -269,6 +288,14 @@ export interface RedactionConfig {
     custom_patterns: [string, string][];
     redact_requests: boolean;
     redact_responses: boolean;
+    reversible: boolean;
+    placeholder_format: PlaceholderFormat;
+    smart: SmartRedactionConfig;
+}
+
+export interface TestRedactionResponse {
+    redacted: string;
+    vault_entries?: Record<string, string>;
 }
 
 export interface SemanticCacheConfig {

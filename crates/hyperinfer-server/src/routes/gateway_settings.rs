@@ -1,9 +1,10 @@
 //! Admin API routes for Gateway Plugins, PII Redaction, and Semantic Cache settings (HYP-73).
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
-use hyperinfer_core::{RedactionConfig, RedactionPlugin};
+use hyperinfer_core::{RedactionConfig, RedactionPlugin, RedactionVault, SmartRedactionBackend};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -78,20 +79,37 @@ pub struct TestRedactionRequest {
 #[derive(Debug, Serialize)]
 pub struct TestRedactionResponse {
     pub redacted: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vault_entries: Option<HashMap<String, String>>,
+}
+
+pub fn allow_localhost_redaction() -> bool {
+    std::env::var("ALLOW_LOCALHOST_REDACTION")
+        .map(|v| v != "false" && v != "0")
+        .unwrap_or(true)
+}
+
+fn validate_redaction_endpoint_url(url: &str) -> Result<(), &'static str> {
+    crate::proxy::validate_base_url(url.trim(), allow_localhost_redaction())
+        .map_err(|_| "Endpoint URL must be a valid non-blocked http:// or https:// URL")
 }
 
 pub async fn get_gateway_settings(
     State(state): State<GatewaySettingsState>,
     _admin: RequireAdmin,
 ) -> impl IntoResponse {
-    let settings = state.settings.read().await.clone();
+    let mut settings = state.settings.read().await.clone();
+    // Never echo raw smart-redaction LLM API keys back in GET responses.
+    if settings.redaction.smart.llm_api_key.is_some() {
+        settings.redaction.smart.llm_api_key = None;
+    }
     Json(settings)
 }
 
 pub async fn update_redaction_config(
     State(state): State<GatewaySettingsState>,
     _admin: RequireAdmin,
-    Json(config): Json<RedactionConfig>,
+    Json(mut config): Json<RedactionConfig>,
 ) -> impl IntoResponse {
     for (pattern, _replacement) in &config.custom_patterns {
         if let Err(err) = regex::Regex::new(pattern) {
@@ -103,13 +121,74 @@ pub async fn update_redaction_config(
         }
     }
 
+    if config.smart.enabled {
+        if config.smart.timeout_ms == 0 {
+            return (
+                StatusCode::BAD_REQUEST,
+                "smart.timeout_ms must be greater than 0",
+            )
+                .into_response();
+        }
+        if !config.smart.presidio_score_threshold.is_finite()
+            || !(0.0..=1.0).contains(&config.smart.presidio_score_threshold)
+        {
+            return (
+                StatusCode::BAD_REQUEST,
+                "smart.presidio_score_threshold must be between 0.0 and 1.0",
+            )
+                .into_response();
+        }
+        match config.smart.backend {
+            SmartRedactionBackend::Presidio => {
+                if let Err(msg) = validate_redaction_endpoint_url(&config.smart.presidio_url) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("smart.presidio_url: {msg}"),
+                    )
+                        .into_response();
+                }
+            }
+            SmartRedactionBackend::Llm => {
+                if let Err(msg) = validate_redaction_endpoint_url(&config.smart.llm_base_url) {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        format!("smart.llm_base_url: {msg}"),
+                    )
+                        .into_response();
+                }
+                if config.smart.llm_model.trim().is_empty() {
+                    return (StatusCode::BAD_REQUEST, "smart.llm_model must not be empty")
+                        .into_response();
+                }
+            }
+        }
+    }
+
+    // Preserve existing stored llm_api_key if the admin omitted it on update.
+    {
+        let existing = state.settings.read().await;
+        if config
+            .smart
+            .llm_api_key
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .is_empty()
+        {
+            config.smart.llm_api_key = existing.redaction.smart.llm_api_key.clone();
+        }
+    }
+
     if let Some(plugin) = &state.live_redaction {
         plugin.update_config(config.clone());
     }
 
     let mut guard = state.settings.write().await;
     guard.redaction = config.clone();
-    Json(config).into_response()
+
+    let mut sanitized = config;
+    sanitized.smart.llm_api_key = None;
+    Json(sanitized).into_response()
 }
 
 pub async fn test_redaction(
@@ -117,13 +196,37 @@ pub async fn test_redaction(
     _admin: RequireAdmin,
     Json(req): Json<TestRedactionRequest>,
 ) -> impl IntoResponse {
-    let redacted = if let Some(plugin) = &state.live_redaction {
-        plugin.redact_str(&req.sample)
+    let plugin = if let Some(plugin) = &state.live_redaction {
+        plugin.as_ref().clone()
     } else {
         let config = state.settings.read().await.redaction.clone();
-        RedactionPlugin::new(config).redact_str(&req.sample)
+        RedactionPlugin::with_localhost_policy(config, allow_localhost_redaction())
     };
-    Json(TestRedactionResponse { redacted })
+
+    let reversible = plugin.config().reversible;
+    let mut vault = if reversible {
+        Some(RedactionVault::new())
+    } else {
+        None
+    };
+
+    match plugin.redact_str_async(&req.sample, vault.as_mut()).await {
+        Ok(redacted) => {
+            let vault_entries = vault
+                .filter(|v| !v.is_empty())
+                .map(|v| v.mappings().clone());
+            Json(TestRedactionResponse {
+                redacted,
+                vault_entries,
+            })
+            .into_response()
+        }
+        Err(err) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            format!("Smart redaction failed: {}", err),
+        )
+            .into_response(),
+    }
 }
 
 pub async fn update_cache_config(
@@ -277,5 +380,118 @@ mod tests {
         assert!(settings.cache.enabled);
         assert_eq!(settings.cache.ttl_secs, 1800);
         assert_eq!(settings.pipeline_plugins, vec!["redaction"]);
+    }
+
+    #[tokio::test]
+    async fn test_smart_redaction_validation_and_reversible_preview() {
+        let (server, token, _) = test_server();
+
+        // Reject invalid Presidio score threshold
+        let bad_score = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "presidio",
+                    "presidio_url": "http://127.0.0.1:5001",
+                    "presidio_score_threshold": 1.5
+                }
+            }))
+            .await;
+        bad_score.assert_status(StatusCode::BAD_REQUEST);
+
+        // Reject non-HTTP Presidio URL
+        let bad_url = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "presidio",
+                    "presidio_url": "file:///etc/passwd"
+                }
+            }))
+            .await;
+        bad_url.assert_status(StatusCode::BAD_REQUEST);
+
+        // Reject empty LLM model
+        let bad_model = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "llm",
+                    "llm_base_url": "http://127.0.0.1:11434/v1",
+                    "llm_model": "   "
+                }
+            }))
+            .await;
+        bad_model.assert_status(StatusCode::BAD_REQUEST);
+
+        // Enable reversible mode + LLM key (should not be echoed in responses)
+        let ok = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "redact_emails": true,
+                "reversible": true,
+                "placeholder_format": "indexed",
+                "smart": {
+                    "enabled": false,
+                    "backend": "llm",
+                    "llm_base_url": "http://127.0.0.1:11434/v1",
+                    "llm_model": "qwen2.5:3b",
+                    "llm_api_key": "super-secret-llm-key"
+                }
+            }))
+            .await;
+        ok.assert_status_ok();
+        let saved: serde_json::Value = ok.json();
+        assert!(saved["smart"].get("llm_api_key").is_none());
+
+        let preview = server
+            .post("/v1/admin/gateway/redaction/test")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "sample": "Reach alice@example.com"
+            }))
+            .await;
+        preview.assert_status_ok();
+        let body: serde_json::Value = preview.json();
+        assert_eq!(body["redacted"], "Reach [REDACTED_EMAIL_1]");
+        assert_eq!(
+            body["vault_entries"]["[REDACTED_EMAIL_1]"],
+            "alice@example.com"
+        );
+
+        // Reject SSRF cloud metadata endpoint for both Presidio and LLM backends
+        let ssrf_presidio = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "presidio",
+                    "presidio_url": "http://169.254.169.254/latest/meta-data"
+                }
+            }))
+            .await;
+        ssrf_presidio.assert_status(StatusCode::BAD_REQUEST);
+
+        let ssrf_llm = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "llm",
+                    "llm_base_url": "http://169.254.169.254/v1",
+                    "llm_model": "qwen2.5:3b"
+                }
+            }))
+            .await;
+        ssrf_llm.assert_status(StatusCode::BAD_REQUEST);
     }
 }

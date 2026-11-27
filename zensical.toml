@@ -23,6 +23,7 @@ nav = [
       "guides/custom-llm-providers.md",
     ]},
     "guides/monitoring.md",
+    "guides/redaction.md",
     "guides/python.md",
   ]},
   {"Deployment" = [

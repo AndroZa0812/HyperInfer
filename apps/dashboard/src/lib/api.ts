@@ -25,6 +25,7 @@ import type {
   GatewaySettings,
   RedactionConfig,
   SemanticCacheConfig,
+  TestRedactionResponse,
 } from "./types";
 
 const API_BASE = "/v1";
@@ -232,7 +233,7 @@ export const api = {
       body: JSON.stringify(config),
     }),
   testRedaction: (sample: string) =>
-    fetchApi<{ redacted: string }>("/admin/gateway/redaction/test", {
+    fetchApi<TestRedactionResponse>("/admin/gateway/redaction/test", {
       method: "POST",
       body: JSON.stringify({ sample }),
     }),
