@@ -3,12 +3,12 @@
     import { auth } from '#lib/stores/auth';
     import type { ApiKey, Team, UsageLog, UsageLogsFilter } from '#lib/types';
     import { onDestroy } from 'svelte';
-    import Card from '#lib/components/Card.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
-    import Modal from '#lib/components/Modal.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
 
     let logs = $state<UsageLog[]>([]);
     let total = $state(0);

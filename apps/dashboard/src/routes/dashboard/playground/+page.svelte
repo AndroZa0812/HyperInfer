@@ -3,10 +3,10 @@
     import { auth } from '#lib/stores/auth';
     import type { ModelAlias, OpenAiModelListItem } from '#lib/types';
     import { onMount } from 'svelte';
-    import Card from '#lib/components/Card.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
 
     type SdkTab = 'openai' | 'anthropic' | 'gemini' | 'responses';
 

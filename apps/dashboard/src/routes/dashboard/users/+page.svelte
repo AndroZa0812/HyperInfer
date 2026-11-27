@@ -2,11 +2,11 @@
     import { api } from '#lib/api';
     import { auth } from '#lib/stores/auth';
     import type { Team, User } from '#lib/types';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
-    import Modal from '#lib/components/Modal.svelte';
-    import Badge from '#lib/components/Badge.svelte';
-    import Card from '#lib/components/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
 
     let users = $state<User[]>([]);
     let teams = $state<Team[]>([]);

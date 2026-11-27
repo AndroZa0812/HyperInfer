@@ -2,7 +2,7 @@
     import { page } from '$app/state';
     import { api } from '#lib/api';
     import type { Team, UsageData } from '#lib/types';
-    import Card from '#lib/components/Card.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
     import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
 

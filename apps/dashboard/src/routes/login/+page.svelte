@@ -5,8 +5,8 @@
     import { auth } from '#lib/stores/auth';
     import { theme } from '#lib/stores/theme';
     import type { ServerConfig } from '#lib/types';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
 
     let email = $state('');
     let password = $state('');

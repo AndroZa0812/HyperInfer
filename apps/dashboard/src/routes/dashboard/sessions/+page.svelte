@@ -8,11 +8,11 @@
         Team,
         User,
     } from '#lib/types';
-    import Card from '#lib/components/Card.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
-    import Modal from '#lib/components/Modal.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
 
     let sessions = $state<AgentSession[]>([]);
     let total = $state(0);

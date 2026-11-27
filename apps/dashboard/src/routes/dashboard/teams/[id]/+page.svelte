@@ -5,12 +5,12 @@
     import { auth } from '#lib/stores/auth';
     import type { ApiKey, ModelAlias, Quota, Team, UsageData } from '#lib/types';
     import StatCard from '#lib/components/StatCard.svelte';
-    import Card from '#lib/components/Card.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
     import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
-    import Modal from '#lib/components/Modal.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
 
     let team = $state<Team | null>(null);
     let keys = $state<ApiKey[]>([]);
