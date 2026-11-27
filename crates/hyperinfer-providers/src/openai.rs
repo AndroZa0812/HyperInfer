@@ -419,9 +419,25 @@ impl LlmProvider for OpenAiProvider {
                         finish_reason: Option<String>,
                     }
                     #[derive(serde::Deserialize)]
+                    struct DeltaToolCallFunction {
+                        #[serde(default)]
+                        name: Option<String>,
+                        #[serde(default)]
+                        arguments: Option<String>,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct DeltaToolCall {
+                        #[serde(default)]
+                        id: Option<String>,
+                        #[serde(default)]
+                        function: Option<DeltaToolCallFunction>,
+                    }
+                    #[derive(serde::Deserialize)]
                     struct DeltaContent {
                         #[serde(default)]
                         content: Option<String>,
+                        #[serde(default)]
+                        tool_calls: Option<Vec<DeltaToolCall>>,
                     }
                     #[derive(serde::Deserialize)]
                     struct StreamEvent {
@@ -462,6 +478,27 @@ impl LlmProvider for OpenAiProvider {
                             let delta = event.choices.first()
                                 .and_then(|c| c.delta.content.clone())
                                 .unwrap_or_default();
+                            let tool_calls = event.choices.first()
+                                .and_then(|c| c.delta.tool_calls.as_ref())
+                                .map(|calls| {
+                                    calls
+                                        .iter()
+                                        .map(|tc| hyperinfer_core::ToolCall {
+                                            id: tc.id.clone().unwrap_or_default(),
+                                            name: tc
+                                                .function
+                                                .as_ref()
+                                                .and_then(|f| f.name.clone())
+                                                .unwrap_or_default(),
+                                            arguments: tc
+                                                .function
+                                                .as_ref()
+                                                .and_then(|f| f.arguments.clone())
+                                                .unwrap_or_default(),
+                                        })
+                                        .collect::<Vec<_>>()
+                                })
+                                .filter(|v| !v.is_empty());
                             let usage = event.usage.map(|u| Usage {
                                 input_tokens: u.prompt_tokens,
                                 output_tokens: u.completion_tokens,
@@ -474,7 +511,7 @@ impl LlmProvider for OpenAiProvider {
                                 delta,
                                 finish_reason,
                                 usage,
-                                tool_calls: None,
+                                tool_calls,
                             };
                         }
                         Err(parse_err) => {

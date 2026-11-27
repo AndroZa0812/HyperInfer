@@ -9,7 +9,7 @@
 		id?: string;
 		name?: string;
 		list?: string;
-		autocomplete?: import('svelte/elements').HTMLInputAttributes['autocomplete'];
+		autocomplete?: 'on' | 'off' | 'email' | 'username' | 'current-password' | 'new-password' | null;
 		error?: string;
 		class?: string;
 		oninput?: (e: Event) => void;
