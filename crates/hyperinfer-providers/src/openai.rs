@@ -396,6 +396,8 @@ impl LlmProvider for OpenAiProvider {
 
             let mut byte_stream = response.bytes_stream();
             let mut raw_buf: Vec<u8> = Vec::new();
+            let mut pending_tool_calls: std::collections::BTreeMap<usize, hyperinfer_core::ToolCall> =
+                std::collections::BTreeMap::new();
 
             while let Some(bytes) = byte_stream.next().await {
                 let bytes = bytes?;
@@ -419,9 +421,27 @@ impl LlmProvider for OpenAiProvider {
                         finish_reason: Option<String>,
                     }
                     #[derive(serde::Deserialize)]
+                    struct DeltaToolCallFunction {
+                        #[serde(default)]
+                        name: Option<String>,
+                        #[serde(default)]
+                        arguments: Option<String>,
+                    }
+                    #[derive(serde::Deserialize)]
+                    struct DeltaToolCall {
+                        #[serde(default)]
+                        index: Option<usize>,
+                        #[serde(default)]
+                        id: Option<String>,
+                        #[serde(default)]
+                        function: Option<DeltaToolCallFunction>,
+                    }
+                    #[derive(serde::Deserialize)]
                     struct DeltaContent {
                         #[serde(default)]
                         content: Option<String>,
+                        #[serde(default)]
+                        tool_calls: Option<Vec<DeltaToolCall>>,
                     }
                     #[derive(serde::Deserialize)]
                     struct StreamEvent {
@@ -462,6 +482,48 @@ impl LlmProvider for OpenAiProvider {
                             let delta = event.choices.first()
                                 .and_then(|c| c.delta.content.clone())
                                 .unwrap_or_default();
+                            if let Some(calls) = event
+                                .choices
+                                .first()
+                                .and_then(|c| c.delta.tool_calls.as_ref())
+                            {
+                                for (pos, tc) in calls.iter().enumerate() {
+                                    let idx = tc.index.unwrap_or(pos);
+                                    let entry = pending_tool_calls.entry(idx).or_insert_with(|| {
+                                        hyperinfer_core::ToolCall {
+                                            id: String::new(),
+                                            name: String::new(),
+                                            arguments: String::new(),
+                                        }
+                                    });
+                                    if let Some(ref id) = tc.id {
+                                        if !id.is_empty() {
+                                            entry.id = id.clone();
+                                        }
+                                    }
+                                    if let Some(ref func) = tc.function {
+                                        if let Some(ref name) = func.name {
+                                            if !name.is_empty() {
+                                                entry.name = name.clone();
+                                            }
+                                        }
+                                        if let Some(ref args) = func.arguments {
+                                            entry.arguments.push_str(args);
+                                        }
+                                    }
+                                }
+                            }
+                            let tool_calls = if finish_reason.is_some()
+                                && !pending_tool_calls.is_empty()
+                            {
+                                Some(
+                                    std::mem::take(&mut pending_tool_calls)
+                                        .into_values()
+                                        .collect::<Vec<_>>(),
+                                )
+                            } else {
+                                None
+                            };
                             let usage = event.usage.map(|u| Usage {
                                 input_tokens: u.prompt_tokens,
                                 output_tokens: u.completion_tokens,
@@ -474,7 +536,7 @@ impl LlmProvider for OpenAiProvider {
                                 delta,
                                 finish_reason,
                                 usage,
-                                tool_calls: None,
+                                tool_calls,
                             };
                         }
                         Err(parse_err) => {

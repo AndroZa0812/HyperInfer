@@ -9,6 +9,7 @@ pub mod sandbox;
 pub mod tool;
 pub mod tools;
 pub mod tui;
+pub mod web;
 
 pub use a2a::{
     A2aServer, A2aStreamEvent, AgentCapabilities, AgentCard, AgentSkill, Artifact, JsonRpcError,
@@ -47,6 +48,7 @@ pub use tui::{
     current_terminal_size, format_diff_preview_for_width, is_interactive_tty, render_banner,
     wrap_text, RawModeGuard, TerminalSize, TuiViewport,
 };
+pub use web::{WebServer, WebServerConfig, WebStreamEvent};
 
 #[cfg(test)]
 mod tests {

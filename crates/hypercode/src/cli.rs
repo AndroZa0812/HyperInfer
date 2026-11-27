@@ -32,6 +32,9 @@ pub struct CliOptions {
     pub max_steps: usize,
     pub a2a_port: Option<u16>,
     pub a2a_stdio: bool,
+    pub web_port: Option<u16>,
+    pub web_token: Option<String>,
+    pub web_no_open: bool,
     pub show_help: bool,
     pub use_rtk: bool,
 }
@@ -53,6 +56,9 @@ impl Default for CliOptions {
             max_steps: 50,
             a2a_port: None,
             a2a_stdio: false,
+            web_port: None,
+            web_token: std::env::var("HYPERCODE_WEB_TOKEN").ok(),
+            web_no_open: false,
             show_help: false,
             use_rtk,
         }
@@ -151,6 +157,27 @@ impl CliOptions {
                 }
                 "--a2a-stdio" => {
                     opts.a2a_stdio = true;
+                }
+                "web" | "serve" if opts.web_port.is_none() && opts.prompt.is_none() => {
+                    opts.web_port = Some(3200);
+                }
+                "--web-port" | "--port" => {
+                    let raw = iter
+                        .next()
+                        .ok_or_else(|| "Missing value for --port".to_string())?;
+                    opts.web_port = Some(
+                        raw.parse::<u16>()
+                            .map_err(|_| format!("Invalid --port value: '{}'", raw))?,
+                    );
+                }
+                "--token" => {
+                    opts.web_token = Some(
+                        iter.next()
+                            .ok_or_else(|| "Missing value for --token".to_string())?,
+                    );
+                }
+                "--no-open" => {
+                    opts.web_no_open = true;
                 }
                 "--use-rtk" => {
                     opts.use_rtk = true;
@@ -835,6 +862,28 @@ pub async fn run_cli(opts: CliOptions) -> Result<(), String> {
             ws_context,
         );
         return server.serve_stdio().await;
+    }
+
+    if let Some(port) = opts.web_port {
+        let auth_token = opts
+            .web_token
+            .filter(|t| !t.trim().is_empty())
+            .unwrap_or_else(crate::web::generate_auth_token);
+        let url = format!("http://127.0.0.1:{}/?token={}", port, auth_token);
+        println!("HyperCode Web UI listening on http://127.0.0.1:{}", port);
+        println!("Open with auth token: {}", url);
+        let server = crate::web::WebServer::new(
+            crate::web::WebServerConfig {
+                auth_token,
+                sandbox_label: sandbox_label.clone(),
+            },
+            agent_config,
+            client,
+            ToolRegistry::with_default_coding_tools(),
+            tool_ctx,
+            ws_context,
+        );
+        return server.serve_localhost(port).await;
     }
 
     if let Some(port) = opts.a2a_port {

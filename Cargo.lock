@@ -245,6 +245,35 @@ dependencies = [
 
 [[package]]
 name = "axum-test"
+version = "18.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce2a8627e8d8851f894696b39f2b67807d6375c177361d376173ace306a21e2"
+dependencies = [
+ "anyhow",
+ "axum",
+ "bytes",
+ "bytesize",
+ "cookie",
+ "expect-json",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "mime",
+ "pretty_assertions",
+ "reserve-port",
+ "rust-multipart-rfc7578_2 0.8.0",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "smallvec",
+ "tokio",
+ "tower",
+ "url",
+]
+
+[[package]]
+name = "axum-test"
 version = "20.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "43c6a2f1d97ee33c39f13dacc0f84ae781a9c2ed373a75bad1129094f5a7c4bd"
@@ -262,7 +291,7 @@ dependencies = [
  "mime",
  "pretty_assertions",
  "reserve-port",
- "rust-multipart-rfc7578_2",
+ "rust-multipart-rfc7578_2 0.9.0",
  "serde",
  "serde_json",
  "serde_urlencoded",
@@ -1645,13 +1674,16 @@ dependencies = [
  "async-stream",
  "async-trait",
  "axum",
+ "axum-test 18.7.0",
  "chrono",
  "crossterm",
  "futures",
  "hyperinfer-client",
  "hyperinfer-core",
  "hyperinfer-providers",
+ "mime_guess",
  "regex",
+ "rust-embed",
  "serde",
  "serde_json",
  "tempfile",
@@ -1789,7 +1821,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-extra",
- "axum-test",
+ "axum-test 20.1.0",
  "chrono",
  "futures",
  "headers",
@@ -3348,6 +3380,21 @@ checksum = "915e33dccbe7deb2b8a342dc4c517503fe85e0230ddbae40a4fb0220493dad9b"
 dependencies = [
  "sha2 0.11.0",
  "walkdir",
+]
+
+[[package]]
+name = "rust-multipart-rfc7578_2"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c839d037155ebc06a571e305af66ff9fd9063a6e662447051737e1ac75beea41"
+dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "mime",
+ "rand 0.9.2",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
