@@ -2,11 +2,11 @@
     import { api } from '#lib/api';
     import type { Deployment, CreateDeploymentRequest, ModelSpec, RoutingHealth } from '#lib/types';
     import { onMount } from 'svelte';
-    import Card from '#lib/components/Card.svelte';
-    import Modal from '#lib/components/Modal.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Badge from '#lib/components/Badge.svelte';
-    import Input from '#lib/components/Input.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
 
     let deployments = $state<Deployment[]>([]);
     let loading = $state(true);

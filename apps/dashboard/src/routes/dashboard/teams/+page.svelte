@@ -2,10 +2,10 @@
     import { api } from '#lib/api';
     import type { Team } from '#lib/types';
     import { onMount } from 'svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Input from '#lib/components/Input.svelte';
-    import Modal from '#lib/components/Modal.svelte';
-    import Card from '#lib/components/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Input from '@hyperinfer/ui/Input.svelte';
+    import Modal from '@hyperinfer/ui/Modal.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
 
     let teams = $state<Team[]>([]);
     let loading = $state(true);

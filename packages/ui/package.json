@@ -1,0 +1,22 @@
+{
+	"name": "@hyperinfer/ui",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"svelte": "./src/index.ts",
+	"exports": {
+		".": {
+			"svelte": "./src/index.ts",
+			"default": "./src/index.ts"
+		},
+		"./Button.svelte": "./src/Button.svelte",
+		"./Card.svelte": "./src/Card.svelte",
+		"./Modal.svelte": "./src/Modal.svelte",
+		"./Input.svelte": "./src/Input.svelte",
+		"./Badge.svelte": "./src/Badge.svelte",
+		"./theme.css": "./src/theme.css"
+	},
+	"peerDependencies": {
+		"svelte": "^5.0.0"
+	}
+}

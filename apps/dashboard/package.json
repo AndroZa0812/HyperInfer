@@ -33,6 +33,7 @@
 		"vite": "^8.1.6"
 	},
 	"dependencies": {
+		"@hyperinfer/ui": "file:../../packages/ui",
 		"echarts": "^6.1.0"
 	},
 	"type": "module"

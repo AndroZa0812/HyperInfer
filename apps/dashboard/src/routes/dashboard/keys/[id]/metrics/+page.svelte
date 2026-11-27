@@ -4,7 +4,7 @@
     import type { ApiKey } from '#lib/types';
     import { onMount } from 'svelte';
     import StatCard from '#lib/components/StatCard.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
     import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
 
     let keyData = $state<ApiKey | null>(null);

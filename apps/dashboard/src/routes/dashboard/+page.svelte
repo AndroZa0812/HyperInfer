@@ -3,9 +3,9 @@
     import { auth } from '#lib/stores/auth';
     import type { ApiKey, ServerConfig, Team, UsageData, User } from '#lib/types';
     import StatCard from '#lib/components/StatCard.svelte';
-    import Card from '#lib/components/Card.svelte';
-    import Button from '#lib/components/Button.svelte';
-    import Badge from '#lib/components/Badge.svelte';
+    import Card from '@hyperinfer/ui/Card.svelte';
+    import Button from '@hyperinfer/ui/Button.svelte';
+    import Badge from '@hyperinfer/ui/Badge.svelte';
 
     let loading = $state(true);
     let usage = $state<UsageData | null>(null);
