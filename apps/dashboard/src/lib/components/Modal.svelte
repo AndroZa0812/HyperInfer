@@ -3,11 +3,16 @@
 
 	interface Props {
 		open?: boolean;
+		size?: 'md' | 'lg' | 'xl';
 		onclose?: () => void;
 		children: Snippet;
 	}
 
-	let { open = $bindable(false), onclose, children }: Props = $props();
+	let { open = $bindable(false), size = 'md', onclose, children }: Props = $props();
+
+	const sizeClass = $derived(
+		size === 'xl' ? 'max-w-3xl' : size === 'lg' ? 'max-w-2xl' : 'max-w-lg'
+	);
 
 	function handleBackdrop(e: MouseEvent) {
 		if (e.target === e.currentTarget) {
@@ -36,7 +41,7 @@
 		tabindex="-1"
 	>
 		<div class="absolute inset-0 bg-[var(--on-surface)]/20 backdrop-blur-sm"></div>
-		<div class="relative bg-[var(--surface-container-lowest)] rounded-xl shadow-[0_24px_48px_rgba(var(--shadow-color),0.12)] max-h-[90vh] overflow-auto w-full max-w-lg">
+		<div class="relative bg-[var(--surface-container-lowest)] rounded-xl shadow-[0_24px_48px_rgba(var(--shadow-color),0.12)] max-h-[90vh] overflow-auto w-full {sizeClass}">
 			{@render children()}
 		</div>
 	</div>

@@ -81,10 +81,12 @@ fn default_status() -> String {
 
 fn redact_session_fields(
     redactor: &RedactionPlugin,
+    agent_name: &mut String,
     title: &mut Option<String>,
     mcp_tool_calls: &mut [McpToolCallSummary],
     trajectory: &mut [TrajectoryEvent],
 ) {
+    *agent_name = redactor.redact_str(agent_name);
     if let Some(ref mut t) = title {
         *t = redactor.redact_str(t);
     }
@@ -118,7 +120,7 @@ fn compute_cost_and_savings(
     let out_tok = output_tokens.max(0) as u64;
     let reason_tok = reasoning_tokens.max(0) as u64;
 
-    let cost_cents = if provided_cost_cents > 0.0 {
+    let cost_cents = if provided_cost_cents.is_finite() && provided_cost_cents > 0.0 {
         provided_cost_cents
     } else if in_tok > 0 || cached_tok > 0 || out_tok > 0 || reason_tok > 0 {
         calc.calculate_cost_cents(
@@ -134,7 +136,8 @@ fn compute_cost_and_savings(
         0.0
     };
 
-    let cache_savings_cents = if provided_savings_cents > 0.0 {
+    let cache_savings_cents = if provided_savings_cents.is_finite() && provided_savings_cents > 0.0
+    {
         provided_savings_cents
     } else if cached_tok > 0 {
         let without_cache = calc.calculate_cost_cents(
@@ -173,6 +176,17 @@ pub async fn upsert_agent_session<D: Database, C: ConfigStore>(
         return (
             StatusCode::BAD_REQUEST,
             "session_key and model are required",
+        )
+            .into_response();
+    }
+    if body.session_key.trim().len() > 255
+        || body.model.trim().len() > 255
+        || body.agent_name.len() > 128
+        || body.title.as_ref().is_some_and(|t| t.len() > 512)
+    {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Field exceeds maximum allowed length (session_key/model <= 255, agent_name <= 128, title <= 512)",
         )
             .into_response();
     }
@@ -232,6 +246,7 @@ pub async fn upsert_agent_session<D: Database, C: ConfigStore>(
         .unwrap_or_else(RedactionPlugin::with_defaults);
     redact_session_fields(
         &redactor,
+        &mut body.agent_name,
         &mut body.title,
         &mut body.mcp_tool_calls,
         &mut body.trajectory,
@@ -313,6 +328,7 @@ pub async fn list_agent_sessions<D: Database, C: ConfigStore>(
             for s in &mut page.sessions {
                 redact_session_fields(
                     &redactor,
+                    &mut s.agent_name,
                     &mut s.title,
                     &mut s.mcp_tool_calls,
                     &mut s.trajectory,
@@ -348,6 +364,7 @@ pub async fn get_agent_session<D: Database, C: ConfigStore>(
                 .unwrap_or_else(RedactionPlugin::with_defaults);
             redact_session_fields(
                 &redactor,
+                &mut session.agent_name,
                 &mut session.title,
                 &mut session.mcp_tool_calls,
                 &mut session.trajectory,
@@ -551,5 +568,17 @@ mod tests {
         );
         assert_eq!(own_session.mcp_tool_calls[0].server, "[REDACTED_EMAIL]");
         assert_eq!(own_session.mcp_tool_calls[0].tool, "run-[REDACTED_API_KEY]");
+
+        // Reject oversized session_key (> 255 chars) with 400 Bad Request
+        let too_long = server
+            .post("/v1/agent/sessions")
+            .add_header("Authorization", format!("Bearer {admin_jwt}"))
+            .json(&serde_json::json!({
+                "session_key": "x".repeat(256),
+                "model": "gpt-4o",
+                "status": "completed"
+            }))
+            .await;
+        too_long.assert_status(StatusCode::BAD_REQUEST);
     }
 }

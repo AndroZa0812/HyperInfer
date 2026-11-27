@@ -130,18 +130,26 @@
         }
     }
 
+    let inspectRequestId = 0;
+
     async function openInspector(session: AgentSession) {
+        const reqId = ++inspectRequestId;
         showInspector = true;
         inspecting = true;
         inspectError = '';
         selectedSession = session;
         try {
-            selectedSession = await api.getAgentSession(session.id);
+            const detail = await api.getAgentSession(session.id);
+            if (reqId !== inspectRequestId) return;
+            selectedSession = detail;
         } catch (e) {
+            if (reqId !== inspectRequestId) return;
             console.error('Failed to load trajectory', e);
             inspectError = 'Failed to load redacted trajectory details.';
         } finally {
-            inspecting = false;
+            if (reqId === inspectRequestId) {
+                inspecting = false;
+            }
         }
     }
 
@@ -151,6 +159,7 @@
 
     function userLabel(userId?: string | null): string {
         if (!userId) return '—';
+        if (userId === $auth.user?.id && $auth.user?.email) return $auth.user.email;
         return users.find((u) => u.id === userId)?.email || userId.slice(0, 8);
     }
 
@@ -453,6 +462,7 @@
 
 <Modal
     bind:open={showInspector}
+    size="xl"
     onclose={() => {
         showInspector = false;
     }}
