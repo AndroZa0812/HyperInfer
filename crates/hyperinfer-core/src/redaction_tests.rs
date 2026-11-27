@@ -350,4 +350,18 @@ mod tests {
             "Leaked key [REDACTED_API_KEY]"
         );
     }
+
+    #[test]
+    fn test_stream_rehydrator_caps_unclosed_placeholder_buffer() {
+        let mut vault = RedactionVault::new();
+        let placeholder = vault.tokenize("EMAIL", "alice@example.com", PlaceholderFormat::Indexed);
+        assert_eq!(placeholder, "[REDACTED_EMAIL_1]");
+
+        let mut rehydrator = StreamRehydrator::new(vault);
+        // Unclosed "[REDACTED_" longer than max placeholder length must be emitted immediately
+        let unclosed = "[REDACTED_not_a_real_placeholder_with_extra_text";
+        let emitted = rehydrator.push_chunk(unclosed);
+        assert_eq!(emitted, unclosed);
+        assert_eq!(rehydrator.flush(), "");
+    }
 }

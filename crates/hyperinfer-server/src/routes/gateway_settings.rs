@@ -83,9 +83,12 @@ pub struct TestRedactionResponse {
     pub vault_entries: Option<HashMap<String, String>>,
 }
 
-fn is_http_url(url: &str) -> bool {
-    let trimmed = url.trim();
-    trimmed.starts_with("http://") || trimmed.starts_with("https://")
+fn validate_redaction_endpoint_url(url: &str) -> Result<(), &'static str> {
+    let allow_localhost = std::env::var("ALLOW_LOCALHOST_REDACTION")
+        .map(|v| v != "false" && v != "0")
+        .unwrap_or(true);
+    crate::proxy::validate_base_url(url.trim(), allow_localhost)
+        .map_err(|_| "Endpoint URL must be a valid non-blocked http:// or https:// URL")
 }
 
 pub async fn get_gateway_settings(
@@ -134,19 +137,19 @@ pub async fn update_redaction_config(
         }
         match config.smart.backend {
             SmartRedactionBackend::Presidio => {
-                if !is_http_url(&config.smart.presidio_url) {
+                if let Err(msg) = validate_redaction_endpoint_url(&config.smart.presidio_url) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        "smart.presidio_url must start with http:// or https://",
+                        format!("smart.presidio_url: {msg}"),
                     )
                         .into_response();
                 }
             }
             SmartRedactionBackend::Llm => {
-                if !is_http_url(&config.smart.llm_base_url) {
+                if let Err(msg) = validate_redaction_endpoint_url(&config.smart.llm_base_url) {
                     return (
                         StatusCode::BAD_REQUEST,
-                        "smart.llm_base_url must start with http:// or https://",
+                        format!("smart.llm_base_url: {msg}"),
                     )
                         .into_response();
                 }
@@ -459,5 +462,33 @@ mod tests {
             body["vault_entries"]["[REDACTED_EMAIL_1]"],
             "alice@example.com"
         );
+
+        // Reject SSRF cloud metadata endpoint for both Presidio and LLM backends
+        let ssrf_presidio = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "presidio",
+                    "presidio_url": "http://169.254.169.254/latest/meta-data"
+                }
+            }))
+            .await;
+        ssrf_presidio.assert_status(StatusCode::BAD_REQUEST);
+
+        let ssrf_llm = server
+            .put("/v1/admin/gateway/redaction")
+            .add_header("Authorization", format!("Bearer {token}"))
+            .json(&serde_json::json!({
+                "smart": {
+                    "enabled": true,
+                    "backend": "llm",
+                    "llm_base_url": "http://169.254.169.254/v1",
+                    "llm_model": "qwen2.5:3b"
+                }
+            }))
+            .await;
+        ssrf_llm.assert_status(StatusCode::BAD_REQUEST);
     }
 }

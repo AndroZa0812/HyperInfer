@@ -195,6 +195,15 @@ impl RedactionVault {
         &self.placeholder_to_original
     }
 
+    /// Maximum byte length of any placeholder currently stored in the vault.
+    pub fn max_placeholder_len(&self) -> usize {
+        self.placeholder_to_original
+            .keys()
+            .map(String::len)
+            .max()
+            .unwrap_or(0)
+    }
+
     /// Restore all placeholders present in `input` to their original values.
     pub fn restore_str(&self, input: &str) -> String {
         if self.placeholder_to_original.is_empty() || !input.contains(PLACEHOLDER_PREFIX) {
@@ -265,7 +274,8 @@ impl StreamRehydrator {
         self.pending.push_str(delta);
         self.pending = self.vault.restore_str(&self.pending);
 
-        let hold_from = find_incomplete_placeholder_start(&self.pending);
+        let hold_from =
+            find_incomplete_placeholder_start(&self.pending, self.vault.max_placeholder_len());
         if hold_from == self.pending.len() {
             std::mem::take(&mut self.pending)
         } else {
@@ -284,11 +294,14 @@ impl StreamRehydrator {
 
 /// Returns the byte index where a potentially incomplete `[REDACTED_...]` token starts,
 /// or `s.len()` if the entire string is safe to emit.
-fn find_incomplete_placeholder_start(s: &str) -> usize {
+///
+/// Caps the unclosed hold window to `max_placeholder_len` so an unclosed `[REDACTED_`
+/// emitted by a model cannot cause unbounded memory buffering.
+fn find_incomplete_placeholder_start(s: &str, max_placeholder_len: usize) -> usize {
     // Case 1: unclosed "[REDACTED_" present in `s` without a closing ']'.
     if let Some(idx) = s.rfind(PLACEHOLDER_PREFIX) {
         let tail = &s[idx..];
-        if !tail.contains(']') {
+        if !tail.contains(']') && tail.len() < max_placeholder_len {
             return idx;
         }
     }
@@ -341,10 +354,11 @@ pub(crate) async fn redact_with_presidio(
     };
 
     let timeout = Duration::from_millis(smart.timeout_ms.max(1));
+    let deadline = tokio::time::Instant::now() + timeout;
     let payload_str = serde_json::to_string(&payload)
         .map_err(|e| format!("Failed to serialize Presidio request: {}", e))?;
-    let response = tokio::time::timeout(
-        timeout,
+    let response = tokio::time::timeout_at(
+        deadline,
         client
             .post(&url)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
@@ -362,7 +376,7 @@ pub(crate) async fn redact_with_presidio(
         ));
     }
 
-    let body_text = tokio::time::timeout(timeout, response.text())
+    let body_text = tokio::time::timeout_at(deadline, response.text())
         .await
         .map_err(|_| "Presidio response body timed out".to_string())?
         .map_err(|e| format!("Failed to read Presidio response: {}", e))?;
@@ -447,6 +461,7 @@ pub(crate) async fn redact_with_llm(
     mut vault: Option<&mut RedactionVault>,
     format: PlaceholderFormat,
     smart: &SmartRedactionConfig,
+    skip_token: &str,
 ) -> Result<String, String> {
     let url = format!(
         "{}/chat/completions",
@@ -481,7 +496,7 @@ pub(crate) async fn redact_with_llm(
     let mut req = client
         .post(&url)
         .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .header(SKIP_REDACTION_HEADER, "1")
+        .header(SKIP_REDACTION_HEADER, skip_token)
         .body(body_str);
     if let Some(api_key) = smart
         .llm_api_key
@@ -492,7 +507,8 @@ pub(crate) async fn redact_with_llm(
     }
 
     let timeout = Duration::from_millis(smart.timeout_ms.max(1));
-    let response = tokio::time::timeout(timeout, req.send())
+    let deadline = tokio::time::Instant::now() + timeout;
+    let response = tokio::time::timeout_at(deadline, req.send())
         .await
         .map_err(|_| format!("LLM redactor timed out after {}ms", smart.timeout_ms))?
         .map_err(|e| format!("LLM redactor request failed: {}", e))?;
@@ -501,7 +517,7 @@ pub(crate) async fn redact_with_llm(
         return Err(format!("LLM redactor returned HTTP {}", response.status()));
     }
 
-    let resp_text = tokio::time::timeout(timeout, response.text())
+    let resp_text = tokio::time::timeout_at(deadline, response.text())
         .await
         .map_err(|_| "LLM redactor response body timed out".to_string())?
         .map_err(|e| format!("Failed to read LLM redactor response: {}", e))?;
@@ -527,17 +543,63 @@ pub(crate) async fn redact_with_llm(
         if needle.is_empty() || needle.starts_with(PLACEHOLDER_PREFIX) {
             continue;
         }
-        if result.contains(needle) {
+        if contains_outside_placeholders(&result, needle) {
             let replacement = if let Some(v) = vault.as_deref_mut() {
                 v.tokenize(&span.category, needle, format)
             } else {
                 format!("[REDACTED_{}]", normalize_category(&span.category))
             };
-            result = result.replace(needle, &replacement);
+            result = replace_outside_placeholders(&result, needle, &replacement);
         }
     }
 
     Ok(result)
+}
+
+/// Returns `true` if `needle` occurs in `input` outside of any `[REDACTED_...]` placeholder span.
+fn contains_outside_placeholders(input: &str, needle: &str) -> bool {
+    let mut cursor = 0;
+    while cursor < input.len() {
+        if let Some(rel_ph) = input[cursor..].find(PLACEHOLDER_PREFIX) {
+            let ph_start = cursor + rel_ph;
+            if input[cursor..ph_start].contains(needle) {
+                return true;
+            }
+            if let Some(rel_end) = input[ph_start..].find(']') {
+                cursor = ph_start + rel_end + 1;
+            } else {
+                break;
+            }
+        } else {
+            return input[cursor..].contains(needle);
+        }
+    }
+    false
+}
+
+/// Replace all occurrences of `needle` with `replacement`, leaving existing `[REDACTED_...]`
+/// placeholder tokens untouched.
+fn replace_outside_placeholders(input: &str, needle: &str, replacement: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut cursor = 0;
+    while cursor < input.len() {
+        if let Some(rel_ph) = input[cursor..].find(PLACEHOLDER_PREFIX) {
+            let ph_start = cursor + rel_ph;
+            out.push_str(&input[cursor..ph_start].replace(needle, replacement));
+            if let Some(rel_end) = input[ph_start..].find(']') {
+                let ph_end = ph_start + rel_end + 1;
+                out.push_str(&input[ph_start..ph_end]);
+                cursor = ph_end;
+            } else {
+                out.push_str(&input[ph_start..]);
+                return out;
+            }
+        } else {
+            out.push_str(&input[cursor..].replace(needle, replacement));
+            return out;
+        }
+    }
+    out
 }
 
 fn strip_markdown_json_fence(raw: &str) -> &str {

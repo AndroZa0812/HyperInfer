@@ -170,18 +170,31 @@ fn derive_custom_category(replacement: &str, idx: usize) -> String {
 pub struct RedactionPlugin {
     inner: Arc<RwLock<CompiledRedaction>>,
     http_client: reqwest::Client,
+    skip_token: Arc<String>,
 }
 
 impl RedactionPlugin {
     pub fn new(config: RedactionConfig) -> Self {
         let http_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
             .build()
             .unwrap_or_default();
+        Self::with_http_client(config, http_client)
+    }
+
+    pub fn with_http_client(config: RedactionConfig, http_client: reqwest::Client) -> Self {
         Self {
             inner: Arc::new(RwLock::new(CompiledRedaction::compile(config))),
             http_client,
+            skip_token: Arc::new(uuid::Uuid::new_v4().simple().to_string()),
         }
+    }
+
+    /// Return the internal per-instance token attached to `X-HyperInfer-Skip-Redaction`
+    /// on outbound LLM redaction calls to safely prevent self-recursion.
+    pub fn skip_token(&self) -> &str {
+        &self.skip_token
     }
 
     pub fn with_defaults() -> Self {
@@ -293,7 +306,15 @@ impl RedactionPlugin {
                     .await
             }
             SmartRedactionBackend::Llm => {
-                redact_with_llm(&self.http_client, &regex_redacted, vault, format, &smart).await
+                redact_with_llm(
+                    &self.http_client,
+                    &regex_redacted,
+                    vault,
+                    format,
+                    &smart,
+                    self.skip_token(),
+                )
+                .await
             }
         };
 

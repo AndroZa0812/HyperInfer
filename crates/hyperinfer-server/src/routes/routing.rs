@@ -149,13 +149,27 @@ pub async fn chat_completions_handler<
         .map_err(|(code, error)| ProxyError { error, code })?;
 
     // 1b. Run GatewayPlugin pre-request pipeline
+    let mut metadata = std::collections::HashMap::new();
+    if let Some(redaction) = state.plugins.redaction() {
+        if let Some(header_val) = headers
+            .get(hyperinfer_core::SKIP_REDACTION_HEADER)
+            .and_then(|v| v.to_str().ok())
+        {
+            if header_val == redaction.skip_token() {
+                metadata.insert(
+                    hyperinfer_core::SKIP_REDACTION_METADATA_KEY.to_string(),
+                    serde_json::Value::Bool(true),
+                );
+            }
+        }
+    }
     let mut plugin_ctx = hyperinfer_core::PluginContext {
         request_id: uuid::Uuid::new_v4().to_string(),
         team_id: Some(auth.team_id.clone()),
         api_key_id: Some(auth.api_key_id.clone()),
         model: request.model.clone(),
         is_fallback: false,
-        metadata: std::collections::HashMap::new(),
+        metadata,
     };
     match state
         .plugins
@@ -365,8 +379,10 @@ pub async fn chat_completions_handler<
             let mut stream = stream;
             let mut last_chunk_id = String::new();
             let mut last_chunk_model = model_name.clone();
-            let mut tool_call_rehydrators: std::collections::HashMap<String, hyperinfer_core::StreamRehydrator> =
-                std::collections::HashMap::new();
+            let mut tool_call_rehydrators: std::collections::HashMap<
+                usize,
+                (String, hyperinfer_core::StreamRehydrator),
+            > = std::collections::HashMap::new();
 
             let mut stream_failed = false;
             while let Some(item) = stream.next().await {
@@ -384,25 +400,26 @@ pub async fn chat_completions_handler<
                             }
                             if let Some(ref mut calls) = chunk.tool_calls {
                                 for (idx, call) in calls.iter_mut().enumerate() {
-                                    if !call.arguments.is_empty() {
-                                        let key = if call.id.is_empty() {
-                                            idx.to_string()
-                                        } else {
-                                            call.id.clone()
-                                        };
-                                        let tc_rehydrator = tool_call_rehydrators
-                                            .entry(key)
-                                            .or_insert_with(|| {
+                                    let entry = tool_call_rehydrators
+                                        .entry(idx)
+                                        .or_insert_with(|| {
+                                            (
+                                                call.id.clone(),
                                                 hyperinfer_core::StreamRehydrator::new(
                                                     rehydrator.vault().clone(),
-                                                )
-                                            });
-                                        call.arguments = tc_rehydrator.push_chunk(&call.arguments);
-                                        if chunk.finish_reason.is_some() {
-                                            let tc_tail = tc_rehydrator.flush();
-                                            if !tc_tail.is_empty() {
-                                                call.arguments.push_str(&tc_tail);
-                                            }
+                                                ),
+                                            )
+                                        });
+                                    if !call.id.is_empty() && entry.0.is_empty() {
+                                        entry.0 = call.id.clone();
+                                    }
+                                    if !call.arguments.is_empty() {
+                                        call.arguments = entry.1.push_chunk(&call.arguments);
+                                    }
+                                    if chunk.finish_reason.is_some() {
+                                        let tc_tail = entry.1.flush();
+                                        if !tc_tail.is_empty() {
+                                            call.arguments.push_str(&tc_tail);
                                         }
                                     }
                                 }
@@ -443,7 +460,7 @@ pub async fn chat_completions_handler<
             if let Some(ref mut rehydrator) = stream_rehydrator {
                 let tail = rehydrator.flush();
                 let mut flushed_calls = Vec::new();
-                for (id, tc_rehydrator) in &mut tool_call_rehydrators {
+                for (id, tc_rehydrator) in tool_call_rehydrators.values_mut() {
                     let tc_tail = tc_rehydrator.flush();
                     if !tc_tail.is_empty() {
                         flushed_calls.push(hyperinfer_core::ToolCall {
