@@ -1,6 +1,6 @@
+@import "@hyperinfer/ui/theme.css";
 @import "tailwindcss";
 @source "../../../packages/ui/src";
-@import "@hyperinfer/ui/theme.css";
 
 @theme {
 	--font-headline: "Manrope", sans-serif;
