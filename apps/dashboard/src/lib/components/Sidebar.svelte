@@ -94,121 +94,134 @@
 
 <div class="flex h-screen overflow-hidden">
 	<aside
-		class="{collapsed ? 'w-[64px]' : 'w-[256px]'} flex flex-col shrink-0 relative border-r border-[var(--ghost-border)] transition-[width] duration-200 ease-out select-none"
+		class="{collapsed ? 'w-[84px]' : 'w-[256px]'} flex flex-col shrink-0 relative border-r border-[var(--ghost-border)] transition-[width] duration-200 ease-out select-none overflow-hidden"
 		style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);"
 	>
 		<div class="absolute inset-0 bg-[var(--surface-variant)]/60 backdrop-blur-xl -z-10"></div>
 
-		{#if collapsed}
-			<div class="px-2 pt-4 pb-3 flex flex-col items-center gap-2 border-b border-[var(--ghost-border)]">
+		<!-- Single-line fixed-height header: lightning icon + disappearing title + expand/collapse square -->
+		<div class="h-16 px-2.5 flex items-center justify-between gap-1 shrink-0 border-b border-[var(--ghost-border)]">
+			<div class="flex items-center min-w-0">
 				<div
-					class="w-9 h-9 rounded-lg flex items-center justify-center shadow-xs shrink-0"
+					class="w-8 h-8 rounded-lg flex items-center justify-center shadow-xs shrink-0"
 					style="background: var(--brand-gradient)"
 					title="HyperInfer — Precision AI"
 				>
-					<span class="material-symbols-outlined text-[var(--on-brand)]" style="font-size: 20px">bolt</span>
+					<span aria-hidden="true" class="material-symbols-outlined text-[var(--on-brand)]" style="font-size: 19px">bolt</span>
 				</div>
-				<button
-					type="button"
-					aria-label="Expand sidebar"
-					aria-expanded="false"
-					title="Expand sidebar ({shortcutHint})"
-					onclick={toggleSidebar}
-					class="w-9 h-9 rounded-lg flex items-center justify-center text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/80 transition-colors cursor-pointer"
+				<div
+					class="overflow-hidden whitespace-nowrap transition-all duration-200 ease-out {collapsed
+						? 'max-w-0 opacity-0 ml-0'
+						: 'max-w-[148px] opacity-100 ml-2.5'}"
 				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<rect x="3" y="3" width="18" height="18" rx="3" />
-						<line x1="9" y1="3" x2="9" y2="21" />
-						<path d="M13 9l3 3-3 3" />
-					</svg>
-				</button>
-			</div>
-		{:else}
-			<div class="px-4 pt-5 pb-4 flex items-center justify-between gap-2">
-				<div class="flex items-center gap-3 min-w-0">
-					<div
-						class="w-9 h-9 rounded-lg flex items-center justify-center shadow-xs shrink-0"
-						style="background: var(--brand-gradient)"
-					>
-						<span class="material-symbols-outlined text-[var(--on-brand)]" style="font-size: 20px">bolt</span>
-					</div>
-					<div class="min-w-0">
-						<h1 class="text-base font-bold text-[var(--on-surface)] truncate" style="font-family: 'Manrope', sans-serif">
-							HyperInfer
-						</h1>
-						<p class="text-[10px] uppercase tracking-[0.15em] text-[var(--on-surface-variant)] truncate">
-							Precision AI
-						</p>
-					</div>
+					<h1 class="text-sm font-bold text-[var(--on-surface)] leading-tight" style="font-family: 'Manrope', sans-serif">
+						HyperInfer
+					</h1>
+					<p class="text-[10px] uppercase tracking-[0.14em] text-[var(--on-surface-variant)] leading-tight mt-0.5">
+						Precision AI
+					</p>
 				</div>
-				<button
-					type="button"
-					aria-label="Collapse sidebar"
-					aria-expanded="true"
-					title="Collapse sidebar ({shortcutHint})"
-					onclick={toggleSidebar}
-					class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/80 transition-colors cursor-pointer"
-				>
-					<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-						<rect x="3" y="3" width="18" height="18" rx="3" />
-						<line x1="9" y1="3" x2="9" y2="21" />
-						<path d="M16 9l-3 3 3 3" />
-					</svg>
-				</button>
 			</div>
-		{/if}
 
-		<nav class="flex-1 {collapsed ? 'px-2 py-2' : 'px-3 py-1'} space-y-1 overflow-y-auto">
+			<button
+				type="button"
+				aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+				aria-expanded={!collapsed}
+				title="{collapsed ? 'Expand' : 'Collapse'} sidebar ({shortcutHint})"
+				onclick={toggleSidebar}
+				class="w-7 h-7 rounded-md flex items-center justify-center shrink-0 text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/80 transition-colors cursor-pointer"
+			>
+				<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<rect x="3" y="3" width="18" height="18" rx="3" />
+					<line x1="9" y1="3" x2="9" y2="21" />
+					{#if collapsed}
+						<path d="M13 9l3 3-3 3" />
+					{:else}
+						<path d="M16 9l-3 3 3 3" />
+					{/if}
+				</svg>
+			</button>
+		</div>
+
+		<!-- Navigation: icons remain at exact same (x, y) coordinates in both states -->
+		<nav class="flex-1 px-3 py-3 space-y-1 overflow-y-auto overflow-x-hidden">
 			{#each filteredItems as item}
 				{@const active = isActive(item.path)}
 				<a
 					href={item.path}
 					aria-label={item.label}
 					title={collapsed ? item.label : undefined}
-					class="flex items-center {collapsed ? 'justify-center w-10 h-10 mx-auto' : 'gap-3 px-3.5 py-2.5'} rounded-lg transition-all duration-200 group
+					class="h-10 w-full flex items-center pl-[20px] pr-3 rounded-lg transition-colors duration-150 group
 					{active
 						? 'text-[var(--primary)] bg-[var(--primary)]/10 font-semibold'
 						: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/70'}"
 				>
 					<span
 						aria-hidden="true"
-						class="material-symbols-outlined shrink-0 transition-all duration-200 {active ? 'fill-1' : ''}"
+						class="material-symbols-outlined shrink-0 transition-transform duration-150 {active ? 'fill-1' : ''}"
 						style="font-size: 20px"
 					>
 						{item.icon}
 					</span>
-					{#if !collapsed}
-						<span class="text-sm font-medium truncate">{item.label}</span>
-					{/if}
+					<span
+						class="text-sm font-medium whitespace-nowrap overflow-hidden transition-all duration-200 ease-out {collapsed
+							? 'max-w-0 opacity-0 ml-0'
+							: 'max-w-[160px] opacity-100 ml-3'}"
+					>
+						{item.label}
+					</span>
 				</a>
 			{/each}
 		</nav>
 
-		{#if collapsed}
-			<div class="p-2 border-t border-[var(--ghost-border)] flex flex-col items-center gap-1.5">
+		<!-- Footer: fixed row heights so nothing shifts vertically when toggling -->
+		<div class="p-2.5 border-t border-[var(--ghost-border)] space-y-1.5 shrink-0">
+			<div
+				class="h-12 flex items-center pl-[16px] pr-3 rounded-lg bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] overflow-hidden"
+				title={collapsed ? `${$auth.user?.email || ''} (${$auth.user?.role || 'member'})` : undefined}
+			>
 				<div
 					class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-[var(--on-brand)] shrink-0"
 					style="background: var(--brand-gradient)"
-					title="{$auth.user?.email || ''} ({$auth.user?.role || 'member'})"
 				>
 					{$auth.user?.email?.[0]?.toUpperCase() || '?'}
 				</div>
+				<div
+					class="min-w-0 overflow-hidden whitespace-nowrap transition-all duration-200 ease-out {collapsed
+						? 'max-w-0 opacity-0 ml-0'
+						: 'max-w-[160px] opacity-100 ml-3'}"
+				>
+					<p class="text-sm font-medium text-[var(--on-surface)] truncate">{$auth.user?.email}</p>
+					<p class="text-[10px] uppercase tracking-wider text-[var(--on-surface-variant)]">
+						{$auth.user?.role || 'member'}
+					</p>
+				</div>
+			</div>
+
+			<div class="h-9 flex items-center gap-1">
 				<button
 					type="button"
 					aria-label="Toggle theme"
-					title="Switch to {$theme === 'light' ? 'Dark' : 'Light'} mode"
-					class="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/60 transition-all cursor-pointer"
+					title={collapsed ? `Switch to ${$theme === 'light' ? 'Dark' : 'Light'} mode` : undefined}
+					class="flex-1 h-9 flex items-center justify-center rounded-lg text-xs font-medium text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/50 transition-colors cursor-pointer overflow-hidden"
 					onclick={() => theme.toggle()}
 				>
-					<span aria-hidden="true" class="material-symbols-outlined" style="font-size: 18px">
+					<span aria-hidden="true" class="material-symbols-outlined shrink-0" style="font-size: 16px">
 						{$theme === 'light' ? 'dark_mode' : 'light_mode'}
+					</span>
+					<span
+						class="whitespace-nowrap overflow-hidden transition-all duration-200 ease-out {collapsed
+							? 'max-w-0 opacity-0 ml-0'
+							: 'max-w-[60px] opacity-100 ml-1.5'}"
+					>
+						{$theme === 'light' ? 'Dark' : 'Light'}
 					</span>
 				</button>
 				<button
 					type="button"
 					aria-label="Logout"
-					title="Logout"
-					class="w-9 h-9 flex items-center justify-center rounded-lg text-[var(--error)] hover:bg-[var(--error)]/10 transition-all cursor-pointer"
+					title={collapsed ? 'Logout' : undefined}
+					class="flex-1 h-9 flex items-center justify-center rounded-lg text-xs font-medium text-[var(--error)] hover:bg-[var(--error)]/10 transition-colors cursor-pointer overflow-hidden"
 					onclick={async () => {
 						try {
 							await auth.logout();
@@ -217,53 +230,17 @@
 						}
 					}}
 				>
-					<span aria-hidden="true" class="material-symbols-outlined" style="font-size: 18px">logout</span>
+					<span aria-hidden="true" class="material-symbols-outlined shrink-0" style="font-size: 16px">logout</span>
+					<span
+						class="whitespace-nowrap overflow-hidden transition-all duration-200 ease-out {collapsed
+							? 'max-w-0 opacity-0 ml-0'
+							: 'max-w-[60px] opacity-100 ml-1.5'}"
+					>
+						Logout
+					</span>
 				</button>
 			</div>
-		{:else}
-			<div class="p-3 space-y-1">
-				<div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)]">
-					<div
-						class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-[var(--on-brand)] shrink-0"
-						style="background: var(--brand-gradient)"
-					>
-						{$auth.user?.email?.[0]?.toUpperCase() || '?'}
-					</div>
-					<div class="flex-1 min-w-0">
-						<p class="text-sm font-medium text-[var(--on-surface)] truncate">{$auth.user?.email}</p>
-						<p class="text-[10px] uppercase tracking-wider text-[var(--on-surface-variant)]">
-							{$auth.user?.role || 'member'}
-						</p>
-					</div>
-				</div>
-				<div class="flex gap-1">
-					<button
-						type="button"
-						class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/50 transition-all cursor-pointer"
-						onclick={() => theme.toggle()}
-					>
-						<span aria-hidden="true" class="material-symbols-outlined" style="font-size: 16px">
-							{$theme === 'light' ? 'dark_mode' : 'light_mode'}
-						</span>
-						{$theme === 'light' ? 'Dark' : 'Light'}
-					</button>
-					<button
-						type="button"
-						class="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-[var(--error)] hover:bg-[var(--error)]/10 transition-all cursor-pointer"
-						onclick={async () => {
-							try {
-								await auth.logout();
-							} finally {
-								window.location.href = '/login';
-							}
-						}}
-					>
-						<span aria-hidden="true" class="material-symbols-outlined" style="font-size: 16px">logout</span>
-						Logout
-					</button>
-				</div>
-			</div>
-		{/if}
+		</div>
 	</aside>
 
 	<main class="flex-1 min-w-0 overflow-auto">
