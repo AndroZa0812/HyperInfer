@@ -10,6 +10,7 @@
     import Breadcrumbs from '#lib/components/Breadcrumbs.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
 
     let team = $state<Team | null>(null);
@@ -421,21 +422,17 @@
             <h2 class="text-xl font-semibold text-[var(--on-surface)]">Add Model Alias</h2>
             <Input id="alias-name" label="Alias" bind:value={aliasName} placeholder="e.g. fast-chat" required />
             <Input id="alias-target" label="Target Model" bind:value={targetModel} placeholder="e.g. gpt-4o-mini" required />
-            <div>
-                <label for="alias-provider" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">
-                    Provider
-                </label>
-                <select
-                    id="alias-provider"
-                    bind:value={aliasProvider}
-                    class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none"
-                >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="ollama">Ollama</option>
-                </select>
-            </div>
+            <Select
+                id="alias-provider"
+                label="Provider"
+                bind:value={aliasProvider}
+                options={[
+                    { value: 'openai', label: 'OpenAI' },
+                    { value: 'anthropic', label: 'Anthropic' },
+                    { value: 'gemini', label: 'Gemini' },
+                    { value: 'ollama', label: 'Ollama' },
+                ]}
+            />
             {#if aliasError}
                 <div class="text-sm text-[var(--error)]">{aliasError}</div>
             {/if}

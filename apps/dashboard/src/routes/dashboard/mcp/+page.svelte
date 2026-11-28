@@ -5,6 +5,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
 
@@ -257,21 +258,13 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label for="mcp-policy-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                            Team
-                        </label>
-                        <select
-                            id="mcp-policy-team"
-                            bind:value={selectedTeamId}
-                            onchange={() => loadTeamPolicy(selectedTeamId)}
-                            class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                        >
-                            {#each teams as team}
-                                <option value={team.id}>{team.name}</option>
-                            {/each}
-                        </select>
-                    </div>
+                    <Select
+                        id="mcp-policy-team"
+                        label="Team"
+                        bind:value={selectedTeamId}
+                        onchange={(v) => loadTeamPolicy(v)}
+                        options={teams.map((t) => ({ value: t.id, label: t.name }))}
+                    />
 
                     <div>
                         <label for="mcp-allow-patterns" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
@@ -382,19 +375,15 @@
 
         <Input label="Server Name" bind:value={newName} placeholder="e.g. github" required />
 
-        <div>
-            <label for="mcp-transport" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                Transport
-            </label>
-            <select
-                id="mcp-transport"
-                bind:value={newTransport}
-                class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-            >
-                <option value="streamable_http">Streamable HTTP</option>
-                <option value="sse">SSE</option>
-            </select>
-        </div>
+        <Select
+            id="mcp-transport"
+            label="Transport"
+            bind:value={newTransport}
+            options={[
+                { value: 'streamable_http', label: 'Streamable HTTP' },
+                { value: 'sse', label: 'SSE' },
+            ]}
+        />
 
         <Input label="Endpoint URL" bind:value={newUrl} placeholder="https://mcp.example.com/mcp" required />
         <Input label="Authorization Header (optional)" bind:value={newAuthHeader} placeholder="e.g. $GITHUB_MCP_TOKEN" />

@@ -9,11 +9,12 @@ test.describe('Routing Deployments', () => {
 		await expect(page.getByRole('heading', { name: 'Routing Deployments' })).toBeVisible();
 
 		// Update Routing Strategy and confirm persistence (HYP-57)
-		await page.getByLabel('Routing Strategy').selectOption('least-busy');
+		await page.getByLabel('Routing Strategy').click();
+		await page.getByRole('option', { name: 'Least Busy' }).click();
 		await page.getByRole('button', { name: 'Save Strategy' }).click();
 		await expect(page.getByText('Strategy saved')).toBeVisible();
 		await page.reload();
-		await expect(page.getByLabel('Routing Strategy')).toHaveValue('least-busy');
+		await expect(page.getByLabel('Routing Strategy')).toContainText('Least Busy');
 
 		// Open Create Deployment modal
 		await page.getByRole('button', { name: 'Add Deployment' }).click();
@@ -21,7 +22,8 @@ test.describe('Routing Deployments', () => {
 		await expect(modal.getByRole('heading', { name: 'Create Deployment' })).toBeVisible();
 
 		await modal.getByLabel('Name', { exact: true }).fill(depName);
-		await modal.getByLabel('Provider').selectOption('openai');
+		await modal.getByLabel('Provider').click();
+		await page.getByRole('option', { name: 'OpenAI' }).click();
 		await modal.getByLabel('Model', { exact: true }).fill('gpt-4');
 		await modal.getByLabel('Model Name Override (optional)').fill('gpt-4o-2024-08-06');
 		await modal.getByLabel('Base URL').fill('https://api.openai.com/v1');

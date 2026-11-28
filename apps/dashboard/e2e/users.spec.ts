@@ -23,7 +23,8 @@ test.describe('Users & Member RBAC', () => {
 		const createDialog = page.getByRole('dialog');
 		await expect(createDialog.getByRole('heading', { name: 'Create User' })).toBeVisible();
 		await createDialog.getByLabel('Email Address').fill(memberEmail);
-		await createDialog.getByLabel('Role').selectOption('member');
+		await createDialog.getByLabel('Role').click();
+		await page.getByRole('option', { name: 'Member' }).click();
 		await createDialog.getByLabel('Initial Password').fill(memberPassword);
 		await createDialog.getByRole('button', { name: 'Create User' }).click();
 		await expect(createDialog).toBeHidden();

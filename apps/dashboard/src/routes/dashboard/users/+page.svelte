@@ -4,6 +4,7 @@
     import type { Team, User } from '#lib/types';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import Card from '@hyperinfer/ui/Card.svelte';
@@ -191,16 +192,15 @@
                         class="h-10 w-full pl-10 pr-4 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none transition-colors text-sm"
                     />
                 </div>
-                <select
-                    aria-label="Filter by team"
+                <Select
+                    ariaLabel="Filter by team"
                     bind:value={teamFilter}
-                    class="h-10 px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                >
-                    <option value="all">All Teams</option>
-                    {#each teams as team}
-                        <option value={team.id}>{team.name}</option>
-                    {/each}
-                </select>
+                    class="w-44"
+                    options={[
+                        { value: 'all', label: 'All Teams' },
+                        ...teams.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                />
             </div>
 
             {#if loading}
@@ -272,33 +272,21 @@
                 </p>
             </div>
             <Input id="user-email" label="Email Address" type="email" bind:value={newEmail} placeholder="member@example.com" required />
-            <div>
-                <label for="user-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">
-                    Team
-                </label>
-                <select
-                    id="user-team"
-                    bind:value={newTeamId}
-                    class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none"
-                >
-                    {#each teams as team}
-                        <option value={team.id}>{team.name}</option>
-                    {/each}
-                </select>
-            </div>
-            <div>
-                <label for="user-role" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">
-                    Role
-                </label>
-                <select
-                    id="user-role"
-                    bind:value={newRole}
-                    class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none"
-                >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                </select>
-            </div>
+            <Select
+                id="user-team"
+                label="Team"
+                bind:value={newTeamId}
+                options={teams.map((t) => ({ value: t.id, label: t.name }))}
+            />
+            <Select
+                id="user-role"
+                label="Role"
+                bind:value={newRole}
+                options={[
+                    { value: 'member', label: 'Member' },
+                    { value: 'admin', label: 'Admin' },
+                ]}
+            />
             <Input
                 id="user-password"
                 label="Initial Password"

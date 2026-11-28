@@ -164,18 +164,13 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input
                         label="Model or Alias"
-                        list="playground-catalog-models"
+                        suggestions={[
+                            ...aliases.map((a) => ({ value: a.alias, label: `Alias → ${a.target_model}` })),
+                            ...deployedModels.map((m) => ({ value: m.id, label: m.owned_by })),
+                        ]}
                         bind:value={model}
                         placeholder={deployedModels.length > 0 || aliases.length > 0 ? 'Select active model or alias' : 'No active deployments yet'}
                     />
-                    <datalist id="playground-catalog-models">
-                        {#each aliases as alias}
-                            <option value={alias.alias}>Alias → {alias.target_model}</option>
-                        {/each}
-                        {#each deployedModels as m}
-                            <option value={m.id}>{m.owned_by}</option>
-                        {/each}
-                    </datalist>
                     <Input label="Virtual API Key" type="password" bind:value={apiKey} placeholder="hi-..." />
                 </div>
 

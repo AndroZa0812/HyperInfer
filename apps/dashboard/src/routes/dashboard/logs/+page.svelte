@@ -6,6 +6,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
@@ -192,66 +193,54 @@
         <form class="space-y-4" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-3 items-end">
                 {#if isAdmin}
-                    <div class="space-y-1.5">
-                        <label for="logs-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Team</label>
-                        <select
-                            id="logs-team"
-                            bind:value={teamFilter}
-                            class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                        >
-                            <option value="">All Teams</option>
-                            {#each teams as t}
-                                <option value={t.id}>{t.name}</option>
-                            {/each}
-                        </select>
-                    </div>
+                    <Select
+                        id="logs-team"
+                        label="Team"
+                        bind:value={teamFilter}
+                        options={[
+                            { value: '', label: 'All Teams' },
+                            ...teams.map((t) => ({ value: t.id, label: t.name })),
+                        ]}
+                    />
                 {/if}
 
-                <div class="space-y-1.5">
-                    <label for="logs-key" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">API Key</label>
-                    <select
-                        id="logs-key"
-                        bind:value={keyFilter}
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                    >
-                        <option value="">All Keys</option>
-                        {#each keys as k}
-                            <option value={k.id}>{k.name || k.id.slice(0, 8)}</option>
-                        {/each}
-                    </select>
-                </div>
+                <Select
+                    id="logs-key"
+                    label="API Key"
+                    bind:value={keyFilter}
+                    options={[
+                        { value: '', label: 'All Keys' },
+                        ...keys.map((k) => ({ value: k.id, label: k.name || k.id.slice(0, 8) })),
+                    ]}
+                />
 
                 <Input id="logs-model" label="Model" bind:value={modelFilter} placeholder="e.g. claude" />
 
-                <div class="space-y-1.5">
-                    <label for="logs-status" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</label>
-                    <select
-                        id="logs-status"
-                        bind:value={statusFilter}
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                    >
-                        <option value="">All Status</option>
-                        <option value="200">200 OK</option>
-                        <option value="400">400 Bad Request</option>
-                        <option value="401">401 Unauthorized</option>
-                        <option value="429">429 Rate Limited</option>
-                        <option value="500">500 Server Error</option>
-                        <option value="502">502 Bad Gateway</option>
-                    </select>
-                </div>
+                <Select
+                    id="logs-status"
+                    label="Status"
+                    bind:value={statusFilter}
+                    options={[
+                        { value: '', label: 'All Status' },
+                        { value: '200', label: '200 OK' },
+                        { value: '400', label: '400 Bad Request' },
+                        { value: '401', label: '401 Unauthorized' },
+                        { value: '429', label: '429 Rate Limited' },
+                        { value: '500', label: '500 Server Error' },
+                        { value: '502', label: '502 Bad Gateway' },
+                    ]}
+                />
 
-                <div class="space-y-1.5">
-                    <label for="logs-cache" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Cache</label>
-                    <select
-                        id="logs-cache"
-                        bind:value={cacheFilter}
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                    >
-                        <option value="all">All</option>
-                        <option value="hit">Cache HIT</option>
-                        <option value="miss">Cache MISS</option>
-                    </select>
-                </div>
+                <Select
+                    id="logs-cache"
+                    label="Cache"
+                    bind:value={cacheFilter}
+                    options={[
+                        { value: 'all', label: 'All' },
+                        { value: 'hit', label: 'Cache HIT' },
+                        { value: 'miss', label: 'Cache MISS' },
+                    ]}
+                />
 
                 <Input id="logs-from" label="From" type="date" bind:value={fromDate} />
                 <Input id="logs-to" label="To" type="date" bind:value={toDate} />

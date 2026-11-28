@@ -7,6 +7,7 @@
     import Button from '@hyperinfer/ui/Button.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
 
     let deployments = $state<Deployment[]>([]);
     let loading = $state(true);
@@ -300,20 +301,13 @@
                 </div>
             </div>
             <div class="flex flex-wrap items-end gap-3 pt-4 xl:pt-0 border-t xl:border-t-0 border-[var(--ghost-border)] shrink-0">
-                <div class="space-y-1.5 flex-1 sm:flex-initial min-w-[180px]">
-                    <label for="routing-strategy" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">
-                        Routing Strategy
-                    </label>
-                    <select
-                        id="routing-strategy"
-                        bind:value={routingStrategy}
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                    >
-                        {#each STRATEGIES as s}
-                            <option value={s.value}>{s.label}</option>
-                        {/each}
-                    </select>
-                </div>
+                <Select
+                    id="routing-strategy"
+                    label="Routing Strategy"
+                    bind:value={routingStrategy}
+                    options={STRATEGIES}
+                    class="flex-1 sm:flex-initial min-w-[180px]"
+                />
                 <Button size="sm" class="h-10 shrink-0" disabled={savingStrategy} onclick={saveStrategy}>
                     {savingStrategy ? 'Saving...' : 'Save Strategy'}
                 </Button>
@@ -384,24 +378,22 @@
             {/if}
             <div class="space-y-4">
                 <Input id="dep-name" label="Name" bind:value={formData.name} />
-                <div class="space-y-1.5">
-                    <label for="dep-provider" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Provider</label>
-                    <select
-                        id="dep-provider"
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                        bind:value={formData.provider}
-                    >
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="gemini">Google Gemini</option>
-                    </select>
-                </div>
-                <Input id="dep-model" label="Model" list="routing-catalog-models" bind:value={formData.model} />
-                <datalist id="routing-catalog-models">
-                    {#each providerCatalogModels as m}
-                        <option value={m.id}>{m.name}</option>
-                    {/each}
-                </datalist>
+                <Select
+                    id="dep-provider"
+                    label="Provider"
+                    bind:value={formData.provider}
+                    options={[
+                        { value: 'openai', label: 'OpenAI' },
+                        { value: 'anthropic', label: 'Anthropic' },
+                        { value: 'gemini', label: 'Google Gemini' },
+                    ]}
+                />
+                <Input
+                    id="dep-model"
+                    label="Model"
+                    suggestions={providerCatalogModels.map((m) => ({ value: m.id, label: m.name }))}
+                    bind:value={formData.model}
+                />
                 {#if matchedCatalogModel}
                     <p class="text-xs text-[var(--on-surface-variant)] -mt-2">
                         Catalog ({catalogSource || matchedCatalogModel.source}):

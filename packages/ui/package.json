@@ -13,6 +13,7 @@
 		"./Card.svelte": "./src/Card.svelte",
 		"./Modal.svelte": "./src/Modal.svelte",
 		"./Input.svelte": "./src/Input.svelte",
+		"./Select.svelte": "./src/Select.svelte",
 		"./Badge.svelte": "./src/Badge.svelte",
 		"./theme.css": "./src/theme.css"
 	},

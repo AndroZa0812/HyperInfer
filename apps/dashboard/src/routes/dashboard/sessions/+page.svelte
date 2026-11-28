@@ -10,6 +10,7 @@
     } from '#lib/types';
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
@@ -246,64 +247,39 @@
     <Card>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             {#if isAdmin}
-                <div class="space-y-1.5">
-                    <label
-                        for="sessions-team-filter"
-                        class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
-                    >
-                        Team
-                    </label>
-                    <select
-                        id="sessions-team-filter"
-                        bind:value={teamFilter}
-                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                    >
-                        <option value="">All Teams</option>
-                        {#each teams as t}
-                            <option value={t.id}>{t.name}</option>
-                        {/each}
-                    </select>
-                </div>
+                <Select
+                    id="sessions-team-filter"
+                    label="Team"
+                    bind:value={teamFilter}
+                    options={[
+                        { value: '', label: 'All Teams' },
+                        ...teams.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                />
             {/if}
 
-            <div class="space-y-1.5">
-                <label
-                    for="sessions-key-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
-                >
-                    Virtual API Key
-                </label>
-                <select
-                    id="sessions-key-filter"
-                    bind:value={keyFilter}
-                    class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                >
-                    <option value="">All Keys</option>
-                    {#each keys as k}
-                        <option value={k.id}>{k.name || k.id.slice(0, 8)}</option>
-                    {/each}
-                </select>
-            </div>
+            <Select
+                id="sessions-key-filter"
+                label="Virtual API Key"
+                bind:value={keyFilter}
+                options={[
+                    { value: '', label: 'All Keys' },
+                    ...keys.map((k) => ({ value: k.id, label: k.name || k.id.slice(0, 8) })),
+                ]}
+            />
 
-            <div class="space-y-1.5">
-                <label
-                    for="sessions-status-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
-                >
-                    Status
-                </label>
-                <select
-                    id="sessions-status-filter"
-                    bind:value={statusFilter}
-                    class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
-                >
-                    <option value="">All Statuses</option>
-                    <option value="running">Running</option>
-                    <option value="completed">Completed</option>
-                    <option value="failed">Failed</option>
-                    <option value="cancelled">Cancelled</option>
-                </select>
-            </div>
+            <Select
+                id="sessions-status-filter"
+                label="Status"
+                bind:value={statusFilter}
+                options={[
+                    { value: '', label: 'All Statuses' },
+                    { value: 'running', label: 'Running' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'failed', label: 'Failed' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                ]}
+            />
 
             <div class="space-y-1.5">
                 <label

@@ -6,6 +6,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import TabBar from '#lib/components/TabBar.svelte';
 
@@ -476,17 +477,15 @@
 
                         {#if redaction.reversible}
                             <div class="max-w-xs">
-                                <label for="placeholder-format" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                    Placeholder Format
-                                </label>
-                                <select
+                                <Select
                                     id="placeholder-format"
+                                    label="Placeholder Format"
                                     bind:value={redaction.placeholder_format}
-                                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                >
-                                    <option value="indexed">Indexed ([REDACTED_API_KEY_1])</option>
-                                    <option value="uuid">UUID ([REDACTED_API_KEY_a1b2c3d4])</option>
-                                </select>
+                                    options={[
+                                        { value: 'indexed', label: 'Indexed ([REDACTED_API_KEY_1])' },
+                                        { value: 'uuid', label: 'UUID ([REDACTED_API_KEY_a1b2c3d4])' },
+                                    ]}
+                                />
                             </div>
                         {/if}
                     </div>
@@ -507,32 +506,24 @@
 
                         {#if redaction.smart.enabled}
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <label for="smart-backend" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                        Backend
-                                    </label>
-                                    <select
-                                        id="smart-backend"
-                                        bind:value={redaction.smart.backend}
-                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                    >
-                                        <option value="presidio">Microsoft Presidio Analyzer</option>
-                                        <option value="llm">Local / Trusted LLM</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="smart-fail-mode" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                        Failure Mode
-                                    </label>
-                                    <select
-                                        id="smart-fail-mode"
-                                        bind:value={redaction.smart.fail_mode}
-                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                    >
-                                        <option value="fallback_regex">Fallback to Regex</option>
-                                        <option value="fail_closed">Fail Closed (HTTP 503)</option>
-                                    </select>
-                                </div>
+                                <Select
+                                    id="smart-backend"
+                                    label="Backend"
+                                    bind:value={redaction.smart.backend}
+                                    options={[
+                                        { value: 'presidio', label: 'Microsoft Presidio Analyzer' },
+                                        { value: 'llm', label: 'Local / Trusted LLM' },
+                                    ]}
+                                />
+                                <Select
+                                    id="smart-fail-mode"
+                                    label="Failure Mode"
+                                    bind:value={redaction.smart.fail_mode}
+                                    options={[
+                                        { value: 'fallback_regex', label: 'Fallback to Regex' },
+                                        { value: 'fail_closed', label: 'Fail Closed (HTTP 503)' },
+                                    ]}
+                                />
                                 <Input label="Timeout (ms)" type="number" bind:value={smartTimeoutText} />
                             </div>
 
