@@ -208,13 +208,13 @@
             { label: team.name }
         ]} />
 
-        <div class="flex items-center justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-4">
             <div class="flex items-center gap-3">
-                <h1 class="text-3xl font-bold text-[var(--on-surface)]">{team.name}</h1>
+                <h1 class="text-2xl font-bold text-[var(--on-surface)]">{team.name}</h1>
                 <Badge variant="info" label="Admin" />
             </div>
             {#if isAdmin}
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2">
                     <Button variant="secondary" size="sm" onclick={openEditTeam}>
                         <span class="material-symbols-outlined" style="font-size: 18px">edit</span>
                         Edit Team
@@ -229,7 +229,7 @@
             {/if}
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard icon="vpn_key" label="Total Keys" value={String(keys.length)} trend="API keys configured" trendDirection="neutral" />
             <StatCard icon="sensors" label="Active Keys" value={String(activeKeys)} trend={`${activeKeys > 0 ? Math.round((activeKeys / keys.length) * 100) : 0}% active`} trendDirection="up" />
             <StatCard icon="data_usage" label="Usage This Month" value={totalTokens.toLocaleString()} trend="Tokens processed" trendDirection="neutral" />
@@ -269,20 +269,20 @@
 
             <Card>
                 <div class="space-y-6">
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-[180px] flex-1">
                             <h2 class="text-lg font-semibold text-[var(--on-surface)]">Rate-Limit Quotas</h2>
                             <p class="text-sm text-[var(--on-surface-variant)]">Per-minute request and token ceilings</p>
                         </div>
                         {#if isAdmin}
-                            <Button variant="secondary" size="sm" onclick={openQuotaModal}>
+                            <Button variant="secondary" size="sm" class="shrink-0" onclick={openQuotaModal}>
                                 Configure Quotas
                             </Button>
                         {/if}
                     </div>
 
                     {#if quota}
-                        <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="p-4 rounded-lg bg-[var(--surface-container-low)]">
                                 <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">RPM Limit</p>
                                 <p class="text-2xl font-bold text-[var(--on-surface)] mt-1">{quota.rpm_limit.toLocaleString()}</p>
@@ -300,13 +300,13 @@
         </div>
 
         <Card padding="none">
-            <div class="p-5 flex items-center justify-between border-b border-[var(--ghost-border)]">
-                <div>
+            <div class="p-5 flex flex-wrap items-start justify-between gap-3 border-b border-[var(--ghost-border)]">
+                <div class="min-w-[200px] flex-1">
                     <h2 class="text-lg font-semibold text-[var(--on-surface)]">Model Aliases</h2>
                     <p class="text-sm text-[var(--on-surface-variant)]">Map friendly model names to provider targets for this team.</p>
                 </div>
                 {#if isAdmin}
-                    <Button size="sm" onclick={openAliasModal}>
+                    <Button size="sm" class="shrink-0" onclick={openAliasModal}>
                         <span class="material-symbols-outlined" style="font-size: 18px">add</span>
                         Add Alias
                     </Button>
@@ -348,7 +348,7 @@
             {/if}
         </Card>
 
-        <div class="flex gap-3">
+        <div class="flex flex-wrap gap-3">
             <Button href="/dashboard/teams/{team.id}/keys" variant="secondary" size="sm">
                 <span class="material-symbols-outlined" style="font-size: 18px">vpn_key</span>
                 Manage Keys

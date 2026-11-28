@@ -200,8 +200,8 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
             <h1 class="text-2xl font-bold text-[var(--on-surface)]">
                 Agent Sessions
             </h1>
@@ -209,13 +209,13 @@
                 Read-only fleet observability and redacted trajectory governance across HyperCode runs.
             </p>
         </div>
-        <Button variant="secondary" size="sm" onclick={loadSessions}>
+        <Button variant="secondary" size="sm" class="shrink-0" onclick={loadSessions}>
             <span class="material-symbols-outlined mr-1" style="font-size: 16px">refresh</span>
             Refresh
         </Button>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
         <StatCard
             label="Matching Sessions"
             value={total.toLocaleString()}

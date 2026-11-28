@@ -170,14 +170,14 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex items-center justify-between">
-        <div>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
             <h1 class="text-2xl font-bold text-[var(--on-surface)]">MCP Gateway</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Manage upstream MCP servers, inspect discovered tools, and configure per-team regex allow/deny policies.
             </p>
         </div>
-        <Button onclick={() => { upstreamError = ''; showAddModal = true; }}>
+        <Button class="shrink-0" onclick={() => { upstreamError = ''; showAddModal = true; }}>
             <span class="material-symbols-outlined" style="font-size: 18px">add</span>
             Add Upstream Server
         </Button>
@@ -192,8 +192,8 @@
     {:else}
         <!-- Upstream MCP Servers -->
         <Card padding="none">
-            <div class="px-6 py-4 border-b border-[var(--ghost-border)] flex items-center justify-between">
-                <div>
+            <div class="px-6 py-4 border-b border-[var(--ghost-border)] flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-[200px] flex-1">
                     <h2 class="text-base font-semibold text-[var(--on-surface)]">Upstream MCP Servers</h2>
                     <p class="text-xs text-[var(--on-surface-variant)]">
                         Tools are namespaced as <code class="font-mono">{'{server}__{tool}'}</code>. Auth headers are injected server-side and never returned to clients.
@@ -327,14 +327,14 @@
             <!-- Discovered Tools & Catalog Meta-Tools -->
             <Card>
                 <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-[180px] flex-1">
                             <h2 class="text-base font-semibold text-[var(--on-surface)]">Discovered Tools</h2>
                             <p class="text-xs text-[var(--on-surface-variant)]">
                                 Active tools available across local host and enabled upstreams.
                             </p>
                         </div>
-                        <Button variant="secondary" size="sm" disabled={refreshingTools} onclick={refreshTools}>
+                        <Button variant="secondary" size="sm" class="shrink-0" disabled={refreshingTools} onclick={refreshTools}>
                             {refreshingTools ? 'Refreshing...' : 'Refresh'}
                         </Button>
                     </div>

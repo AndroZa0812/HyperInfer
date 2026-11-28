@@ -41,7 +41,7 @@
             <span class="material-symbols-outlined animate-spin text-[var(--primary)]" style="font-size: 32px">progress_activity</span>
         </div>
     {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard icon="speed" label="Total Requests" value={summary ? summary.total_requests.toLocaleString() : '0'} />
             <StatCard icon="input" label="Input Tokens" value={summary ? summary.total_input_tokens.toLocaleString() : '0'} />
             <StatCard icon="output" label="Output Tokens" value={summary ? summary.total_output_tokens.toLocaleString() : '0'} />

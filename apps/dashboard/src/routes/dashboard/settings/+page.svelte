@@ -324,12 +324,12 @@
         <Card>
             <div class="space-y-6">
                 <h2 class="text-lg font-semibold text-[var(--on-surface)]">Appearance</h2>
-                <div class="flex items-center justify-between">
+                <div class="flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <p class="text-sm font-medium text-[var(--on-surface)]">Theme</p>
                         <p class="text-xs text-[var(--on-surface-variant)]">Choose your preferred color scheme</p>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <button
                             class="px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer {$theme === 'light' ? 'text-[var(--on-primary)]' : 'bg-[var(--surface-container)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'}"
                             style={$theme === 'light' ? 'background: linear-gradient(135deg, var(--primary), var(--primary-container))' : ''}
@@ -571,14 +571,14 @@
                         <p class="text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">
                             Live Redaction Preview
                         </p>
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap gap-2">
                             <input
                                 type="text"
                                 bind:value={testSample}
                                 placeholder="Paste sample text (e.g. alice@example.com SECRET-1234)"
-                                class="flex-1 px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs font-mono"
+                                class="h-10 flex-1 min-w-[200px] px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-xs font-mono transition-colors duration-200"
                             />
-                            <Button variant="secondary" size="sm" onclick={runRedactionTest}>
+                            <Button variant="secondary" size="sm" class="h-10 shrink-0" onclick={runRedactionTest}>
                                 Test Redaction
                             </Button>
                         </div>

@@ -160,14 +160,14 @@
     </Card>
 {:else}
     <div class="space-y-8">
-        <div class="flex items-center justify-between">
-            <div>
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="min-w-[220px] flex-1">
                 <h1 class="text-2xl font-bold text-[var(--on-surface)]">Users</h1>
                 <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                     Provision accounts, assign teams, and manage admin/member roles.
                 </p>
             </div>
-            <Button onclick={openCreateModal}>
+            <Button class="shrink-0" onclick={openCreateModal}>
                 <span class="material-symbols-outlined" style="font-size: 18px">person_add</span>
                 Create User
             </Button>
@@ -180,7 +180,7 @@
         {/if}
 
         <Card padding="none">
-            <div class="p-4 flex flex-wrap items-center gap-4">
+            <div class="p-4 flex flex-wrap items-center gap-3">
                 <div class="flex-1 min-w-[200px] relative">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)]" style="font-size: 20px">
                         search
@@ -188,13 +188,13 @@
                     <input
                         bind:value={searchQuery}
                         placeholder="Search users by email..."
-                        class="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors text-sm"
+                        class="h-10 w-full pl-10 pr-4 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none transition-colors text-sm"
                     />
                 </div>
                 <select
                     aria-label="Filter by team"
                     bind:value={teamFilter}
-                    class="px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    class="h-10 px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 >
                     <option value="all">All Teams</option>
                     {#each teams as team}

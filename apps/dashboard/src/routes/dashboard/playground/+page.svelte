@@ -161,7 +161,7 @@
                     {/if}
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input
                         label="Model or Alias"
                         list="playground-catalog-models"
@@ -276,16 +276,16 @@
         </Card>
 
         <!-- Multi-SDK Quickstart Snippets -->
-        <Card>
+        <Card class="min-w-0">
             <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-[180px] flex-1">
                         <h2 class="text-base font-semibold text-[var(--on-surface)]">Connect SDK (Drop-In)</h2>
                         <p class="text-xs text-[var(--on-surface-variant)]">
                             Point any supported SDK at this HyperInfer gateway with a 1-line base URL change.
                         </p>
                     </div>
-                    <Button variant="ghost" size="sm" onclick={copySnippet}>
+                    <Button variant="ghost" size="sm" class="shrink-0" onclick={copySnippet}>
                         <span class="material-symbols-outlined" style="font-size: 16px">{copiedSnippet ? 'check' : 'content_copy'}</span>
                         {copiedSnippet ? 'Copied!' : 'Copy'}
                     </Button>
@@ -311,7 +311,7 @@
 
                 <pre class="p-4 rounded-lg bg-[var(--surface-container-low)] text-xs font-mono text-[var(--on-surface)] overflow-x-auto leading-relaxed">{snippetCode}</pre>
 
-                <div class="pt-2 border-t border-[var(--ghost-border)] grid grid-cols-2 gap-2 text-xs text-[var(--on-surface-variant)]">
+                <div class="pt-2 border-t border-[var(--ghost-border)] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[var(--on-surface-variant)]">
                     <div><span class="font-semibold text-[var(--on-surface)]">Chat:</span> <code>/v1/chat/completions</code></div>
                     <div><span class="font-semibold text-[var(--on-surface)]">Responses:</span> <code>/v1/responses</code></div>
                     <div><span class="font-semibold text-[var(--on-surface)]">Anthropic:</span> <code>/v1/messages</code></div>

@@ -9,6 +9,7 @@
 	}
 
 	let { children }: Props = $props();
+	let mobileOpen = $state(false);
 
 	const navItems = [
 		{ path: '/dashboard', label: 'Overview', icon: 'dashboard' },
@@ -39,8 +40,37 @@
 	}
 </script>
 
-<div class="flex h-screen">
-	<aside class="w-[260px] flex flex-col shrink-0 relative border-r border-[var(--ghost-border)]" style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
+<div class="flex flex-col md:flex-row h-screen overflow-hidden">
+	<header class="md:hidden flex items-center justify-between px-4 py-3 border-b border-[var(--ghost-border)] bg-[var(--surface-container-lowest)] shrink-0 z-20">
+		<div class="flex items-center gap-2.5">
+			<div class="w-8 h-8 rounded-lg flex items-center justify-center shadow-xs" style="background: var(--brand-gradient)">
+				<span class="material-symbols-outlined text-[var(--on-brand)]" style="font-size: 18px">bolt</span>
+			</div>
+			<span class="text-sm font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">HyperInfer</span>
+		</div>
+		<button
+			type="button"
+			aria-label="Toggle navigation"
+			class="p-1.5 rounded-lg text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)] cursor-pointer"
+			onclick={() => (mobileOpen = !mobileOpen)}
+		>
+			<span class="material-symbols-outlined" style="font-size: 22px">{mobileOpen ? 'close' : 'menu'}</span>
+		</button>
+	</header>
+
+	{#if mobileOpen}
+		<button
+			type="button"
+			aria-label="Close navigation"
+			class="md:hidden fixed inset-0 bg-black/40 z-30 cursor-default"
+			onclick={() => (mobileOpen = false)}
+		></button>
+	{/if}
+
+	<aside
+		class="w-[260px] flex flex-col shrink-0 border-r border-[var(--ghost-border)] z-40 transition-transform duration-200 fixed inset-y-0 left-0 md:static {mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}"
+		style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);"
+	>
 		<div class="absolute inset-0 bg-[var(--surface-variant)]/60 backdrop-blur-xl -z-10"></div>
 
 		<div class="p-6 pb-4">
@@ -55,12 +85,13 @@
 			</div>
 		</div>
 
-		<nav class="flex-1 px-3 space-y-1">
+		<nav class="flex-1 px-3 space-y-1 overflow-y-auto">
 			{#each filteredItems as item}
 				{@const active = isActive(item.path)}
 				<a
 					href={item.path}
-				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group
+					onclick={() => (mobileOpen = false)}
+					class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group
 					{active
 						? 'text-[var(--primary)] bg-[var(--primary)]/10 font-semibold'
 						: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/70'}"
@@ -73,7 +104,7 @@
 
 		<div class="p-3 space-y-1">
 			<div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)]">
-				<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-[var(--on-brand)]" style="background: var(--brand-gradient)">
+				<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-[var(--on-brand)] shrink-0" style="background: var(--brand-gradient)">
 					{$auth.user?.email?.[0]?.toUpperCase() || '?'}
 				</div>
 				<div class="flex-1 min-w-0">
@@ -100,8 +131,8 @@
 		</div>
 	</aside>
 
-	<main class="flex-1 overflow-auto">
-		<div class="p-8 max-w-[1400px] mx-auto">
+	<main class="flex-1 min-w-0 overflow-auto">
+		<div class="p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto">
 			{@render children()}
 		</div>
 	</main>

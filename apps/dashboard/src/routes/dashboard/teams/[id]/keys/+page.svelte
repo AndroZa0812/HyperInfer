@@ -86,9 +86,9 @@
         { label: 'API Keys' }
     ]} />
 
-    <div class="flex items-center justify-between">
-        <h1 class="text-3xl font-bold text-[var(--on-surface)]">API Keys</h1>
-        <Button onclick={() => showCreate = true}>
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <h1 class="text-2xl font-bold text-[var(--on-surface)]">API Keys</h1>
+        <Button class="shrink-0" onclick={() => showCreate = true}>
             <span class="material-symbols-outlined" style="font-size: 18px">add</span>
             Create Key
         </Button>

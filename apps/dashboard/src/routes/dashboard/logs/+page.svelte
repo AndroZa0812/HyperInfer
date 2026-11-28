@@ -161,15 +161,15 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
             <h1 class="text-2xl font-bold text-[var(--on-surface)]">Request Logs</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Inspect request latency, token breakdown, weighted cost, cache hits, and failover telemetry. Raw prompts/responses are omitted to protect redacted PII.
             </p>
         </div>
-        <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-[var(--on-surface-variant)] cursor-pointer select-none">
+        <div class="flex items-center gap-3 shrink-0">
+            <label class="flex items-center gap-2 text-xs font-medium text-[var(--on-surface-variant)] cursor-pointer select-none whitespace-nowrap">
                 <input type="checkbox" bind:checked={liveTail} />
                 Live Tail (5s)
             </label>
@@ -180,7 +180,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard icon="receipt_long" label="Matching Requests" value={total.toLocaleString()} />
         <StatCard icon="timer" label="Avg Latency (Page)" value={`${avgLatencyMs}ms`} />
         <StatCard icon="bolt" label="Cache Hit Rate" value={`${cacheHitPct}%`} />
@@ -357,7 +357,7 @@
                 <Badge variant={statusVariant(selectedLog.status_code)} label={`HTTP ${selectedLog.status_code}`} />
             </div>
 
-            <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div class="p-3 rounded-lg bg-[var(--surface-container-low)]">
                     <p class="text-[var(--on-surface-variant)]">Model</p>
                     <p class="font-mono font-semibold text-[var(--on-surface)] mt-0.5">{selectedLog.model}</p>
