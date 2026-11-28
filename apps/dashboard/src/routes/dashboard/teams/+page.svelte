@@ -51,8 +51,8 @@
 <div class="space-y-8">
     <div class="flex items-center justify-between">
         <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">Organization</p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">Teams</h1>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Teams</h1>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">Manage organizational teams, monthly budgets, and rate-limit quotas.</p>
         </div>
         <Button onclick={() => showCreate = true}>
             <span class="material-symbols-outlined" style="font-size: 18px">add</span>

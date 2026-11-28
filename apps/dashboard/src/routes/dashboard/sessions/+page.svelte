@@ -202,7 +202,7 @@
 <div class="space-y-8">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">
                 Agent Sessions
             </h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
@@ -246,17 +246,17 @@
     <Card>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             {#if isAdmin}
-                <div>
+                <div class="space-y-1.5">
                     <label
                         for="sessions-team-filter"
-                        class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
+                        class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
                     >
                         Team
                     </label>
                     <select
                         id="sessions-team-filter"
                         bind:value={teamFilter}
-                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                     >
                         <option value="">All Teams</option>
                         {#each teams as t}
@@ -266,17 +266,17 @@
                 </div>
             {/if}
 
-            <div>
+            <div class="space-y-1.5">
                 <label
                     for="sessions-key-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
+                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
                 >
                     Virtual API Key
                 </label>
                 <select
                     id="sessions-key-filter"
                     bind:value={keyFilter}
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 >
                     <option value="">All Keys</option>
                     {#each keys as k}
@@ -285,17 +285,17 @@
                 </select>
             </div>
 
-            <div>
+            <div class="space-y-1.5">
                 <label
                     for="sessions-status-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
+                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
                 >
                     Status
                 </label>
                 <select
                     id="sessions-status-filter"
                     bind:value={statusFilter}
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 >
                     <option value="">All Statuses</option>
                     <option value="running">Running</option>
@@ -305,10 +305,10 @@
                 </select>
             </div>
 
-            <div>
+            <div class="space-y-1.5">
                 <label
                     for="sessions-model-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
+                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
                 >
                     Model
                 </label>
@@ -317,7 +317,7 @@
                     type="text"
                     bind:value={modelFilter}
                     placeholder="e.g. gpt-4o, claude"
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    class="h-10 w-full px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 />
             </div>
         </div>

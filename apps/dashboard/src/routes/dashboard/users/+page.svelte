@@ -162,10 +162,7 @@
     <div class="space-y-8">
         <div class="flex items-center justify-between">
             <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                    Access Control
-                </p>
-                <h1 class="text-3xl font-bold text-[var(--on-surface)]">Users</h1>
+                <h1 class="text-2xl font-bold text-[var(--on-surface)]">Users</h1>
                 <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                     Provision accounts, assign teams, and manage admin/member roles.
                 </p>

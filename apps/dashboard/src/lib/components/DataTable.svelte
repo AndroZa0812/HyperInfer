@@ -22,7 +22,7 @@
 	}: Props = $props();
 </script>
 
-<div class="bg-[var(--surface-container-lowest)] rounded-xl overflow-hidden">
+<div class="bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] shadow-[var(--card-shadow)] rounded-xl overflow-hidden">
 	{#if rows.length === 0}
 		<div class="p-8 text-center text-[var(--on-surface-variant)]">
 			{emptyMessage}

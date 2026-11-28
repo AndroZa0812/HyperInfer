@@ -283,7 +283,7 @@
 
 <div class="space-y-8 max-w-4xl">
     <div>
-        <h1 class="text-3xl font-bold text-[var(--on-surface)]">Settings</h1>
+        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Settings</h1>
         <p class="text-sm text-[var(--on-surface-variant)] mt-1">Manage your account settings and technical preferences.</p>
     </div>
 
@@ -296,7 +296,7 @@
                 <p class="text-sm text-[var(--on-surface-variant)]">Your account identity and team membership.</p>
 
                 <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-primary)]" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
+                    <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-brand)]" style="background: var(--brand-gradient)">
                         {$auth.user?.email?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div>

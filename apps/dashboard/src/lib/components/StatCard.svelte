@@ -30,7 +30,7 @@
 	};
 </script>
 
-<div class="bg-[var(--surface-container-lowest)] rounded-xl p-5 space-y-3 {className}">
+<div class="bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] shadow-[var(--card-shadow)] rounded-xl p-5 space-y-3 {className}">
 	<div class="flex items-center justify-between">
 		{#if icon}
 			<div class="w-10 h-10 rounded-lg bg-[var(--surface-container)] flex items-center justify-center">

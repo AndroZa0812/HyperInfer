@@ -58,7 +58,7 @@
 		bind:value
 		{oninput}
 		{onblur}
-		class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 transition-colors duration-200 outline-none focus:bg-[var(--surface-container)] {error ? 'border-b-[var(--error)]' : 'border-b-[var(--outline-variant)] focus:border-b-[var(--primary)]'}"
+		class="h-10 w-full {type === 'date' ? 'px-3' : 'px-3.5'} text-sm bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border transition-colors duration-200 outline-none focus:bg-[var(--surface-container-lowest)] {error ? 'border-[var(--error)]' : 'border-[var(--outline-variant)] focus:border-[var(--primary)]'}"
 	/>
 	{#if error}
 		<p class="text-xs text-[var(--error)]">{error}</p>

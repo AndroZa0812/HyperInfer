@@ -172,10 +172,7 @@
 <div class="space-y-8">
     <div class="flex items-center justify-between">
         <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                Tool Multiplexing
-            </p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">MCP Gateway</h1>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">MCP Gateway</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Manage upstream MCP servers, inspect discovered tools, and configure per-team regex allow/deny policies.
             </p>

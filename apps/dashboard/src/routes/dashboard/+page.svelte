@@ -49,17 +49,14 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                Control Plane
-            </p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">Overview</h1>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Overview</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Live gateway usage, credentials, and organization summary.
             </p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2 shrink-0">
             <Button href="/dashboard/keys" size="sm">
                 <span class="material-symbols-outlined" style="font-size: 18px">vpn_key</span>
                 Manage Keys
@@ -80,7 +77,7 @@
             </span>
         </div>
     {:else}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <StatCard
                 icon="speed"
                 label="Total Requests"
@@ -112,10 +109,10 @@
         </div>
 
         {#if isAdmin}
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex-1 min-w-[180px]">
                             <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">
                                 Organization
                             </p>
@@ -126,15 +123,15 @@
                                 Manage budgets, rate-limit quotas, and model aliases.
                             </p>
                         </div>
-                        <Button href="/dashboard/teams" variant="secondary" size="sm">
+                        <Button href="/dashboard/teams" variant="secondary" size="sm" class="shrink-0">
                             View Teams
                         </Button>
                     </div>
                 </Card>
 
                 <Card>
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div class="flex-1 min-w-[180px]">
                             <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">
                                 Access Control
                             </p>
@@ -145,7 +142,7 @@
                                 Provision accounts and manage admin/member roles.
                             </p>
                         </div>
-                        <Button href="/dashboard/users" variant="secondary" size="sm">
+                        <Button href="/dashboard/users" variant="secondary" size="sm" class="shrink-0">
                             Manage Users
                         </Button>
                     </div>
@@ -177,7 +174,7 @@
                             {/if}
                         </div>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <Button href="/dashboard/playground" variant="secondary" size="sm">
                             <span class="material-symbols-outlined" style="font-size: 18px">terminal</span>
                             Open Playground

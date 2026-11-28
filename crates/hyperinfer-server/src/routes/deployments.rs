@@ -13,6 +13,7 @@ use crate::state::AppState;
 
 #[derive(Deserialize)]
 pub struct ListDeploymentsQuery {
+    #[serde(default)]
     pub model: String,
     pub is_active: Option<bool>,
 }

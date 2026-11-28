@@ -326,8 +326,11 @@ where
     catalog_state.spawn_background_load();
 
     let catalog_public_router = Router::new()
-        .route("/v1/models", get(catalog::list_openai_models))
-        .with_state(catalog_state.clone());
+        .route("/v1/models", get(catalog::list_openai_models::<D>))
+        .with_state(catalog::ModelsRouteState {
+            db: state.db.clone(),
+            catalog: catalog_state.clone(),
+        });
 
     let catalog_admin_router = Router::new()
         .route("/v1/admin/catalog", get(catalog::get_admin_catalog))

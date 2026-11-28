@@ -163,10 +163,7 @@
 <div class="space-y-8">
     <div class="flex flex-wrap items-center justify-between gap-4">
         <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                Gateway Observability
-            </p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">Request Logs</h1>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Request Logs</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Inspect request latency, token breakdown, weighted cost, cache hits, and failover telemetry. Raw prompts/responses are omitted to protect redacted PII.
             </p>
@@ -193,14 +190,14 @@
     <!-- Filter Bar -->
     <Card>
         <form class="space-y-4" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-3 items-end">
                 {#if isAdmin}
-                    <div>
-                        <label for="logs-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Team</label>
+                    <div class="space-y-1.5">
+                        <label for="logs-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Team</label>
                         <select
                             id="logs-team"
                             bind:value={teamFilter}
-                            class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                            class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                         >
                             <option value="">All Teams</option>
                             {#each teams as t}
@@ -210,12 +207,12 @@
                     </div>
                 {/if}
 
-                <div>
-                    <label for="logs-key" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">API Key</label>
+                <div class="space-y-1.5">
+                    <label for="logs-key" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">API Key</label>
                     <select
                         id="logs-key"
                         bind:value={keyFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                     >
                         <option value="">All Keys</option>
                         {#each keys as k}
@@ -226,12 +223,12 @@
 
                 <Input id="logs-model" label="Model" bind:value={modelFilter} placeholder="e.g. claude" />
 
-                <div>
-                    <label for="logs-status" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Status</label>
+                <div class="space-y-1.5">
+                    <label for="logs-status" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</label>
                     <select
                         id="logs-status"
                         bind:value={statusFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                     >
                         <option value="">All Status</option>
                         <option value="200">200 OK</option>
@@ -243,12 +240,12 @@
                     </select>
                 </div>
 
-                <div>
-                    <label for="logs-cache" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Cache</label>
+                <div class="space-y-1.5">
+                    <label for="logs-cache" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Cache</label>
                     <select
                         id="logs-cache"
                         bind:value={cacheFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                        class="h-10 w-full px-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                     >
                         <option value="all">All</option>
                         <option value="hit">Cache HIT</option>
@@ -256,14 +253,12 @@
                     </select>
                 </div>
 
-                <div class="grid grid-cols-2 gap-2">
-                    <Input id="logs-from" label="From" type="date" bind:value={fromDate} />
-                    <Input id="logs-to" label="To" type="date" bind:value={toDate} />
-                </div>
+                <Input id="logs-from" label="From" type="date" bind:value={fromDate} />
+                <Input id="logs-to" label="To" type="date" bind:value={toDate} />
             </div>
 
             <div class="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onclick={resetFilters}>Reset</Button>
+                <Button variant="secondary" size="sm" onclick={resetFilters}>Reset</Button>
                 <Button type="submit" size="sm">Apply Filters</Button>
             </div>
         </form>

@@ -40,13 +40,13 @@
 </script>
 
 <div class="flex h-screen">
-	<aside class="w-[260px] flex flex-col shrink-0 relative" style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
+	<aside class="w-[260px] flex flex-col shrink-0 relative border-r border-[var(--ghost-border)]" style="background: var(--surface-variant); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);">
 		<div class="absolute inset-0 bg-[var(--surface-variant)]/60 backdrop-blur-xl -z-10"></div>
 
 		<div class="p-6 pb-4">
 			<div class="flex items-center gap-3">
-				<div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
-					<span class="material-symbols-outlined text-[var(--on-primary)]" style="font-size: 20px">bolt</span>
+				<div class="w-9 h-9 rounded-lg flex items-center justify-center shadow-xs" style="background: var(--brand-gradient)">
+					<span class="material-symbols-outlined text-[var(--on-brand)]" style="font-size: 20px">bolt</span>
 				</div>
 				<div>
 					<h1 class="text-base font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">HyperInfer</h1>
@@ -62,8 +62,8 @@
 					href={item.path}
 				class="flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group
 					{active
-						? 'text-[var(--primary)] bg-[var(--primary)]/8'
-						: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/50'}"
+						? 'text-[var(--primary)] bg-[var(--primary)]/10 font-semibold'
+						: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]/70'}"
 				>
 					<span class="material-symbols-outlined transition-all duration-200 {active ? 'fill-1' : ''}" style="font-size: 20px">{item.icon}</span>
 					<span class="text-sm font-medium">{item.label}</span>
@@ -72,8 +72,8 @@
 		</nav>
 
 		<div class="p-3 space-y-1">
-			<div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--surface-container-lowest)]/50">
-				<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-[var(--on-primary)]" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
+			<div class="flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)]">
+				<div class="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold text-[var(--on-brand)]" style="background: var(--brand-gradient)">
 					{$auth.user?.email?.[0]?.toUpperCase() || '?'}
 				</div>
 				<div class="flex-1 min-w-0">

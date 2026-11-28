@@ -149,8 +149,7 @@
 <div class="space-y-8">
     <div class="flex items-center justify-between">
         <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">Security Infrastructure</p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">API Keys</h1>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">API Keys</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">Manage authentication credentials for your production and development clusters.</p>
         </div>
         <Button onclick={() => showCreate = true}>

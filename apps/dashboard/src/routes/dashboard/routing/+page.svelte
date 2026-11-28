@@ -248,7 +248,10 @@
 
 <div class="space-y-6">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Routing Deployments</h1>
+        <div>
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Routing Deployments</h1>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">Configure upstream provider deployments, routing strategies, and live model catalog sync.</p>
+        </div>
         <div class="flex gap-2">
             <input
                 type="text"
