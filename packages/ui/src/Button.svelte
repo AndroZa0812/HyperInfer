@@ -23,11 +23,11 @@
 		class: className = ''
 	}: Props = $props();
 
-	const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 cursor-pointer select-none';
+	const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 cursor-pointer select-none whitespace-nowrap';
 
 	const variants = {
-		primary: 'text-[var(--on-primary)] shadow-sm hover:opacity-90 active:scale-[0.98]',
-		secondary: 'bg-transparent text-[var(--primary)] hover:bg-[var(--surface-container)] active:scale-[0.98]',
+		primary: 'text-[var(--on-brand)] shadow-sm hover:brightness-110 active:scale-[0.98]',
+		secondary: 'bg-[var(--surface-container-lowest)] border border-[var(--outline-variant)] text-[var(--on-surface)] shadow-2xs hover:bg-[var(--surface-container)] hover:border-[var(--outline)] active:scale-[0.98]',
 		ghost: 'bg-transparent text-[var(--on-surface-variant)] hover:bg-[var(--surface-container)] hover:text-[var(--on-surface)]'
 	};
 
@@ -37,15 +37,16 @@
 		lg: 'px-6 py-3 text-base gap-2.5'
 	};
 
+	const primaryStyle = $derived(variant === 'primary' ? 'background: var(--brand-gradient)' : '');
 	const classes = $derived(`${base} ${variants[variant]} ${sizes[size]} ${disabled ? 'opacity-50 pointer-events-none' : ''} ${className}`);
 </script>
 
 {#if href && !disabled}
-	<a {href} class={classes} onclick={onclick}>
+	<a {href} class={classes} style={primaryStyle} onclick={onclick}>
 		{@render children()}
 	</a>
 {:else}
-	<button {type} {disabled} class={classes} onclick={onclick} style={variant === 'primary' ? 'background: linear-gradient(135deg, var(--primary), var(--primary-container))' : ''}>
+	<button {type} {disabled} class={classes} style={primaryStyle} onclick={onclick}>
 		{@render children()}
 	</button>
 {/if}

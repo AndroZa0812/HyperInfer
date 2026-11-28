@@ -10,6 +10,7 @@
     } from '#lib/types';
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
@@ -200,22 +201,22 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">
                 Agent Sessions
             </h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Read-only fleet observability and redacted trajectory governance across HyperCode runs.
             </p>
         </div>
-        <Button variant="secondary" size="sm" onclick={loadSessions}>
+        <Button variant="secondary" size="sm" class="shrink-0" onclick={loadSessions}>
             <span class="material-symbols-outlined mr-1" style="font-size: 16px">refresh</span>
             Refresh
         </Button>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
         <StatCard
             label="Matching Sessions"
             value={total.toLocaleString()}
@@ -246,69 +247,44 @@
     <Card>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
             {#if isAdmin}
-                <div>
-                    <label
-                        for="sessions-team-filter"
-                        class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
-                    >
-                        Team
-                    </label>
-                    <select
-                        id="sessions-team-filter"
-                        bind:value={teamFilter}
-                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                    >
-                        <option value="">All Teams</option>
-                        {#each teams as t}
-                            <option value={t.id}>{t.name}</option>
-                        {/each}
-                    </select>
-                </div>
+                <Select
+                    id="sessions-team-filter"
+                    label="Team"
+                    bind:value={teamFilter}
+                    options={[
+                        { value: '', label: 'All Teams' },
+                        ...teams.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                />
             {/if}
 
-            <div>
-                <label
-                    for="sessions-key-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
-                >
-                    Virtual API Key
-                </label>
-                <select
-                    id="sessions-key-filter"
-                    bind:value={keyFilter}
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                >
-                    <option value="">All Keys</option>
-                    {#each keys as k}
-                        <option value={k.id}>{k.name || k.id.slice(0, 8)}</option>
-                    {/each}
-                </select>
-            </div>
+            <Select
+                id="sessions-key-filter"
+                label="Virtual API Key"
+                bind:value={keyFilter}
+                options={[
+                    { value: '', label: 'All Keys' },
+                    ...keys.map((k) => ({ value: k.id, label: k.name || k.id.slice(0, 8) })),
+                ]}
+            />
 
-            <div>
-                <label
-                    for="sessions-status-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
-                >
-                    Status
-                </label>
-                <select
-                    id="sessions-status-filter"
-                    bind:value={statusFilter}
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                >
-                    <option value="">All Statuses</option>
-                    <option value="running">Running</option>
-                    <option value="completed">Completed</option>
-                    <option value="failed">Failed</option>
-                    <option value="cancelled">Cancelled</option>
-                </select>
-            </div>
+            <Select
+                id="sessions-status-filter"
+                label="Status"
+                bind:value={statusFilter}
+                options={[
+                    { value: '', label: 'All Statuses' },
+                    { value: 'running', label: 'Running' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'failed', label: 'Failed' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                ]}
+            />
 
-            <div>
+            <div class="space-y-1.5">
                 <label
                     for="sessions-model-filter"
-                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1"
+                    class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]"
                 >
                     Model
                 </label>
@@ -317,7 +293,7 @@
                     type="text"
                     bind:value={modelFilter}
                     placeholder="e.g. gpt-4o, claude"
-                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
+                    class="h-10 w-full px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 />
             </div>
         </div>

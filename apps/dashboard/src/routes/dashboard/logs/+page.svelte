@@ -6,6 +6,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import StatCard from '#lib/components/StatCard.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
@@ -161,18 +162,15 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-        <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                Gateway Observability
-            </p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">Request Logs</h1>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Request Logs</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Inspect request latency, token breakdown, weighted cost, cache hits, and failover telemetry. Raw prompts/responses are omitted to protect redacted PII.
             </p>
         </div>
-        <div class="flex items-center gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-[var(--on-surface-variant)] cursor-pointer select-none">
+        <div class="flex items-center gap-3 shrink-0">
+            <label class="flex items-center gap-2 text-xs font-medium text-[var(--on-surface-variant)] cursor-pointer select-none whitespace-nowrap">
                 <input type="checkbox" bind:checked={liveTail} />
                 Live Tail (5s)
             </label>
@@ -183,7 +181,7 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard icon="receipt_long" label="Matching Requests" value={total.toLocaleString()} />
         <StatCard icon="timer" label="Avg Latency (Page)" value={`${avgLatencyMs}ms`} />
         <StatCard icon="bolt" label="Cache Hit Rate" value={`${cacheHitPct}%`} />
@@ -193,77 +191,63 @@
     <!-- Filter Bar -->
     <Card>
         <form class="space-y-4" onsubmit={(e) => { e.preventDefault(); applyFilters(); }}>
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7 gap-3 items-end">
                 {#if isAdmin}
-                    <div>
-                        <label for="logs-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Team</label>
-                        <select
-                            id="logs-team"
-                            bind:value={teamFilter}
-                            class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                        >
-                            <option value="">All Teams</option>
-                            {#each teams as t}
-                                <option value={t.id}>{t.name}</option>
-                            {/each}
-                        </select>
-                    </div>
+                    <Select
+                        id="logs-team"
+                        label="Team"
+                        bind:value={teamFilter}
+                        options={[
+                            { value: '', label: 'All Teams' },
+                            ...teams.map((t) => ({ value: t.id, label: t.name })),
+                        ]}
+                    />
                 {/if}
 
-                <div>
-                    <label for="logs-key" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">API Key</label>
-                    <select
-                        id="logs-key"
-                        bind:value={keyFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                    >
-                        <option value="">All Keys</option>
-                        {#each keys as k}
-                            <option value={k.id}>{k.name || k.id.slice(0, 8)}</option>
-                        {/each}
-                    </select>
-                </div>
+                <Select
+                    id="logs-key"
+                    label="API Key"
+                    bind:value={keyFilter}
+                    options={[
+                        { value: '', label: 'All Keys' },
+                        ...keys.map((k) => ({ value: k.id, label: k.name || k.id.slice(0, 8) })),
+                    ]}
+                />
 
                 <Input id="logs-model" label="Model" bind:value={modelFilter} placeholder="e.g. claude" />
 
-                <div>
-                    <label for="logs-status" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Status</label>
-                    <select
-                        id="logs-status"
-                        bind:value={statusFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                    >
-                        <option value="">All Status</option>
-                        <option value="200">200 OK</option>
-                        <option value="400">400 Bad Request</option>
-                        <option value="401">401 Unauthorized</option>
-                        <option value="429">429 Rate Limited</option>
-                        <option value="500">500 Server Error</option>
-                        <option value="502">502 Bad Gateway</option>
-                    </select>
-                </div>
+                <Select
+                    id="logs-status"
+                    label="Status"
+                    bind:value={statusFilter}
+                    options={[
+                        { value: '', label: 'All Status' },
+                        { value: '200', label: '200 OK' },
+                        { value: '400', label: '400 Bad Request' },
+                        { value: '401', label: '401 Unauthorized' },
+                        { value: '429', label: '429 Rate Limited' },
+                        { value: '500', label: '500 Server Error' },
+                        { value: '502', label: '502 Bad Gateway' },
+                    ]}
+                />
 
-                <div>
-                    <label for="logs-cache" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">Cache</label>
-                    <select
-                        id="logs-cache"
-                        bind:value={cacheFilter}
-                        class="w-full px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                    >
-                        <option value="all">All</option>
-                        <option value="hit">Cache HIT</option>
-                        <option value="miss">Cache MISS</option>
-                    </select>
-                </div>
+                <Select
+                    id="logs-cache"
+                    label="Cache"
+                    bind:value={cacheFilter}
+                    options={[
+                        { value: 'all', label: 'All' },
+                        { value: 'hit', label: 'Cache HIT' },
+                        { value: 'miss', label: 'Cache MISS' },
+                    ]}
+                />
 
-                <div class="grid grid-cols-2 gap-2">
-                    <Input id="logs-from" label="From" type="date" bind:value={fromDate} />
-                    <Input id="logs-to" label="To" type="date" bind:value={toDate} />
-                </div>
+                <Input id="logs-from" label="From" type="date" bind:value={fromDate} />
+                <Input id="logs-to" label="To" type="date" bind:value={toDate} />
             </div>
 
             <div class="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onclick={resetFilters}>Reset</Button>
+                <Button variant="secondary" size="sm" onclick={resetFilters}>Reset</Button>
                 <Button type="submit" size="sm">Apply Filters</Button>
             </div>
         </form>
@@ -362,7 +346,7 @@
                 <Badge variant={statusVariant(selectedLog.status_code)} label={`HTTP ${selectedLog.status_code}`} />
             </div>
 
-            <div class="grid grid-cols-2 gap-3 text-xs">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div class="p-3 rounded-lg bg-[var(--surface-container-low)]">
                     <p class="text-[var(--on-surface-variant)]">Model</p>
                     <p class="font-mono font-semibold text-[var(--on-surface)] mt-0.5">{selectedLog.model}</p>

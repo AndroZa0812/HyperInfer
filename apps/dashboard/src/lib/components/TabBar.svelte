@@ -19,10 +19,10 @@
 	}
 </script>
 
-<div class="flex gap-1 {className}">
+<div class="flex flex-wrap gap-1 {className}">
 	{#each items as item}
 		<button
-			class="px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 cursor-pointer {active === item.value
+			class="px-4 py-2 text-sm font-medium rounded-lg whitespace-nowrap transition-all duration-200 cursor-pointer {active === item.value
 				? 'text-[var(--primary)] bg-[var(--primary)]/10'
 				: 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)] hover:bg-[var(--surface-container)]'}"
 			onclick={() => select(item.value)}

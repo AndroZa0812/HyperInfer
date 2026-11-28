@@ -16,9 +16,9 @@
 	}: Props = $props();
 
 	const variants = {
-		default: 'bg-[var(--surface-container-lowest)]',
-		elevated: 'bg-[var(--surface-container-lowest)] shadow-[0_24px_48px_rgba(var(--shadow-color),0.06)]',
-		outlined: 'bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)]'
+		default: 'bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] shadow-[var(--card-shadow)]',
+		elevated: 'bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] shadow-[0_16px_36px_rgba(var(--shadow-color),0.10)]',
+		outlined: 'bg-[var(--surface-container-lowest)] border border-[var(--outline-variant)]'
 	};
 
 	const paddings = {

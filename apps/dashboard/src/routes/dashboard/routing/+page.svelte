@@ -7,12 +7,13 @@
     import Button from '@hyperinfer/ui/Button.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
 
     let deployments = $state<Deployment[]>([]);
     let loading = $state(true);
     let showCreate = $state(false);
     let editingId = $state<string | null>(null);
-    let modelFilter = $state('gpt-4');
+    let modelFilter = $state('');
     let createError = $state('');
     let pendingDeleteId = $state<string | null>(null);
     let showDeleteConfirm = $state(false);
@@ -247,17 +248,22 @@
 </script>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Routing Deployments</h1>
-        <div class="flex gap-2">
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">Routing Deployments</h1>
+            <p class="text-sm text-[var(--on-surface-variant)] mt-1">Configure upstream provider deployments, routing strategies, and live model catalog sync.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <input
                 type="text"
                 placeholder="Filter by model..."
-                class="px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
+                class="h-10 flex-1 sm:w-56 min-w-[160px] px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
                 bind:value={modelFilter}
                 onkeydown={(e) => e.key === 'Enter' && loadDeployments()}
             />
             <Button
+                size="sm"
+                class="h-10 shrink-0"
                 onclick={() => { showCreate = true; editingId = null; resetForm(); }}
             >
                 Add Deployment
@@ -266,11 +272,11 @@
     </div>
 
     <Card>
-        <div class="flex flex-wrap items-center justify-between gap-4">
-            <div class="flex items-center gap-6">
+        <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-5">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 flex-1 min-w-0">
                 <div>
                     <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Gateway Status</p>
-                    <div class="mt-1">
+                    <div class="mt-1.5">
                         <Badge
                             variant={routingHealth?.status === 'healthy' ? 'success' : routingHealth ? 'error' : 'neutral'}
                             label={routingHealth?.status ?? 'unknown'}
@@ -279,13 +285,13 @@
                 </div>
                 <div>
                     <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Active Deployments</p>
-                    <p class="text-xl font-bold text-[var(--on-surface)] mt-0.5">{routingHealth?.active_deployments ?? deployments.filter(d => d.is_active).length}</p>
+                    <p class="text-xl font-bold text-[var(--on-surface)] mt-1">{routingHealth?.active_deployments ?? deployments.filter(d => d.is_active).length}</p>
                 </div>
-                <div>
+                <div class="min-w-0">
                     <p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)]">Model Catalog</p>
-                    <div class="flex items-center gap-2 mt-0.5">
-                        <span class="text-sm font-semibold text-[var(--on-surface)]">{catalogModels.length} models</span>
-                        <Button variant="ghost" size="sm" disabled={syncingCatalog} onclick={syncCatalog}>
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                        <span class="text-sm font-semibold text-[var(--on-surface)] whitespace-nowrap">{catalogModels.length} models</span>
+                        <Button variant="secondary" size="sm" disabled={syncingCatalog} onclick={syncCatalog}>
                             {syncingCatalog ? 'Syncing...' : 'Sync Catalog'}
                         </Button>
                         {#if catalogStatus}
@@ -294,26 +300,19 @@
                     </div>
                 </div>
             </div>
-            <div class="flex items-end gap-3">
-                <div>
-                    <label for="routing-strategy" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                        Routing Strategy
-                    </label>
-                    <select
-                        id="routing-strategy"
-                        bind:value={routingStrategy}
-                        class="px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                    >
-                        {#each STRATEGIES as s}
-                            <option value={s.value}>{s.label}</option>
-                        {/each}
-                    </select>
-                </div>
-                <Button size="sm" disabled={savingStrategy} onclick={saveStrategy}>
+            <div class="flex flex-wrap items-end gap-3 pt-4 xl:pt-0 border-t xl:border-t-0 border-[var(--ghost-border)] shrink-0">
+                <Select
+                    id="routing-strategy"
+                    label="Routing Strategy"
+                    bind:value={routingStrategy}
+                    options={STRATEGIES}
+                    class="flex-1 sm:flex-initial min-w-[180px]"
+                />
+                <Button size="sm" class="h-10 shrink-0" disabled={savingStrategy} onclick={saveStrategy}>
                     {savingStrategy ? 'Saving...' : 'Save Strategy'}
                 </Button>
                 {#if strategyStatus}
-                    <span class="text-xs text-[var(--on-surface-variant)]">{strategyStatus}</span>
+                    <span class="text-xs text-[var(--on-surface-variant)] self-center">{strategyStatus}</span>
                 {/if}
             </div>
         </div>
@@ -322,35 +321,43 @@
     {#if loading}
         <div class="text-center py-8 text-[var(--on-surface-variant)]">Loading...</div>
     {:else if deployments.length === 0}
-        <div class="text-center py-8 text-[var(--on-surface-variant)]">No deployments found for model "{modelFilter}"</div>
+        <Card class="text-center py-10">
+            <p class="text-sm text-[var(--on-surface-variant)]">
+                {#if modelFilter.trim()}
+                    No deployments found for model "{modelFilter}"
+                {:else}
+                    No deployments configured yet. Click <strong>Add Deployment</strong> to register an upstream model.
+                {/if}
+            </p>
+        </Card>
     {:else}
-        <Card variant="outlined" padding="none">
+        <Card padding="none">
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead>
                         <tr class="bg-[var(--surface-container-low)]">
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Name</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Provider</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Model</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Base URL</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Weight</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</th>
-                            <th class="text-left p-3 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Actions</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Name</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Provider</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Model</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Base URL</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Weight</th>
+                            <th class="text-left p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Status</th>
+                            <th class="text-right p-3.5 text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {#each deployments as deployment}
                             <tr class="border-t border-[var(--ghost-border)] hover:bg-[var(--surface-container-low)]/50 transition-colors">
-                                <td class="p-3 text-sm text-[var(--on-surface)]">{deployment.name}</td>
-                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.provider}</td>
-                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.model}</td>
-                                <td class="p-3 text-sm text-[var(--on-surface-variant)] truncate max-w-[200px]">{deployment.base_url}</td>
-                                <td class="p-3 text-sm text-[var(--on-surface-variant)]">{deployment.weight}</td>
-                                <td class="p-3">
+                                <td class="p-3.5 text-sm font-medium text-[var(--on-surface)] whitespace-nowrap">{deployment.name}</td>
+                                <td class="p-3.5 text-sm text-[var(--on-surface-variant)] whitespace-nowrap">{deployment.provider}</td>
+                                <td class="p-3.5 text-sm font-mono text-[var(--on-surface-variant)] whitespace-nowrap">{deployment.model}</td>
+                                <td class="p-3.5 text-sm text-[var(--on-surface-variant)] truncate max-w-[220px]">{deployment.base_url}</td>
+                                <td class="p-3.5 text-sm text-[var(--on-surface-variant)]">{deployment.weight}</td>
+                                <td class="p-3.5">
                                     <Badge variant={deployment.is_active ? 'success' : 'error'} label={deployment.is_active ? 'Active' : 'Inactive'} />
                                 </td>
-                                <td class="p-3">
-                                    <div class="flex gap-2">
+                                <td class="p-3.5 text-right">
+                                    <div class="flex justify-end gap-2">
                                         <Button variant="secondary" size="sm" onclick={() => startEdit(deployment)}>Edit</Button>
                                         <Button variant="ghost" size="sm" class="text-[var(--error)]" onclick={() => confirmDelete(deployment.id)}>Delete</Button>
                                     </div>
@@ -364,31 +371,29 @@
     {/if}
 
     <Modal bind:open={showCreate}>
-        <div class="p-6">
+        <div class="p-6 max-h-[85vh] overflow-y-auto">
             <h2 class="text-xl font-bold text-[var(--on-surface)] mb-4">{editingId ? 'Edit Deployment' : 'Create Deployment'}</h2>
             {#if createError}
                 <div class="text-[var(--error)] text-sm mb-4">{createError}</div>
             {/if}
             <div class="space-y-4">
                 <Input id="dep-name" label="Name" bind:value={formData.name} />
-                <div>
-                    <label for="dep-provider" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Provider</label>
-                    <select
-                        id="dep-provider"
-                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
-                        bind:value={formData.provider}
-                    >
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="gemini">Google Gemini</option>
-                    </select>
-                </div>
-                <Input id="dep-model" label="Model" list="routing-catalog-models" bind:value={formData.model} />
-                <datalist id="routing-catalog-models">
-                    {#each providerCatalogModels as m}
-                        <option value={m.id}>{m.name}</option>
-                    {/each}
-                </datalist>
+                <Select
+                    id="dep-provider"
+                    label="Provider"
+                    bind:value={formData.provider}
+                    options={[
+                        { value: 'openai', label: 'OpenAI' },
+                        { value: 'anthropic', label: 'Anthropic' },
+                        { value: 'gemini', label: 'Google Gemini' },
+                    ]}
+                />
+                <Input
+                    id="dep-model"
+                    label="Model"
+                    suggestions={providerCatalogModels.map((m) => ({ value: m.id, label: m.name }))}
+                    bind:value={formData.model}
+                />
                 {#if matchedCatalogModel}
                     <p class="text-xs text-[var(--on-surface-variant)] -mt-2">
                         Catalog ({catalogSource || matchedCatalogModel.source}):
@@ -403,25 +408,27 @@
                 <Input id="dep-model-override" label="Model Name Override (optional)" bind:value={modelNameOverride} placeholder="e.g. gpt-4o-2024-08-06" />
                 <Input id="dep-base-url" label="Base URL" bind:value={formData.base_url} />
                 <Input id="dep-api-key-ref" label="API Key Ref" bind:value={formData.api_key_ref} placeholder="env:OPENAI_API_KEY" />
-                <div>
-                    <label for="dep-weight" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Weight</label>
-                    <input
-                        id="dep-weight"
-                        type="number"
-                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
-                        bind:value={formData.weight}
-                        min="0"
-                    />
-                </div>
-                <div>
-                    <label for="dep-priority" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">Priority</label>
-                    <input
-                        id="dep-priority"
-                        type="number"
-                        class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors"
-                        bind:value={formData.priority}
-                        min="0"
-                    />
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="space-y-1.5">
+                        <label for="dep-weight" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Weight</label>
+                        <input
+                            id="dep-weight"
+                            type="number"
+                            class="h-10 w-full px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
+                            bind:value={formData.weight}
+                            min="0"
+                        />
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="dep-priority" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">Priority</label>
+                        <input
+                            id="dep-priority"
+                            type="number"
+                            class="h-10 w-full px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-sm transition-colors duration-200"
+                            bind:value={formData.priority}
+                            min="0"
+                        />
+                    </div>
                 </div>
                 <div class="flex items-center gap-2">
                     <input type="checkbox" id="dep-is-active" bind:checked={formData.is_active} class="rounded border-[var(--outline-variant)]" />

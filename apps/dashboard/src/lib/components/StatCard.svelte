@@ -30,10 +30,10 @@
 	};
 </script>
 
-<div class="bg-[var(--surface-container-lowest)] rounded-xl p-5 space-y-3 {className}">
-	<div class="flex items-center justify-between">
+<div class="bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] shadow-[var(--card-shadow)] rounded-xl p-5 space-y-3 min-w-0 overflow-hidden {className}">
+	<div class="flex flex-wrap items-center justify-between gap-2">
 		{#if icon}
-			<div class="w-10 h-10 rounded-lg bg-[var(--surface-container)] flex items-center justify-center">
+			<div class="w-10 h-10 rounded-lg bg-[var(--surface-container)] flex items-center justify-center shrink-0">
 				<span class="material-symbols-outlined text-[var(--primary)]" style="font-size: 20px">{icon}</span>
 			</div>
 		{/if}
@@ -44,8 +44,8 @@
 			</div>
 		{/if}
 	</div>
-	<div>
-		<p class="text-2xl font-bold text-[var(--on-surface)]" style="font-family: 'Manrope', sans-serif">{value}</p>
-		<p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)] mt-1">{label}</p>
+	<div class="min-w-0">
+		<p class="text-2xl font-bold text-[var(--on-surface)] truncate" title={value} style="font-family: 'Manrope', sans-serif">{value}</p>
+		<p class="text-xs uppercase tracking-wider text-[var(--on-surface-variant)] mt-1 truncate" title={label}>{label}</p>
 	</div>
 </div>

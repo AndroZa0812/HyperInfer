@@ -362,15 +362,26 @@ impl Database for SqlxDb {
         model: &str,
         is_active: Option<bool>,
     ) -> Result<Vec<Deployment>, DbError> {
-        let result: Vec<DeploymentRow> = match is_active {
-            Some(active) => sqlx::query_as(
+        let result: Vec<DeploymentRow> = match (model.is_empty(), is_active) {
+            (true, Some(active)) => sqlx::query_as(
+                "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE is_active = $1 ORDER BY sort_order ASC, created_at ASC"
+            )
+            .bind(active)
+            .fetch_all(&self.pool)
+            .await?,
+            (true, None) => sqlx::query_as(
+                "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments ORDER BY sort_order ASC, created_at ASC"
+            )
+            .fetch_all(&self.pool)
+            .await?,
+            (false, Some(active)) => sqlx::query_as(
                 "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE model = $1 AND is_active = $2 ORDER BY sort_order ASC, created_at ASC"
             )
             .bind(model)
             .bind(active)
             .fetch_all(&self.pool)
             .await?,
-            None => sqlx::query_as(
+            (false, None) => sqlx::query_as(
                 "SELECT id, name, provider, model, api_key_ref, base_url, is_active, weight, priority, max_tpm, max_rpm, cost_per_1k_input_tokens, cost_per_1k_output_tokens, metadata, sort_order, created_at, updated_at FROM deployments WHERE model = $1 ORDER BY sort_order ASC, created_at ASC"
             )
             .bind(model)

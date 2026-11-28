@@ -41,7 +41,7 @@
 		tabindex="-1"
 	>
 		<div class="absolute inset-0 bg-[var(--on-surface)]/20 backdrop-blur-sm"></div>
-		<div class="relative bg-[var(--surface-container-lowest)] rounded-xl shadow-[0_24px_48px_rgba(var(--shadow-color),0.12)] max-h-[90vh] overflow-auto w-full {sizeClass}">
+		<div class="relative bg-[var(--surface-container-lowest)] border border-[var(--ghost-border)] rounded-xl shadow-[0_24px_48px_rgba(var(--shadow-color),0.16)] max-h-[90vh] overflow-auto w-full {sizeClass}">
 			{@render children()}
 		</div>
 	</div>

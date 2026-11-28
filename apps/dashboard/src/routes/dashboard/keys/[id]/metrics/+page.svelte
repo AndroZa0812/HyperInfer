@@ -35,12 +35,12 @@
             { label: keyData.name || 'Unnamed Key' }
         ]} />
 
-        <div class="flex items-center gap-3">
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">{keyData.name || 'Unnamed Key'}</h1>
+        <div class="flex flex-wrap items-center gap-3">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">{keyData.name || 'Unnamed Key'}</h1>
             <Badge variant={keyData.is_active ? 'success' : 'error'} label={keyData.is_active ? 'Active' : 'Revoked'} />
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             <StatCard icon="vpn_key" label="Status" value={keyData.is_active ? 'Active' : 'Revoked'} />
             <StatCard icon="calendar_today" label="Created" value={new Date(keyData.created_at).toLocaleDateString()} />
             <StatCard icon="schedule" label="Last Used" value={keyData.last_used_at ? new Date(keyData.last_used_at).toLocaleDateString() : 'Never'} />

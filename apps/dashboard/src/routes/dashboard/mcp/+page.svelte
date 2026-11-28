@@ -5,6 +5,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
 
@@ -170,17 +171,14 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex items-center justify-between">
-        <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                Tool Multiplexing
-            </p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">MCP Gateway</h1>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">MCP Gateway</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                 Manage upstream MCP servers, inspect discovered tools, and configure per-team regex allow/deny policies.
             </p>
         </div>
-        <Button onclick={() => { upstreamError = ''; showAddModal = true; }}>
+        <Button class="shrink-0" onclick={() => { upstreamError = ''; showAddModal = true; }}>
             <span class="material-symbols-outlined" style="font-size: 18px">add</span>
             Add Upstream Server
         </Button>
@@ -195,8 +193,8 @@
     {:else}
         <!-- Upstream MCP Servers -->
         <Card padding="none">
-            <div class="px-6 py-4 border-b border-[var(--ghost-border)] flex items-center justify-between">
-                <div>
+            <div class="px-6 py-4 border-b border-[var(--ghost-border)] flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-[200px] flex-1">
                     <h2 class="text-base font-semibold text-[var(--on-surface)]">Upstream MCP Servers</h2>
                     <p class="text-xs text-[var(--on-surface-variant)]">
                         Tools are namespaced as <code class="font-mono">{'{server}__{tool}'}</code>. Auth headers are injected server-side and never returned to clients.
@@ -260,21 +258,13 @@
                         </div>
                     </div>
 
-                    <div>
-                        <label for="mcp-policy-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                            Team
-                        </label>
-                        <select
-                            id="mcp-policy-team"
-                            bind:value={selectedTeamId}
-                            onchange={() => loadTeamPolicy(selectedTeamId)}
-                            class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                        >
-                            {#each teams as team}
-                                <option value={team.id}>{team.name}</option>
-                            {/each}
-                        </select>
-                    </div>
+                    <Select
+                        id="mcp-policy-team"
+                        label="Team"
+                        bind:value={selectedTeamId}
+                        onchange={(v) => loadTeamPolicy(v)}
+                        options={teams.map((t) => ({ value: t.id, label: t.name }))}
+                    />
 
                     <div>
                         <label for="mcp-allow-patterns" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
@@ -330,14 +320,14 @@
             <!-- Discovered Tools & Catalog Meta-Tools -->
             <Card>
                 <div class="space-y-4">
-                    <div class="flex items-center justify-between">
-                        <div>
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                        <div class="min-w-[180px] flex-1">
                             <h2 class="text-base font-semibold text-[var(--on-surface)]">Discovered Tools</h2>
                             <p class="text-xs text-[var(--on-surface-variant)]">
                                 Active tools available across local host and enabled upstreams.
                             </p>
                         </div>
-                        <Button variant="secondary" size="sm" disabled={refreshingTools} onclick={refreshTools}>
+                        <Button variant="secondary" size="sm" class="shrink-0" disabled={refreshingTools} onclick={refreshTools}>
                             {refreshingTools ? 'Refreshing...' : 'Refresh'}
                         </Button>
                     </div>
@@ -385,19 +375,15 @@
 
         <Input label="Server Name" bind:value={newName} placeholder="e.g. github" required />
 
-        <div>
-            <label for="mcp-transport" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                Transport
-            </label>
-            <select
-                id="mcp-transport"
-                bind:value={newTransport}
-                class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-            >
-                <option value="streamable_http">Streamable HTTP</option>
-                <option value="sse">SSE</option>
-            </select>
-        </div>
+        <Select
+            id="mcp-transport"
+            label="Transport"
+            bind:value={newTransport}
+            options={[
+                { value: 'streamable_http', label: 'Streamable HTTP' },
+                { value: 'sse', label: 'SSE' },
+            ]}
+        />
 
         <Input label="Endpoint URL" bind:value={newUrl} placeholder="https://mcp.example.com/mcp" required />
         <Input label="Authorization Header (optional)" bind:value={newAuthHeader} placeholder="e.g. $GITHUB_MCP_TOKEN" />

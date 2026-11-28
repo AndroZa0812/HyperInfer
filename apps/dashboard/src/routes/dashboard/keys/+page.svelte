@@ -147,32 +147,31 @@
 </script>
 
 <div class="space-y-8">
-    <div class="flex items-center justify-between">
-        <div>
-            <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">Security Infrastructure</p>
-            <h1 class="text-3xl font-bold text-[var(--on-surface)]">API Keys</h1>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-[220px] flex-1">
+            <h1 class="text-2xl font-bold text-[var(--on-surface)]">API Keys</h1>
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">Manage authentication credentials for your production and development clusters.</p>
         </div>
-        <Button onclick={() => showCreate = true}>
+        <Button class="shrink-0" onclick={() => showCreate = true}>
             <span class="material-symbols-outlined" style="font-size: 18px">add</span>
             Create New Key
         </Button>
     </div>
 
     <Card padding="none">
-        <div class="p-4 flex items-center gap-4">
-            <div class="flex-1 relative">
+        <div class="p-4 flex flex-wrap items-center gap-3">
+            <div class="flex-1 min-w-[200px] relative">
                 <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)]" style="font-size: 20px">search</span>
                 <input
                     bind:value={searchQuery}
                     placeholder="Search keys..."
-                    class="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors text-sm"
+                    class="h-10 w-full pl-10 pr-4 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none transition-colors text-sm"
                 />
             </div>
-            <div class="flex gap-1 bg-[var(--surface-container-low)] rounded-lg p-1">
+            <div class="flex flex-wrap gap-1 bg-[var(--surface-container-low)] rounded-lg p-1">
                 {#each [{l:'All Status',v:'all'},{l:'Active',v:'active'},{l:'Revoked',v:'revoked'}] as tab}
                     <button
-                        class="px-3 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer {statusFilter === tab.v ? 'bg-[var(--surface-container-lowest)] text-[var(--primary)] shadow-sm' : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'}"
+                        class="px-3 py-1.5 text-xs font-medium rounded-md whitespace-nowrap transition-all cursor-pointer {statusFilter === tab.v ? 'bg-[var(--surface-container-lowest)] text-[var(--primary)] shadow-sm' : 'text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'}"
                         onclick={() => statusFilter = tab.v}
                     >{tab.l}</button>
                 {/each}
@@ -264,7 +263,7 @@
         {/if}
     </Card>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         <StatCard icon="speed" label="Total Requests" value={usage ? usage.total_requests.toLocaleString() : '0'} />
         <StatCard icon="security" label="Total Tokens" value={usage ? (usage.total_input_tokens + usage.total_output_tokens).toLocaleString() : '0'} />
         <StatCard icon="timer" label="Average Latency" value={usage ? `${Math.round(usage.avg_response_time_ms)}ms` : '0ms'} />
@@ -278,12 +277,12 @@
             <p class="text-sm text-[var(--on-surface-variant)] mt-1">Generate a new authentication credential.</p>
         </div>
         <Input label="Key Name" bind:value={newKeyName} placeholder="e.g. Production-Main" required />
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="Budget (cents, optional)" type="number" bind:value={newBudgetCents} placeholder="e.g. 5000" />
             <Input label="Expires On (optional)" type="date" bind:value={newExpiresAt} />
         </div>
         <Input label="Allowed Models (comma-separated, optional)" bind:value={newAllowedModels} placeholder="e.g. gpt-4, gpt-4o-mini" />
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input label="RPM Limit (optional)" type="number" bind:value={newRpmLimit} placeholder="e.g. 60" />
             <Input label="TPM Limit (optional)" type="number" bind:value={newTpmLimit} placeholder="e.g. 100000" />
         </div>

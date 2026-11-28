@@ -4,6 +4,7 @@
     import type { Team, User } from '#lib/types';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Modal from '@hyperinfer/ui/Modal.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import Card from '@hyperinfer/ui/Card.svelte';
@@ -160,17 +161,14 @@
     </Card>
 {:else}
     <div class="space-y-8">
-        <div class="flex items-center justify-between">
-            <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-                    Access Control
-                </p>
-                <h1 class="text-3xl font-bold text-[var(--on-surface)]">Users</h1>
+        <div class="flex flex-wrap items-start justify-between gap-4">
+            <div class="min-w-[220px] flex-1">
+                <h1 class="text-2xl font-bold text-[var(--on-surface)]">Users</h1>
                 <p class="text-sm text-[var(--on-surface-variant)] mt-1">
                     Provision accounts, assign teams, and manage admin/member roles.
                 </p>
             </div>
-            <Button onclick={openCreateModal}>
+            <Button class="shrink-0" onclick={openCreateModal}>
                 <span class="material-symbols-outlined" style="font-size: 18px">person_add</span>
                 Create User
             </Button>
@@ -183,7 +181,7 @@
         {/if}
 
         <Card padding="none">
-            <div class="p-4 flex flex-wrap items-center gap-4">
+            <div class="p-4 flex flex-wrap items-center gap-3">
                 <div class="flex-1 min-w-[200px] relative">
                     <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[var(--outline)]" style="font-size: 20px">
                         search
@@ -191,19 +189,18 @@
                     <input
                         bind:value={searchQuery}
                         placeholder="Search users by email..."
-                        class="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none transition-colors text-sm"
+                        class="h-10 w-full pl-10 pr-4 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none transition-colors text-sm"
                     />
                 </div>
-                <select
-                    aria-label="Filter by team"
+                <Select
+                    ariaLabel="Filter by team"
                     bind:value={teamFilter}
-                    class="px-3 py-2.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-sm"
-                >
-                    <option value="all">All Teams</option>
-                    {#each teams as team}
-                        <option value={team.id}>{team.name}</option>
-                    {/each}
-                </select>
+                    class="w-44"
+                    options={[
+                        { value: 'all', label: 'All Teams' },
+                        ...teams.map((t) => ({ value: t.id, label: t.name })),
+                    ]}
+                />
             </div>
 
             {#if loading}
@@ -275,33 +272,21 @@
                 </p>
             </div>
             <Input id="user-email" label="Email Address" type="email" bind:value={newEmail} placeholder="member@example.com" required />
-            <div>
-                <label for="user-team" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">
-                    Team
-                </label>
-                <select
-                    id="user-team"
-                    bind:value={newTeamId}
-                    class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none"
-                >
-                    {#each teams as team}
-                        <option value={team.id}>{team.name}</option>
-                    {/each}
-                </select>
-            </div>
-            <div>
-                <label for="user-role" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1.5">
-                    Role
-                </label>
-                <select
-                    id="user-role"
-                    bind:value={newRole}
-                    class="w-full px-4 py-3 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none"
-                >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                </select>
-            </div>
+            <Select
+                id="user-team"
+                label="Team"
+                bind:value={newTeamId}
+                options={teams.map((t) => ({ value: t.id, label: t.name }))}
+            />
+            <Select
+                id="user-role"
+                label="Role"
+                bind:value={newRole}
+                options={[
+                    { value: 'member', label: 'Member' },
+                    { value: 'admin', label: 'Admin' },
+                ]}
+            />
             <Input
                 id="user-password"
                 label="Initial Password"

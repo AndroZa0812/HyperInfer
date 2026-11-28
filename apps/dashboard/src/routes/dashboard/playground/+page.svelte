@@ -8,16 +8,16 @@
     import Input from '@hyperinfer/ui/Input.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
 
-    type SdkTab = 'openai' | 'anthropic' | 'gemini' | 'responses';
+    type SdkTab = 'hyperinfer' | 'openai' | 'anthropic' | 'gemini' | 'responses';
 
-    let model = $state('gpt-4o-mini');
+    let model = $state('');
     let apiKey = $state('');
     let systemPrompt = $state('You are a helpful AI assistant.');
     let userPrompt = $state('');
     let temperature = $state<string | number>('0.7');
     let maxTokens = $state<string | number>('512');
     let aliases = $state<ModelAlias[]>([]);
-    let catalogModels = $state<OpenAiModelListItem[]>([]);
+    let deployedModels = $state<OpenAiModelListItem[]>([]);
 
     let sending = $state(false);
     let responseText = $state('');
@@ -25,28 +25,30 @@
     let lastLatencyMs = $state<number | null>(null);
     let lastUsage = $state<{ prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null>(null);
 
-    let activeSdk = $state<SdkTab>('openai');
+    let activeSdk = $state<SdkTab>('hyperinfer');
     let copiedSnippet = $state(false);
     let baseOrigin = $state('http://localhost:3000');
+    let isAdmin = $derived($auth.user?.role === 'admin');
 
     onMount(async () => {
         if (typeof window !== 'undefined') {
             baseOrigin = window.location.origin;
         }
-        try {
-            const modelsRes = await api.getModels();
-            catalogModels = modelsRes.data;
-        } catch {
-            // Optional live model suggestions
+        const [modelsRes, aliasesRes] = await Promise.allSettled([
+            api.getModels(),
+            $auth.user?.team_id ? api.getModelAliases($auth.user.team_id) : Promise.resolve([]),
+        ]);
+        if (modelsRes.status === 'fulfilled') {
+            deployedModels = modelsRes.value.data;
         }
-        if ($auth.user?.team_id) {
-            try {
-                aliases = await api.getModelAliases($auth.user.team_id);
-                if (aliases.length > 0) {
-                    model = aliases[0].alias;
-                }
-            } catch {
-                // Non-fatal: user can type any model name
+        if (aliasesRes.status === 'fulfilled') {
+            aliases = aliasesRes.value;
+        }
+        if (!model) {
+            if (aliases.length > 0) {
+                model = aliases[0].alias;
+            } else if (deployedModels.length > 0) {
+                model = deployedModels[0].id;
             }
         }
     });
@@ -57,14 +59,16 @@
         const m = model.trim() || 'gpt-4o-mini';
         const k = keyDisplay;
         switch (activeSdk) {
+            case 'hyperinfer':
+                return `# Native HyperInfer Data Plane SDK (pip install hyperinfer)\nimport asyncio\nfrom hyperinfer import Client\n\nasync def main():\n    async with Client(\n        redis_url="redis://localhost:6379",\n        api_keys={"openai": "$OPENAI_API_KEY"},\n        virtual_key="${k}",\n    ) as client:\n        resp = await client.chat(\n            model="${m}",\n            messages=[{"role": "user", "content": "Hello from HyperInfer!"}],\n        )\n        print(resp["choices"][0]["message"]["content"])\n\nasyncio.run(main())`;
             case 'openai':
                 return `from openai import OpenAI\n\nclient = OpenAI(\n    base_url="${baseOrigin}/v1",\n    api_key="${k}",\n)\nresp = client.chat.completions.create(\n    model="${m}",\n    messages=[{"role": "user", "content": "Hello from HyperInfer!"}],\n)\nprint(resp.choices[0].message.content)`;
             case 'anthropic':
                 return `# Claude Code / Anthropic SDK drop-in\nexport ANTHROPIC_BASE_URL="${baseOrigin}"\nexport ANTHROPIC_API_KEY="${k}"\n\n# Or in Python:\nfrom anthropic import Anthropic\nclient = Anthropic(base_url="${baseOrigin}", api_key="${k}")\nmsg = client.messages.create(\n    model="${m}",\n    max_tokens=512,\n    messages=[{"role": "user", "content": "Hello!"}],\n)`;
             case 'gemini':
-                return `curl -X POST "${baseOrigin}/v1beta/models/${m}:generateContent" \\\n  -H "x-goog-api-key: ${k}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"contents":[{"role":"user","parts":[{"text":"Hello from HyperInfer!"}]}]}'`;
+                return `# Google GenAI SDK (routes to /v1beta/models/${m}:generateContent)\nfrom google import genai\nfrom google.genai import types\n\nclient = genai.Client(\n    api_key="${k}",\n    http_options=types.HttpOptions(\n        base_url="${baseOrigin}",\n        api_version="v1beta",\n    ),\n)\nresp = client.models.generate_content(\n    model="${m}",\n    contents="Hello from HyperInfer!",\n)\nprint(resp.text)`;
             case 'responses':
-                return `curl -X POST "${baseOrigin}/v1/responses" \\\n  -H "Authorization: Bearer ${k}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${m}","input":"Hello from HyperInfer!"}'`;
+                return `# OpenAI Responses API (routes to /v1/responses)\nfrom openai import OpenAI\n\nclient = OpenAI(\n    base_url="${baseOrigin}/v1",\n    api_key="${k}",\n)\nresp = client.responses.create(\n    model="${m}",\n    input="Hello from HyperInfer!",\n)\nprint(resp.output_text)`;
         }
     });
 
@@ -140,12 +144,9 @@
 
 <div class="space-y-8">
     <div>
-        <p class="text-xs uppercase tracking-[0.2em] text-[var(--on-surface-variant)] mb-1">
-            Interactive Testing &amp; Multi-SDK Drop-In
-        </p>
-        <h1 class="text-3xl font-bold text-[var(--on-surface)]">Playground</h1>
+        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Playground</h1>
         <p class="text-sm text-[var(--on-surface-variant)] mt-1">
-            Test configured models through the HyperInfer gateway and copy 1-line drop-in snippets for OpenAI, Anthropic, and Gemini SDKs.
+            Test configured models through the HyperInfer gateway and copy drop-in snippets for supported SDKs.
         </p>
     </div>
 
@@ -160,29 +161,54 @@
                     {/if}
                 </div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input label="Model or Alias" list="playground-catalog-models" bind:value={model} placeholder="Select or type model ID" />
-                    <datalist id="playground-catalog-models">
-                        {#each catalogModels as m}
-                            <option value={m.id}>{m.owned_by}</option>
-                        {/each}
-                    </datalist>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Input
+                        label="Model or Alias"
+                        suggestions={[
+                            ...aliases.map((a) => ({ value: a.alias, label: `Alias → ${a.target_model}` })),
+                            ...deployedModels.map((m) => ({ value: m.id, label: m.owned_by })),
+                        ]}
+                        bind:value={model}
+                        placeholder={deployedModels.length > 0 || aliases.length > 0 ? 'Select active model or alias' : 'No active deployments yet'}
+                    />
                     <Input label="Virtual API Key" type="password" bind:value={apiKey} placeholder="hi-..." />
                 </div>
 
-                {#if aliases.length > 0}
-                    <div class="flex flex-wrap items-center gap-2">
-                        <span class="text-xs text-[var(--on-surface-variant)]">Team aliases:</span>
-                        {#each aliases as alias}
-                            <button
-                                type="button"
-                                onclick={() => model = alias.alias}
-                                class="px-2 py-0.5 text-xs font-mono rounded bg-[var(--surface-container-low)] text-[var(--primary)] hover:bg-[var(--surface-container)] cursor-pointer"
-                            >
-                                {alias.alias}
-                            </button>
-                        {/each}
+                {#if aliases.length > 0 || deployedModels.length > 0}
+                    <div class="space-y-1.5">
+                        {#if aliases.length > 0}
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="text-xs text-[var(--on-surface-variant)]">Team aliases:</span>
+                                {#each aliases as alias}
+                                    <button
+                                        type="button"
+                                        onclick={() => model = alias.alias}
+                                        class="px-2 py-0.5 text-xs font-mono rounded border cursor-pointer transition-colors {model === alias.alias ? 'bg-[var(--primary)]/10 border-[var(--primary)] text-[var(--primary)]' : 'bg-[var(--surface-container-low)] border-[var(--ghost-border)] text-[var(--on-surface)] hover:bg-[var(--surface-container)]'}"
+                                    >
+                                        {alias.alias}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
+                        {#if deployedModels.length > 0}
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <span class="text-xs text-[var(--on-surface-variant)]">Active deployments:</span>
+                                {#each deployedModels as m}
+                                    <button
+                                        type="button"
+                                        onclick={() => model = m.id}
+                                        class="px-2 py-0.5 text-xs font-mono rounded border cursor-pointer transition-colors {model === m.id ? 'bg-[var(--primary)]/10 border-[var(--primary)] text-[var(--primary)]' : 'bg-[var(--surface-container-low)] border-[var(--ghost-border)] text-[var(--on-surface)] hover:bg-[var(--surface-container)]'}"
+                                    >
+                                        {m.id}
+                                    </button>
+                                {/each}
+                            </div>
+                        {/if}
                     </div>
+                {:else}
+                    <p class="text-xs text-[var(--on-surface-variant)]">
+                        No active deployments or team aliases configured yet.{#if isAdmin} <a href="/dashboard/routing" class="text-[var(--primary)] font-medium hover:underline">Add a deployment in Routing →</a>{/if}
+                    </p>
                 {/if}
 
                 <div class="grid grid-cols-2 gap-4">
@@ -245,16 +271,16 @@
         </Card>
 
         <!-- Multi-SDK Quickstart Snippets -->
-        <Card>
+        <Card class="min-w-0">
             <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-[180px] flex-1">
                         <h2 class="text-base font-semibold text-[var(--on-surface)]">Connect SDK (Drop-In)</h2>
                         <p class="text-xs text-[var(--on-surface-variant)]">
                             Point any supported SDK at this HyperInfer gateway with a 1-line base URL change.
                         </p>
                     </div>
-                    <Button variant="ghost" size="sm" onclick={copySnippet}>
+                    <Button variant="ghost" size="sm" class="shrink-0" onclick={copySnippet}>
                         <span class="material-symbols-outlined" style="font-size: 16px">{copiedSnippet ? 'check' : 'content_copy'}</span>
                         {copiedSnippet ? 'Copied!' : 'Copy'}
                     </Button>
@@ -262,6 +288,7 @@
 
                 <div class="flex flex-wrap gap-1 bg-[var(--surface-container-low)] rounded-lg p-1">
                     {#each [
+                        { id: 'hyperinfer', label: 'HyperInfer SDK' },
                         { id: 'openai', label: 'OpenAI SDK' },
                         { id: 'anthropic', label: 'Anthropic / Claude Code' },
                         { id: 'gemini', label: 'Gemini SDK' },
@@ -279,7 +306,7 @@
 
                 <pre class="p-4 rounded-lg bg-[var(--surface-container-low)] text-xs font-mono text-[var(--on-surface)] overflow-x-auto leading-relaxed">{snippetCode}</pre>
 
-                <div class="pt-2 border-t border-[var(--ghost-border)] grid grid-cols-2 gap-2 text-xs text-[var(--on-surface-variant)]">
+                <div class="pt-2 border-t border-[var(--ghost-border)] grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[var(--on-surface-variant)]">
                     <div><span class="font-semibold text-[var(--on-surface)]">Chat:</span> <code>/v1/chat/completions</code></div>
                     <div><span class="font-semibold text-[var(--on-surface)]">Responses:</span> <code>/v1/responses</code></div>
                     <div><span class="font-semibold text-[var(--on-surface)]">Anthropic:</span> <code>/v1/messages</code></div>

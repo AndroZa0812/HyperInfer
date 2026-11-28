@@ -54,7 +54,11 @@ test.describe('Gateway Views (MCP, Playground, Runtime Config)', () => {
 		await page.goto('/dashboard/playground');
 		await expect(page.getByRole('heading', { name: 'Playground' })).toBeVisible();
 
-		// OpenAI SDK default snippet
+		// Native HyperInfer SDK default snippet
+		await expect(page.locator('pre')).toContainText('from hyperinfer import Client');
+
+		// Switch to OpenAI SDK
+		await page.getByRole('button', { name: 'OpenAI SDK' }).click();
 		await expect(page.locator('pre')).toContainText('from openai import OpenAI');
 		await expect(page.locator('pre')).toContainText('/v1');
 
@@ -64,10 +68,13 @@ test.describe('Gateway Views (MCP, Playground, Runtime Config)', () => {
 
 		// Switch to Gemini SDK
 		await page.getByRole('button', { name: 'Gemini SDK' }).click();
+		await expect(page.locator('pre')).toContainText('from google import genai');
+		await expect(page.locator('pre')).toContainText('client.models.generate_content');
 		await expect(page.locator('pre')).toContainText('/v1beta/models/');
 
 		// Switch to Responses API
 		await page.getByRole('button', { name: 'Responses API' }).click();
+		await expect(page.locator('pre')).toContainText('client.responses.create');
 		await expect(page.locator('pre')).toContainText('/v1/responses');
 
 		// Validation when sending without a Virtual API Key

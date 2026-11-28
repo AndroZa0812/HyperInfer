@@ -11,8 +11,10 @@ test.describe('Request Logs Explorer (HYP-71)', () => {
 
 		// Exercise filter controls
 		await page.getByLabel('Model').fill('claude');
-		await page.getByLabel('Status').selectOption('200');
-		await page.getByLabel('Cache').selectOption('hit');
+		await page.getByLabel('Status').click();
+		await page.getByRole('option', { name: '200 OK' }).click();
+		await page.getByLabel('Cache').click();
+		await page.getByRole('option', { name: 'Cache HIT' }).click();
 		await page.getByRole('button', { name: 'Apply Filters' }).click();
 		await expect(page.getByText('No request logs match the current filters.')).toBeVisible();
 

@@ -6,6 +6,7 @@
 //! - `POST /v1/admin/catalog/refresh` — Force-refresh live catalog from `models.dev` / custom URL
 //! - `POST /v1/admin/catalog/discover` — Query a provider's live `list_models()` endpoint
 
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -16,8 +17,8 @@ use axum::{
     Json,
 };
 use hyperinfer_core::{
-    default_cache_path, DiscoveredModel, ModelCatalog, ModelSpec, DEFAULT_CACHE_TTL_SECS,
-    DEFAULT_CATALOG_URL,
+    default_cache_path, Database, DiscoveredModel, ModelCatalog, ModelPricing, ModelSpec,
+    DEFAULT_CACHE_TTL_SECS, DEFAULT_CATALOG_URL,
 };
 use hyperinfer_providers::{
     anthropic::AnthropicProvider, gemini::GeminiProvider, openai::OpenAiProvider, LlmProvider,
@@ -95,34 +96,81 @@ pub struct EnrichedDiscoveredModel {
     pub catalog_spec: Option<ModelSpec>,
 }
 
-/// `GET /v1/models` — OpenAI-compatible model listing.
-pub async fn list_openai_models(
-    State(state): State<CatalogState>,
+#[derive(Clone)]
+pub struct ModelsRouteState<D> {
+    pub db: D,
+    pub catalog: CatalogState,
+}
+
+/// `GET /v1/models` — OpenAI-compatible model listing of active gateway deployments.
+pub async fn list_openai_models<D: Database>(
+    State(state): State<ModelsRouteState<D>>,
     Query(query): Query<CatalogQuery>,
 ) -> impl IntoResponse {
-    let catalog = state.catalog.read().await;
-    let models: Vec<&ModelSpec> = match query.provider.as_deref() {
-        Some(p) if !p.trim().is_empty() => catalog.list_by_provider(p),
-        _ => catalog.all_models(),
+    let deployments = match state.db.list_deployments("", Some(true)).await {
+        Ok(list) => list,
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to list active models",
+            )
+                .into_response()
+        }
     };
 
-    let data: Vec<serde_json::Value> = models
-        .into_iter()
-        .map(|m| {
-            serde_json::json!({
-                "id": m.id,
-                "object": "model",
-                "owned_by": m.provider,
-                "context_window": m.context_window,
-                "pricing": m.pricing,
-            })
-        })
-        .collect();
+    let provider_filter = query
+        .provider
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+
+    let catalog = state.catalog.catalog.read().await;
+    let mut seen = HashSet::new();
+    let mut data: Vec<serde_json::Value> = Vec::new();
+
+    for d in deployments {
+        if let Some(pf) = provider_filter {
+            if !d.provider.eq_ignore_ascii_case(pf) {
+                continue;
+            }
+        }
+        let dedup_key = (d.provider.to_lowercase(), d.model.clone());
+        if !seen.insert(dedup_key) {
+            continue;
+        }
+
+        let spec = catalog.get(Some(&d.provider), &d.model);
+        let pricing = match (d.cost_per_1k_input_tokens, d.cost_per_1k_output_tokens) {
+            (Some(inp), Some(out)) => Some(ModelPricing {
+                input_per_1m_usd: inp * 1000.0,
+                output_per_1m_usd: out * 1000.0,
+                cache_read_per_1m_usd: spec
+                    .and_then(|s| s.pricing.as_ref())
+                    .and_then(|p| p.cache_read_per_1m_usd),
+                cache_write_per_1m_usd: spec
+                    .and_then(|s| s.pricing.as_ref())
+                    .and_then(|p| p.cache_write_per_1m_usd),
+                reasoning_per_1m_usd: spec
+                    .and_then(|s| s.pricing.as_ref())
+                    .and_then(|p| p.reasoning_per_1m_usd),
+            }),
+            _ => spec.and_then(|s| s.pricing.clone()),
+        };
+
+        data.push(serde_json::json!({
+            "id": d.model,
+            "object": "model",
+            "owned_by": d.provider,
+            "context_window": spec.and_then(|s| s.context_window),
+            "pricing": pricing,
+        }));
+    }
 
     Json(serde_json::json!({
         "object": "list",
         "data": data,
     }))
+    .into_response()
 }
 
 /// `GET /v1/admin/catalog` — Admin model catalog with optional provider/search filter.
@@ -314,9 +362,10 @@ pub async fn discover_provider_models(
 mod tests {
     use super::*;
     use crate::auth::{auth_middleware, create_auth_token};
+    use crate::standalone::InMemoryDb;
     use axum::{middleware, routing::get, Router};
     use axum_test::TestServer;
-    use hyperinfer_core::User;
+    use hyperinfer_core::{CreateDeploymentRequest, User};
 
     #[tokio::test]
     async fn test_catalog_routes_filter_and_return_openai_list() {
@@ -344,11 +393,70 @@ mod tests {
         }"#;
         let catalog = ModelCatalog::from_models_dev_json(raw).unwrap();
         let state = CatalogState::with_catalog(catalog);
+        let db = InMemoryDb::new();
+        db.create_deployment(CreateDeploymentRequest {
+            name: "openai-gpt6".to_string(),
+            provider: "openai".to_string(),
+            model: "gpt-6".to_string(),
+            api_key_ref: Some("sk-test".to_string()),
+            base_url: "https://api.openai.com/v1".to_string(),
+            is_active: true,
+            weight: 1,
+            priority: 1,
+            max_tpm: None,
+            max_rpm: None,
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: Some(0),
+        })
+        .await
+        .unwrap();
+        db.create_deployment(CreateDeploymentRequest {
+            name: "local-qwen".to_string(),
+            provider: "openai".to_string(),
+            model: "qwen3-local-gguf".to_string(),
+            api_key_ref: Some("local".to_string()),
+            base_url: "http://127.0.0.1:9931".to_string(),
+            is_active: true,
+            weight: 1,
+            priority: 2,
+            max_tpm: None,
+            max_rpm: None,
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: Some(0),
+        })
+        .await
+        .unwrap();
+        db.create_deployment(CreateDeploymentRequest {
+            name: "inactive-claude".to_string(),
+            provider: "anthropic".to_string(),
+            model: "claude-fable-5".to_string(),
+            api_key_ref: Some("sk-ant".to_string()),
+            base_url: "https://api.anthropic.com".to_string(),
+            is_active: false,
+            weight: 1,
+            priority: 1,
+            max_tpm: None,
+            max_rpm: None,
+            cost_per_1k_input_tokens: None,
+            cost_per_1k_output_tokens: None,
+            metadata: None,
+            sort_order: Some(0),
+        })
+        .await
+        .unwrap();
+
         let secret = "catalog-test-secret";
 
         let public_router = Router::new()
-            .route("/v1/models", get(list_openai_models))
-            .with_state(state.clone());
+            .route("/v1/models", get(list_openai_models::<InMemoryDb>))
+            .with_state(ModelsRouteState {
+                db,
+                catalog: state.clone(),
+            });
         let admin_router = Router::new()
             .route("/v1/admin/catalog", get(get_admin_catalog))
             .layer(middleware::from_fn_with_state(
@@ -359,14 +467,19 @@ mod tests {
 
         let server = TestServer::new(public_router.merge(admin_router));
 
-        // OpenAI-compatible /v1/models
+        // OpenAI-compatible /v1/models only lists active deployments (including custom models),
+        // enriched with catalog specs when available.
         let models_resp = server.get("/v1/models").await;
         models_resp.assert_status_ok();
         let body: serde_json::Value = models_resp.json();
         assert_eq!(body["object"], "list");
-        assert_eq!(body["data"].as_array().unwrap().len(), 2);
+        let items = body["data"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["id"], "gpt-6");
+        assert_eq!(items[0]["context_window"], 1000000);
+        assert_eq!(items[1]["id"], "qwen3-local-gguf");
 
-        // Admin catalog with provider filter
+        // Admin catalog still returns full upstream catalog with provider filter
         let admin_user = User {
             id: "u1".to_string(),
             team_id: "t1".to_string(),

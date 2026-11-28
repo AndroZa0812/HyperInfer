@@ -75,7 +75,8 @@ test.describe('Teams', () => {
 		await expect(aliasDialog.getByRole('heading', { name: 'Add Model Alias' })).toBeVisible();
 		await aliasDialog.getByLabel('Alias').fill('fast-chat');
 		await aliasDialog.getByLabel('Target Model').fill('gpt-4o-mini');
-		await aliasDialog.getByLabel('Provider').selectOption('openai');
+		await aliasDialog.getByLabel('Provider').click();
+		await page.getByRole('option', { name: 'OpenAI' }).click();
 		await aliasDialog.getByRole('button', { name: 'Create Alias' }).click();
 		await expect(aliasDialog).toBeHidden();
 

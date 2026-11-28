@@ -6,6 +6,7 @@
     import Card from '@hyperinfer/ui/Card.svelte';
     import Button from '@hyperinfer/ui/Button.svelte';
     import Input from '@hyperinfer/ui/Input.svelte';
+    import Select from '@hyperinfer/ui/Select.svelte';
     import Badge from '@hyperinfer/ui/Badge.svelte';
     import TabBar from '#lib/components/TabBar.svelte';
 
@@ -283,7 +284,7 @@
 
 <div class="space-y-8 max-w-4xl">
     <div>
-        <h1 class="text-3xl font-bold text-[var(--on-surface)]">Settings</h1>
+        <h1 class="text-2xl font-bold text-[var(--on-surface)]">Settings</h1>
         <p class="text-sm text-[var(--on-surface-variant)] mt-1">Manage your account settings and technical preferences.</p>
     </div>
 
@@ -296,7 +297,7 @@
                 <p class="text-sm text-[var(--on-surface-variant)]">Your account identity and team membership.</p>
 
                 <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-primary)]" style="background: linear-gradient(135deg, var(--primary), var(--primary-container))">
+                    <div class="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-[var(--on-brand)]" style="background: var(--brand-gradient)">
                         {$auth.user?.email?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div>
@@ -324,12 +325,12 @@
         <Card>
             <div class="space-y-6">
                 <h2 class="text-lg font-semibold text-[var(--on-surface)]">Appearance</h2>
-                <div class="flex items-center justify-between">
+                <div class="flex flex-wrap items-center justify-between gap-4">
                     <div>
                         <p class="text-sm font-medium text-[var(--on-surface)]">Theme</p>
                         <p class="text-xs text-[var(--on-surface-variant)]">Choose your preferred color scheme</p>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                         <button
                             class="px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer {$theme === 'light' ? 'text-[var(--on-primary)]' : 'bg-[var(--surface-container)] text-[var(--on-surface-variant)] hover:text-[var(--on-surface)]'}"
                             style={$theme === 'light' ? 'background: linear-gradient(135deg, var(--primary), var(--primary-container))' : ''}
@@ -476,17 +477,15 @@
 
                         {#if redaction.reversible}
                             <div class="max-w-xs">
-                                <label for="placeholder-format" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                    Placeholder Format
-                                </label>
-                                <select
+                                <Select
                                     id="placeholder-format"
+                                    label="Placeholder Format"
                                     bind:value={redaction.placeholder_format}
-                                    class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                >
-                                    <option value="indexed">Indexed ([REDACTED_API_KEY_1])</option>
-                                    <option value="uuid">UUID ([REDACTED_API_KEY_a1b2c3d4])</option>
-                                </select>
+                                    options={[
+                                        { value: 'indexed', label: 'Indexed ([REDACTED_API_KEY_1])' },
+                                        { value: 'uuid', label: 'UUID ([REDACTED_API_KEY_a1b2c3d4])' },
+                                    ]}
+                                />
                             </div>
                         {/if}
                     </div>
@@ -507,32 +506,24 @@
 
                         {#if redaction.smart.enabled}
                             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <label for="smart-backend" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                        Backend
-                                    </label>
-                                    <select
-                                        id="smart-backend"
-                                        bind:value={redaction.smart.backend}
-                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                    >
-                                        <option value="presidio">Microsoft Presidio Analyzer</option>
-                                        <option value="llm">Local / Trusted LLM</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label for="smart-fail-mode" class="block text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)] mb-1">
-                                        Failure Mode
-                                    </label>
-                                    <select
-                                        id="smart-fail-mode"
-                                        bind:value={redaction.smart.fail_mode}
-                                        class="w-full px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs"
-                                    >
-                                        <option value="fallback_regex">Fallback to Regex</option>
-                                        <option value="fail_closed">Fail Closed (HTTP 503)</option>
-                                    </select>
-                                </div>
+                                <Select
+                                    id="smart-backend"
+                                    label="Backend"
+                                    bind:value={redaction.smart.backend}
+                                    options={[
+                                        { value: 'presidio', label: 'Microsoft Presidio Analyzer' },
+                                        { value: 'llm', label: 'Local / Trusted LLM' },
+                                    ]}
+                                />
+                                <Select
+                                    id="smart-fail-mode"
+                                    label="Failure Mode"
+                                    bind:value={redaction.smart.fail_mode}
+                                    options={[
+                                        { value: 'fallback_regex', label: 'Fallback to Regex' },
+                                        { value: 'fail_closed', label: 'Fail Closed (HTTP 503)' },
+                                    ]}
+                                />
                                 <Input label="Timeout (ms)" type="number" bind:value={smartTimeoutText} />
                             </div>
 
@@ -571,14 +562,14 @@
                         <p class="text-xs font-medium uppercase tracking-wider text-[var(--on-surface-variant)]">
                             Live Redaction Preview
                         </p>
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap gap-2">
                             <input
                                 type="text"
                                 bind:value={testSample}
                                 placeholder="Paste sample text (e.g. alice@example.com SECRET-1234)"
-                                class="flex-1 px-3 py-2 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border-b-2 border-b-[var(--outline-variant)] focus:border-b-[var(--primary)] outline-none text-xs font-mono"
+                                class="h-10 flex-1 min-w-[200px] px-3.5 bg-[var(--surface-container-low)] text-[var(--on-surface)] placeholder:text-[var(--outline)] rounded-lg border border-[var(--outline-variant)] focus:bg-[var(--surface-container-lowest)] focus:border-[var(--primary)] outline-none text-xs font-mono transition-colors duration-200"
                             />
-                            <Button variant="secondary" size="sm" onclick={runRedactionTest}>
+                            <Button variant="secondary" size="sm" class="h-10 shrink-0" onclick={runRedactionTest}>
                                 Test Redaction
                             </Button>
                         </div>
